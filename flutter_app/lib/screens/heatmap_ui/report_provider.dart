@@ -1,5 +1,5 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import '../models/report_model.dart';
+import 'report_model.dart';
 
 class ReportNotifier extends Notifier<List<ReportModel>> {
   @override
@@ -9,6 +9,17 @@ class ReportNotifier extends Notifier<List<ReportModel>> {
 
   void addReport(ReportModel report) {
     state = [...state, report];
+  }
+
+  void updateReport(ReportModel updatedReport) {
+    state = [
+      for (final report in state)
+        if (report.id == updatedReport.id) updatedReport else report,
+    ];
+  }
+
+  void deleteReport(String id) {
+    state = state.where((r) => r.id != id).toList();
   }
 }
 
