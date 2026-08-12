@@ -1,0 +1,808 @@
+Created At: 2026-08-04T09:39:35+05:30
+Completed At: 2026-08-04T09:39:35+05:30
+File Path: `file:///c:/projects/Unisafe/flutter_app/lib/screens/heatmap_ui/map_screen.dart`
+Total Lines: 1420
+Total Bytes: 56725
+Showing lines 1 to 800
+The following code has been modified to include a line number before every line, in the format: <line_number>: <original_line>. Please note that any changes targeting the original code should remove the line number, colon, and leading space.
+1: import 'dart:async';
+2: import 'dart:convert';
+3: import 'dart:ui';
+4: import 'package:flutter/material.dart';
+5: import 'package:flutter_map/flutter_map.dart';
+6: import 'package:latlong2/latlong.dart' hide Path;
+7: import 'package:lucide_icons_flutter/lucide_icons.dart';
+8: import 'package:flutter_riverpod/flutter_riverpod.dart';
+9: import 'package:geolocator/geolocator.dart';
+10: import 'package:http/http.dart' as http;
+11: import 'package:flutter_map_marker_cluster/flutter_map_marker_cluster.dart';
+12: import 'report_model.dart';
+13: import 'report_provider.dart';
+14: 
+15: /// Centralized visual identity for each issue category.
+16: class CategoryStyle {
+17:   final IconData icon;
+18:   final Color color;
+19:   final Color glowColor;
+20:   final String label;
+21:   const CategoryStyle(this.icon, this.color, this.glowColor, this.label);
+22: }
+23: 
+24: const Map<IssueCategory, CategoryStyle> kCategoryStyles = {
+25:   IssueCategory.infrastructure:
+26:       CategoryStyle(LucideIcons.building, Color(0xFFFF6B6B), Color(0x66FF6B6B), 'Infrastructure'),
+27:   IssueCategory.sanitation:
+28:       CategoryStyle(LucideIcons.trash2, Color(0xFFF9A826), Color(0x66F9A826), 'Sanitation'),
+29:   IssueCategory.safety:
+30:       CategoryStyle(LucideIcons.shield, Color(0xFF4D96FF), Color(0x664D96FF), 'Safety'),
+31:   IssueCategory.greenery:
+32:       CategoryStyle(LucideIcons.leaf, Color(0xFF4CAF50), Color(0x664CAF50), 'Greenery'),
+33: };
+34: 
+35: const Map<IssueCategory, List<String>> kSubcategories = {
+36:   IssueCategory.infrastructure: ['Nonfunctional street lights', 'Potholes', 'Water logging', 'Prolonged road work', 'Drainage', 'Other'],
+37:   IssueCategory.sanitation: ['Garbage scattered on the road', 'Public washrooms not clean', 'Garbage beach/river', 'Untimely garbage collection/overflowing', 'Other'],
+38:   IssueCategory.safety: ['Open manholes', 'Non existent footpath', 'Women safety', 'Illegal parking', 'Theft / Robbery', 'Harassment / Eve-Teasing', 'Assault / Violence', 'Poor Street Lighting', 'Fire Hazard', 'Electrical Hazard', 'Exposed Wires', 'Child Safety Concern', 'Stray Animal Threat', 'Other'],
+39:   IssueCategory.greenery: ['Waste Dumping in Green Area', 'Poor Landscape Maintenance', 'Watering Required for Plants', 'Encroachment on Green Spaces', 'Pest or Insect Infestation', 'Overgrown Vegetation', 'Need Tree Plantation', 'Illegal Tree Cutting', 'Public problems on greenery', 'Other'],
+40: };
+41: 
+42: /// A highly customized, premium map pin.
+43: class MapPinShape extends StatefulWidget {
+44:   static const double headSize = 44;
+45:   static const double tailHeight = 16;
+46:   static const double totalHeight = headSize + tailHeight;
+47:   static const double boxWidth = headSize + 20;
+48:   static const double boxHeight = totalHeight * 2;
+49: 
+50:   final IconData icon;
+51:   final Color color;
+52:   final Color glowColor;
+53:   final bool isEditing;
+54:   final bool isPending;
+55: 
+56:   const MapPinShape({
+57:     super.key,
+58:     required this.icon,
+59:     required this.color,
+60:     required this.glowColor,
+61:     this.isEditing = false,
+62:     this.isPending = false,
+63:   });
+64: 
+65:   @override
+66:   State<MapPinShape> createState() => _MapPinShapeState();
+67: }
+68: 
+69: class _MapPinShapeState extends State<MapPinShape> with SingleTickerProviderStateMixin {
+70:   late AnimationController _pulseController;
+71: 
+72:   bool get _isAnimated => widget.isPending || widget.isEditing;
+73: 
+74:   @override
+75:   void initState() {
+76:     super.initState();
+77:     _pulseController = AnimationController(
+78:       vsync: this,
+79:       duration: const Duration(seconds: 2),
+80:     );
+81:     // Only static (non-interactive) pins skip the ticker entirely, so a map
+82:     // full of existing reports doesn't pay for dozens of idle animations.
+83:     if (_isAnimated) _pulseController.repeat(reverse: true);
+84:   }
+85: 
+86:   @override
+87:   void didUpdateWidget(covariant MapPinShape oldWidget) {
+88:     super.didUpdateWidget(oldWidget);
+89:     if (_isAnimated && !_pulseController.isAnimating) {
+90:       _pulseController.repeat(reverse: true);
+91:     } else if (!_isAnimated && _pulseController.isAnimating) {
+92:       _pulseController.stop();
+93:       _pulseController.value = 0;
+94:     }
+95:   }
+96: 
+97:   @override
+98:   void dispose() {
+99:     _pulseController.dispose();
+100:     super.dispose();
+101:   }
+102: 
+103:   @override
+104:   Widget build(BuildContext context) {
+105:     final ringColor = widget.isEditing ? const Color(0xFFF59E0B) : Colors.white;
+106:     
+107:     return SizedBox(
+108:       width: MapPinShape.boxWidth,
+109:       height: MapPinShape.boxHeight,
+110:       child: Align(
+111:         alignment: Alignment.topCenter,
+112:         child: Column(
+113:           mainAxisSize: MainAxisSize.min,
+114:           children: [
+115:             AnimatedBuilder(
+116:               animation: _pulseController,
+117:               builder: (context, child) {
+118:                 final scale = widget.isPending || widget.isEditing 
+119:                     ? 1.0 + (_pulseController.value * 0.1) 
+120:                     : 1.0;
+121:                 return Transform.scale(
+122:                   scale: scale,
+123:                   child: Container(
+124:                     width: MapPinShape.headSize,
+125:                     height: MapPinShape.headSize,
+126:                     decoration: BoxDecoration(
+127:                       color: widget.color,
+128:                       shape: BoxShape.circle,
+129:                       border: Border.all(color: ringColor, width: widget.isEditing ? 3 : 2.5),
+130:                       boxShadow: [
+131:                         BoxShadow(
+132:                           color: widget.glowColor,
+133:                           blurRadius: (widget.isPending || widget.isEditing) ? 15 : 8,
+134:                           spreadRadius: (widget.isPending || widget.isEditing) ? 4 : 1,
+135:                           offset: const Offset(0, 4),
+136:                         ),
+137:                       ],
+138:                     ),
+139:                     child: Icon(widget.icon, color: Colors.white, size: MapPinShape.headSize * 0.5),
+140:                   ),
+141:                 );
+142:               },
+143:             ),
+144:             CustomPaint(
+145:               size: const Size(MapPinShape.headSize * 0.34, MapPinShape.tailHeight),
+146:               painter: _PinTailPainter(color: widget.isEditing ? const Color(0xFFF59E0B) : widget.color),
+147:             ),
+148:           ],
+149:         ),
+150:       ),
+151:     );
+152:   }
+153: }
+154: 
+155: class _PinTailPainter extends CustomPainter {
+156:   final Color color;
+157:   _PinTailPainter({required this.color});
+158: 
+159:   @override
+160:   void paint(Canvas canvas, Size size) {
+161:     final paint = Paint()..color = color;
+162:     final path = Path()
+163:       ..moveTo(0, 0)
+164:       ..lineTo(size.width, 0)
+165:       ..lineTo(size.width / 2, size.height)
+166:       ..close();
+167:     canvas.drawPath(path, paint);
+168:   }
+169: 
+170:   @override
+171:   bool shouldRepaint(covariant _PinTailPainter oldDelegate) => oldDelegate.color != color;
+172: }
+173: 
+174: class MapScreen extends ConsumerStatefulWidget {
+175:   const MapScreen({super.key});
+176: 
+177:   @override
+178:   ConsumerState<MapScreen> createState() => _MapScreenState();
+179: }
+180: 
+181: class _MapScreenState extends ConsumerState<MapScreen> {
+182:   final MapController _mapController = MapController();
+183:   final TextEditingController _searchController = TextEditingController();
+184:   final GlobalKey _mapKey = GlobalKey();
+185: 
+186:   LatLng? _droppedLocation;
+187:   IssueCategory? _selectedCategory;
+188:   String? _editingReportId;
+189:   LatLng? _draggedReportLocation; // Local state for throttling drag writes
+190:   Set<IssueCategory> _hiddenCategories = {}; // For category filtering
+191:   bool _isSearching = false;
+192:   bool _isFetchingLocation = false;
+193: 
+194:   Timer? _debounce;
+195:   List<dynamic> _suggestions = [];
+196:   LatLng? _myLocation;
+197: 
+198:   @override
+199:   void initState() {
+200:     super.initState();
+201:     WidgetsBinding.instance.addPostFrameCallback((_) {
+202:       _goToMyLocation();
+203:     });
+204:   }
+205: 
+206:   @override
+207:   void dispose() {
+208:     _debounce?.cancel();
+209:     _searchController.dispose();
+210:     super.dispose();
+211:   }
+212: 
+213:   int _searchRequestId = 0;
+214: 
+215:   void _onSearchChanged(String query) {
+216:     if (_debounce?.isActive ?? false) _debounce!.cancel();
+217:     _debounce = Timer(const Duration(milliseconds: 500), () async {
+218:       if (query.isEmpty) {
+219:         if (mounted) setState(() => _suggestions = []);
+220:         return;
+221:       }
+222:       final requestId = ++_searchRequestId;
+223:       try {
+224:         final response = await http.get(
+225:           Uri.parse(
+226:               'https://nominatim.openstreetmap.org/search?q=${Uri.encodeComponent(query)}&format=json&limit=5'),
+227:           headers: {'User-Agent': 'com.unisafe.app (Unisafe community reporting app)'},
+228:         );
+229:         // A slower, older request can resolve after a newer one — ignore it
+230:         // so stale results don't flash over what the user is now seeing.
+231:         if (requestId != _searchRequestId) return;
+232:         if (response.statusCode == 200) {
+233:           if (mounted) {
+234:             setState(() {
+235:               _suggestions = json.decode(response.body) as List;
+236:             });
+237:           }
+238:         }
+239:       } catch (e) {
+240:         debugPrint('Search error: $e');
+241:       }
+242:     });
+243:   }
+244: 
+245:   void _selectSuggestion(dynamic suggestion) {
+246:     FocusScope.of(context).unfocus();
+247:     final lat = double.parse(suggestion['lat'].toString());
+248:     final lon = double.parse(suggestion['lon'].toString());
+249:     _searchController.text = suggestion['display_name'];
+250:     setState(() {
+251:       _suggestions = [];
+252:     });
+253:     _mapController.move(LatLng(lat, lon), 16.0);
+254:   }
+255: 
+256:   Future<void> _searchLocation(String query) async {
+257:     if (query.isEmpty) return;
+258:     FocusScope.of(context).unfocus();
+259:     setState(() {
+260:       _isSearching = true;
+261:       _suggestions = [];
+262:     });
+263: 
+264:     try {
+265:       final response = await http.get(
+266:         Uri.parse(
+267:             'https://nominatim.openstreetmap.org/search?q=${Uri.encodeComponent(query)}&format=json&limit=1'),
+268:         headers: {'User-Agent': 'com.unisafe.app (Unisafe community reporting app)'},
+269:       );
+270: 
+271:       if (response.statusCode == 200) {
+272:         final data = json.decode(response.body) as List;
+273:         if (data.isNotEmpty) {
+274:           final lat = double.parse(data[0]['lat'].toString());
+275:           final lon = double.parse(data[0]['lon'].toString());
+276:           _mapController.move(LatLng(lat, lon), 16.0);
+277:         } else {
+278:           if (mounted) {
+279:             ScaffoldMessenger.of(context).showSnackBar(
+280:               const SnackBar(content: Text('Location not found')),
+281:             );
+282:           }
+283:         }
+284:       }
+285:     } catch (e) {
+286:       debugPrint('Search error: $e');
+287:     } finally {
+288:       if (mounted) setState(() => _isSearching = false);
+289:     }
+290:   }
+291: 
+292:   Future<void> _goToMyLocation() async {
+293:     bool serviceEnabled = await Geolocator.isLocationServiceEnabled();
+294:     if (!serviceEnabled) {
+295:       if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Location services are disabled.')));
+296:       return;
+297:     }
+298: 
+299:     LocationPermission permission = await Geolocator.checkPermission();
+300:     if (permission == LocationPermission.denied) {
+301:       permission = await Geolocator.requestPermission();
+302:       if (permission == LocationPermission.denied) {
+303:         if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Location permissions are denied')));
+304:         return;
+305:       }
+306:     }
+307: 
+308:     if (permission == LocationPermission.deniedForever) {
+309:       if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Location permissions are permanently denied, we cannot request permissions.')));
+310:       return;
+311:     }
+312: 
+313:     // Start loading spinner ONLY after permissions are resolved,
+314:     // to preserve the browser's user-gesture token for the native API.
+315:     setState(() {
+316:       _isFetchingLocation = true;
+317:     });
+318: 
+319:     try {
+320:       Position position = await Geolocator.getCurrentPosition();
+321:       final latLng = LatLng(position.latitude, position.longitude);
+322: 
+323:       setState(() {
+324:         _myLocation = latLng;
+325:       });
+326: 
+327:       _mapController.move(latLng, 17.0);
+328:     } catch (e) {
+329:       debugPrint("Error fetching location: $e");
+330:       if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Failed to fetch location')));
+331:     } finally {
+332:       if (mounted) {
+333:         setState(() {
+334:           _isFetchingLocation = false;
+335:         });
+336:       }
+337:     }
+338:   }
+339: 
+340:   void _onCategoryTapped(IssueCategory category) {
+341:     setState(() {
+342:       _selectedCategory = category;
+343:       _droppedLocation = _mapController.camera.center;
+344:       _editingReportId = null;
+345:     });
+346:   }
+347: 
+348:   void _onPinDropped(DragTargetDetails<IssueCategory> details) {
+349:     final currentContext = _mapKey.currentContext;
+350:     if (currentContext == null) return;
+351:     final renderBox = currentContext.findRenderObject() as RenderBox?;
+352:     if (renderBox == null) return;
+353:     
+354:     // Offset by approx half the feedback widget size (which is ~56x56) to get the center
+355:     final globalCenter = details.offset + const Offset(28, 28);
+356:     final localOffset = renderBox.globalToLocal(globalCenter);
+357:     final latLng = _mapController.camera.screenOffsetToLatLng(localOffset);
+358: 
+359:     setState(() {
+360:       _selectedCategory = details.data;
+361:       _droppedLocation = latLng;
+362:       _editingReportId = null;
+363:     });
+364:   }
+365: 
+366:   void _dragPin(LatLng currentLocation, Offset delta, void Function(LatLng) onUpdate) {
+367:     try {
+368:       final currentScreenOffset = _mapController.camera.latLngToScreenOffset(currentLocation);
+369:       final newScreenOffset = Offset(
+370:         currentScreenOffset.dx + delta.dx,
+371:         currentScreenOffset.dy + delta.dy,
+372:       );
+373:       final newLatLng = _mapController.camera.screenOffsetToLatLng(newScreenOffset);
+374:       onUpdate(newLatLng);
+375:     } catch (e) {
+376:       debugPrint("Error dragging pin: $e");
+377:     }
+378:   }
+379: 
+380:   @override
+381:   Widget build(BuildContext context) {
+382:     final reports = ref.watch(reportProvider);
+383: 
+384:     return Scaffold(
+385:       body: Stack(
+386:         children: [
+387:           Positioned.fill(
+388:             child: DragTarget<IssueCategory>(
+389:             onAcceptWithDetails: _onPinDropped,
+390:             builder: (context, candidateData, rejectedData) {
+391:               return Container(
+392:                 key: _mapKey,
+393:                 child: FlutterMap(
+394:                   mapController: _mapController,
+395:                   options: MapOptions(
+396:               initialCenter: const LatLng(28.6139, 77.2090),
+397:               initialZoom: 14.0,
+398:               interactionOptions: InteractionOptions(
+399:                 flags: (_editingReportId != null || _droppedLocation != null)
+400:                     ? InteractiveFlag.pinchZoom | InteractiveFlag.doubleTapZoom
+401:                     : InteractiveFlag.all,
+402:               ),
+403:             ),
+404:             children: [
+405:               TileLayer(
+406:                 urlTemplate: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
+407:                 userAgentPackageName: 'com.unisafe.app',
+408:               ),
+409:               MarkerClusterLayerWidget(
+410:                 options: MarkerClusterLayerOptions(
+411:                   maxClusterRadius: 45,
+412:                   size: const Size(40, 40),
+413:                   alignment: Alignment.center,
+414:                   maxZoom: 15,
+415:                   markers: [
+416:                     ...reports.where((r) => r.id != _editingReportId && !_hiddenCategories.contains(r.category)).map((r) {
+417:                       final style = kCategoryStyles[r.category]!;
+418:                       return Marker(
+419:                         point: r.location,
+420:                         width: MapPinShape.boxWidth,
+421:                         height: MapPinShape.boxHeight,
+422:                         alignment: Alignment.bottomCenter,
+423:                         child: GestureDetector(
+424:                           behavior: HitTestBehavior.opaque,
+425:                           onTap: () => _showReportOptions(r),
+426:                           child: MapPinShape(
+427:                             icon: style.icon, 
+428:                             color: style.color, 
+429:                             glowColor: style.glowColor,
+430:                             isEditing: false,
+431:                           ),
+432:                         ),
+433:                       );
+434:                     }),
+435:                   ],
+436:                   builder: (context, markers) {
+437:                     return Container(
+438:                       decoration: BoxDecoration(
+439:                         color: Colors.black87,
+440:                         shape: BoxShape.circle,
+441:                         border: Border.all(color: Colors.white, width: 2),
+442:                         boxShadow: const [BoxShadow(color: Colors.black26, blurRadius: 4)],
+443:                       ),
+444:                       child: Center(
+445:                         child: Text(
+446:                           markers.length.toString(),
+447:                           style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+448:                         ),
+449:                       ),
+450:                     );
+451:                   },
+452:                 ),
+453:               ),
+454:               MarkerLayer(
+455:                 markers: [
+456:                   if (_myLocation != null)
+457:                     Marker(
+458:                       point: _myLocation!,
+459:                       width: 24,
+460:                       height: 24,
+461:                       child: Container(
+462:                         decoration: BoxDecoration(
+463:                           color: Colors.blue,
+464:                           shape: BoxShape.circle,
+465:                           border: Border.all(color: Colors.white, width: 3),
+466:                           boxShadow: const [BoxShadow(color: Colors.black26, blurRadius: 4)],
+467:                         ),
+468:                       ),
+469:                     ),
+470: 
+471:                   // The currently edited report
+472:                   if (_editingReportId != null)
+473:                     ...reports.where((r) => r.id == _editingReportId).map((r) {
+474:                       final style = kCategoryStyles[r.category]!;
+475:                       return Marker(
+476:                         point: _draggedReportLocation ?? r.location,
+477:                         width: MapPinShape.boxWidth,
+478:                         height: MapPinShape.boxHeight,
+479:                         alignment: Alignment.bottomCenter,
+480:                         child: GestureDetector(
+481:                           behavior: HitTestBehavior.opaque,
+482:                           onPanUpdate: (details) {
+483:                             _dragPin(
+484:                               _draggedReportLocation ?? r.location, 
+485:                               details.delta, 
+486:                               (newLatLng) => setState(() => _draggedReportLocation = newLatLng)
+487:                             );
+488:                           },
+489:                           onPanEnd: (_) {
+490:                             if (_draggedReportLocation != null) {
+491:                               ref.read(reportProvider.notifier).updateReport(r.copyWith(location: _draggedReportLocation));
+492:                             }
+493:                           },
+494:                           child: MapPinShape(
+495:                             icon: style.icon, 
+496:                             color: style.color, 
+497:                             glowColor: style.glowColor,
+498:                             isEditing: true,
+499:                           ),
+500:                         ),
+501:                       );
+502:                     }),
+503: 
+504:                   // Currently dropping pin
+505:                   if (_droppedLocation != null && _selectedCategory != null)
+506:                     Marker(
+507:                       point: _droppedLocation!,
+508:                       width: MapPinShape.boxWidth,
+509:                       height: MapPinShape.boxHeight,
+510:                       alignment: Alignment.bottomCenter,
+511:                       child: GestureDetector(
+512:                         behavior: HitTestBehavior.opaque,
+513:                         onPanUpdate: (details) {
+514:                           _dragPin(
+515:                             _droppedLocation!, 
+516:                             details.delta, 
+517:                             (newLatLng) => setState(() => _droppedLocation = newLatLng)
+518:                           );
+519:                         },
+520:                         child: MapPinShape(
+521:                           icon: kCategoryStyles[_selectedCategory!]!.icon,
+522:                           color: kCategoryStyles[_selectedCategory!]!.color,
+523:                           glowColor: kCategoryStyles[_selectedCategory!]!.glowColor,
+524:                           isPending: true,
+525:                         ),
+526:                       ),
+527:                     ),
+528:                     ], // closes MarkerLayer.markers
+529:                   ),   // closes MarkerLayer
+530:                 ],     // closes FlutterMap.children
+531:               ),       // closes FlutterMap
+532:             );         // closes Container
+533:           },           // closes builder
+534:         ),             // closes DragTarget
+535:       ),               // closes Positioned.fill
+536:           
+537:           // Top Search Bar
+538:           SafeArea(
+539:             child: Align(
+540:               alignment: Alignment.topCenter,
+541:               child: Padding(
+542:                 padding: const EdgeInsets.symmetric(horizontal: 20.0, vertical: 10),
+543:                 child: Column(
+544:                   mainAxisSize: MainAxisSize.min,
+545:                   children: [
+546:                     // Search Bar
+547:                     ClipRRect(
+548:                       borderRadius: BorderRadius.circular(24),
+549:                       child: BackdropFilter(
+550:                         filter: ImageFilter.blur(sigmaX: 16, sigmaY: 16),
+551:                         child: Container(
+552:                           decoration: BoxDecoration(
+553:                             color: Colors.white.withOpacity(0.75),
+554:                             borderRadius: BorderRadius.circular(24),
+555:                             border: Border.all(color: Colors.white.withOpacity(0.6), width: 1.0),
+556:                             boxShadow: [
+557:                               BoxShadow(color: Colors.black.withOpacity(0.08), blurRadius: 30, offset: const Offset(0, 10)),
+558:                             ],
+559:                           ),
+560:                           child: TextField(
+561:                             controller: _searchController,
+562:                             onChanged: _onSearchChanged,
+563:                             style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
+564:                             decoration: InputDecoration(
+565:                               hintText: 'Search anywhere...',
+566:                               hintStyle: TextStyle(color: Colors.grey.shade500, fontWeight: FontWeight.w500),
+567:                               prefixIcon: Icon(LucideIcons.search, color: Colors.grey.shade700, size: 22),
+568:                               suffixIcon: _isSearching
+569:                                   ? const Padding(
+570:                                       padding: EdgeInsets.all(14.0),
+571:                                       child: SizedBox(
+572:                                         width: 20,
+573:                                         height: 20,
+574:                                         child: CircularProgressIndicator(strokeWidth: 2.5),
+575:                                       ),
+576:                                     )
+577:                                   : Row(
+578:                                       mainAxisSize: MainAxisSize.min,
+579:                                       children: [
+580:                                         if (_searchController.text.isNotEmpty)
+581:                                           IconButton(
+582:                                             icon: Icon(LucideIcons.x, size: 20, color: Colors.grey.shade600),
+583:                                             onPressed: () {
+584:                                               _searchController.clear();
+585:                                               setState(() => _suggestions = []);
+586:                                             },
+587:                                           ),
+588:                                       ],
+589:                                     ),
+590:                               border: InputBorder.none,
+591:                               contentPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+592:                             ),
+593:                             onSubmitted: _searchLocation,
+594:                           ),
+595:                         ),
+596:                       ),
+597:                     ),
+598:                     
+599:                     // Suggestions List
+600:                     if (_suggestions.isNotEmpty)
+601:                       Container(
+602:                         margin: const EdgeInsets.only(top: 8),
+603:                         constraints: const BoxConstraints(maxHeight: 260),
+604:                         decoration: BoxDecoration(
+605:                           color: Colors.white.withOpacity(0.95),
+606:                           borderRadius: BorderRadius.circular(24),
+607:                           border: Border.all(color: Colors.white.withOpacity(0.5), width: 1.0),
+608:                           boxShadow: [
+609:                             BoxShadow(color: Colors.black.withOpacity(0.08), blurRadius: 30, offset: const Offset(0, 10)),
+610:                           ],
+611:                         ),
+612:                         child: ListView.separated(
+613:                           shrinkWrap: true,
+614:                           padding: const EdgeInsets.symmetric(vertical: 8),
+615:                           itemCount: _suggestions.length,
+616:                           separatorBuilder: (context, index) => Divider(height: 1, indent: 56, color: Colors.grey.shade200),
+617:                           itemBuilder: (context, index) {
+618:                             final suggestion = _suggestions[index];
+619:                             return ListTile(
+620:                               leading: Container(
+621:                                 padding: const EdgeInsets.all(8),
+622:                                 decoration: BoxDecoration(
+623:                                   color: Colors.blue.shade50,
+624:                                   shape: BoxShape.circle,
+625:                                 ),
+626:                                 child: Icon(LucideIcons.mapPin, color: Colors.blue.shade600, size: 18),
+627:                               ),
+628:                               title: Text(
+629:                                 suggestion['display_name'],
+630:                                 maxLines: 2,
+631:                                 overflow: TextOverflow.ellipsis,
+632:                                 style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w500),
+633:                               ),
+634:                               onTap: () => _selectSuggestion(suggestion),
+635:                             );
+636:                           },
+637:                         ),
+638:                       ),
+639:                     
+640:                     // Pin Categories Bar (When idle)
+641:                     if (_droppedLocation == null && _editingReportId == null) ...[
+642:                       const SizedBox(height: 12),
+643:                       if (reports.isEmpty && _suggestions.isEmpty)
+644:                         Padding(
+645:                           padding: const EdgeInsets.only(bottom: 8),
+646:                           child: Container(
+647:                             padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+648:                             decoration: BoxDecoration(
+649:                               color: Colors.black.withOpacity(0.55),
+650:                               borderRadius: BorderRadius.circular(20),
+651:                             ),
+652:                             child: const Text(
+653:                               'Tap or drag a category below to report an issue',
+654:                               style: TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.w600),
+655:                             ),
+656:                           ),
+657:                         ),
+658:                       ClipRRect(
+659:                         borderRadius: BorderRadius.circular(36),
+660:                         child: BackdropFilter(
+661:                           filter: ImageFilter.blur(sigmaX: 16, sigmaY: 16),
+662:                           child: Container(
+663:                             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+664:                             decoration: BoxDecoration(
+665:                               color: Colors.white.withOpacity(0.85),
+666:                               borderRadius: BorderRadius.circular(36),
+667:                               border: Border.all(color: Colors.white.withOpacity(0.6), width: 1.0),
+668:                               boxShadow: [
+669:                                 BoxShadow(color: Colors.black.withOpacity(0.08), blurRadius: 30, offset: const Offset(0, 10)),
+670:                               ],
+671:                             ),
+672:                             child: Row(
+673:                               mainAxisSize: MainAxisSize.min,
+674:                               children: [
+675:                                 for (var category in IssueCategory.values)
+676:                                   _buildCategoryButton(category),
+677:                               ],
+678:                             ),
+679:                           ),
+680:                         ),
+681:                       ),
+682:                     ],
+683:                   ],
+684:                 ),
+685:               ),
+686:             ),
+687:           ),
+688: 
+689:           // Bottom Action Areas
+690:           Align(
+691:             alignment: Alignment.bottomCenter,
+692:             child: Padding(
+693:               padding: const EdgeInsets.only(bottom: 30.0),
+694:               child: Column(
+695:                 mainAxisSize: MainAxisSize.min,
+696:                 children: [
+697:                   // My Location FAB
+698:                   if (_droppedLocation == null && _editingReportId == null)
+699:                     Align(
+700:                       alignment: Alignment.centerRight,
+701:                       child: Padding(
+702:                         padding: const EdgeInsets.only(right: 20.0, bottom: 20.0),
+703:                         child: Column(
+704:                           mainAxisSize: MainAxisSize.min,
+705:                           children: [
+706:                             GestureDetector(
+707:                               onTap: _showFilterDialog,
+708:                               child: Container(
+709:                                 width: 56,
+710:                                 height: 56,
+711:                                 margin: const EdgeInsets.only(bottom: 12),
+712:                                 decoration: BoxDecoration(
+713:                                   color: Colors.white,
+714:                                   shape: BoxShape.circle,
+715:                                   boxShadow: [
+716:                                     BoxShadow(color: Colors.black.withOpacity(0.15), blurRadius: 15, offset: const Offset(0, 8)),
+717:                                   ],
+718:                                 ),
+719:                                 child: Center(
+720:                                   child: Icon(LucideIcons.filter, color: _hiddenCategories.isNotEmpty ? Colors.blue.shade600 : Colors.grey.shade700, size: 26),
+721:                                 ),
+722:                               ),
+723:                             ),
+724:                             GestureDetector(
+725:                               onTap: _isFetchingLocation ? null : _goToMyLocation,
+726:                               child: Container(
+727:                                 width: 56,
+728:                                 height: 56,
+729:                                 decoration: BoxDecoration(
+730:                                   color: Colors.white,
+731:                                   shape: BoxShape.circle,
+732:                                   boxShadow: [
+733:                                     BoxShadow(color: Colors.black.withOpacity(0.15), blurRadius: 15, offset: const Offset(0, 8)),
+734:                                   ],
+735:                                 ),
+736:                                 child: Center(
+737:                                   child: _isFetchingLocation
+738:                                       ? const SizedBox(
+739:                                           width: 24,
+740:                                           height: 24,
+741:                                           child: CircularProgressIndicator(strokeWidth: 2.5, color: Color(0xFF2563EB)),
+742:                                         )
+743:                                       : const Icon(LucideIcons.locate, color: Color(0xFF2563EB), size: 26),
+744:                                 ),
+745:                               ),
+746:                             ),
+747:                           ],
+748:                         ),
+749:                       ),
+750:                     ),
+751: 
+752:                   // Confirm Pending Pin Area
+753:                   if (_droppedLocation != null)
+754:                     _buildPendingActionPanel(),
+755: 
+756:                   // Editing Pin Area
+757:                   if (_editingReportId != null)
+758:                     _buildEditingActionPanel(),
+759:                 ],
+760:               ),
+761:             ),
+762:           ),
+763:         ],
+764:       ),
+765:     );
+766:   }
+767: 
+768:   Widget _buildCategoryButton(IssueCategory category) {
+769:     final style = kCategoryStyles[category]!;
+770: 
+771:     Widget buttonContent = Column(
+772:       mainAxisSize: MainAxisSize.min,
+773:       children: [
+774:         Container(
+775:           padding: const EdgeInsets.all(12),
+776:           decoration: BoxDecoration(
+777:             color: style.color,
+778:             shape: BoxShape.circle,
+779:           ),
+780:           child: Icon(style.icon, color: Colors.white, size: 22),
+781:         ),
+782:         const SizedBox(height: 4),
+783:         Text(
+784:           style.label,
+785:           style: TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: Colors.grey.shade700),
+786:         ),
+787:       ],
+788:     );
+789: 
+790:     return Draggable<IssueCategory>(
+791:       data: category,
+792:       feedback: Material(
+793:         color: Colors.transparent,
+794:         child: Container(
+795:           padding: const EdgeInsets.all(16),
+796:           decoration: BoxDecoration(
+797:             color: style.color,
+798:             shape: BoxShape.circle,
+799:             boxShadow: const [BoxShadow(color: Colors.black26, blurRadius: 10, offset: Offset(0, 4))],
+800:           ),
+The above content does NOT show the entire file contents. If you need to view any lines of the file which were not shown to complete your task, call this tool again to view those lines.

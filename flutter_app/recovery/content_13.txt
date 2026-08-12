@@ -1,0 +1,34 @@
+Created At: 2026-08-06T08:55:12+05:30
+Completed At: 2026-08-06T08:55:13+05:30
+File Path: `file:///c:/projects/Unisafe/flutter_app/lib/screens/heatmap_ui/map_screen.dart`
+Total Lines: 1561
+Total Bytes: 64555
+Showing lines 400 to 425
+The following code has been modified to include a line number before every line, in the format: <line_number>: <original_line>. Please note that any changes targeting the original code should remove the line number, colon, and leading space.
+400:               ),
+401:               MarkerClusterLayerWidget(
+402:                 options: MarkerClusterLayerOptions(
+403:                   maxClusterRadius: 45,
+404:                   size: const Size(40, 40),
+405:                   alignment: Alignment.center,
+406:                   maxZoom: 15,
+407:                   markers: [
+408:                     ...reports.where((r) => r.id != _editingReportId && !_hiddenCategories.contains(r.category)).map((r) {
+409:                       final style = kCategoryStyles[r.category]!;
+410:                       return Marker(
+411:                         point: r.location,
+412:                         width: MapPinShape.boxWidth,
+413:                         height: MapPinShape.boxHeight,
+414:                         alignment: Alignment.bottomCenter,
+415:                         child: GestureDetector(
+416:                           behavior: HitTestBehavior.opaque,
+417:                           onTap: () => _showReportOptions(r),
+418:                           child: MapPinShape(
+419:                             icon: style.icon, 
+420:                             color: style.color, 
+421:                             glowColor: style.glowColor,
+422:                             isEditing: false,
+423:                           ),
+424:                         ),
+425:                       );
+The above content does NOT show the entire file contents. If you need to view any lines of the file which were not shown to complete your task, call this tool again to view those lines.

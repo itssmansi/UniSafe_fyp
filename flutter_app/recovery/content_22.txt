@@ -1,0 +1,24 @@
+Created At: 2026-08-06T09:13:28+05:30
+Tool is running as a background task with task id: a018f14c-7202-4554-ad60-9b88719f89a9/task-324
+Task Description: python -c "
+import os
+import glob
+app_data = os.environ.get('APPDATA')
+history_dir = os.path.join(app_data, 'Code', 'User', 'History')
+candidates = []
+for root, dirs, files in os.walk(history_dir):
+    for f in files:
+        if len(f) > 10: # usually hash.json or hash files
+            path = os.path.join(root, f)
+            try:
+                with open(path, 'r', encoding='utf-8') as file:
+                    content = file.read()
+                    if 'class MapScreen ' in content and 'LucideIcons.arrowLeft' in content and 'MapPinShape' in content:
+                        candidates.append((os.path.getmtime(path), path, len(content)))
+            except:
+                pass
+candidates.sort(reverse=True)
+for c in candidates[:5]:
+    print(c)
+"
+Task logs are available at: file:///C:/Users/Lenovo/.gemini/antigravity/brain/a018f14c-7202-4554-ad60-9b88719f89a9/.system_generated/tasks/task-324.log

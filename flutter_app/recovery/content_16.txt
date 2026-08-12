@@ -1,0 +1,39 @@
+Created At: 2026-08-06T08:59:32+05:30
+Completed At: 2026-08-06T08:59:32+05:30
+File Path: `file:///c:/projects/Unisafe/flutter_app/lib/screens/heatmap_ui/map_screen.dart`
+Total Lines: 1568
+Total Bytes: 65003
+Showing lines 470 to 500
+The following code has been modified to include a line number before every line, in the format: <line_number>: <original_line>. Please note that any changes targeting the original code should remove the line number, colon, and leading space.
+470:                   // The currently edited report
+471:                   if (_editingReportId != null)
+472:                     ...reports.where((r) => r.id == _editingReportId).map((r) {
+473:                       final style = kCategoryStyles[r.category]!;
+474:                       return Marker(
+475:                         point: _draggedReportLocation ?? r.location,
+476:                         width: MapPinShape.boxWidth,
+477:                         height: MapPinShape.boxHeight,
+478:                         alignment: Alignment.bottomCenter,
+479:                         child: GestureDetector(
+480:                           behavior: HitTestBehavior.opaque,
+481:                           onPanUpdate: (details) {
+482:                             _dragPin(
+483:                               _draggedReportLocation ?? r.location, 
+484:                               details.delta, 
+485:                               (newLatLng) => setState(() => _draggedReportLocation = newLatLng)
+486:                             );
+487:                           },
+488:                           onPanEnd: (_) {
+489:                             if (_draggedReportLocation != null) {
+490:                               ref.read(reportProvider.notifier).updateReport(r.copyWith(location: _draggedReportLocation));
+491:                             }
+492:                           },
+493:                           child: MapPinShape(
+494:                             icon: style.icon, 
+495:                             color: style.color, 
+496:                             glowColor: style.glowColor,
+497:                             isEditing: true,
+498:                           ),
+499:                         ),
+500:                       );
+The above content does NOT show the entire file contents. If you need to view any lines of the file which were not shown to complete your task, call this tool again to view those lines.

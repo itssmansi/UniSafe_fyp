@@ -1,0 +1,109 @@
+Created At: 2026-08-06T08:40:15+05:30
+Completed At: 2026-08-06T08:40:15+05:30
+File Path: `file:///c:/projects/Unisafe/flutter_app/lib/screens/heatmap_ui/map_screen.dart`
+Total Lines: 1574
+Total Bytes: 64890
+Showing lines 43 to 143
+The following code has been modified to include a line number before every line, in the format: <line_number>: <original_line>. Please note that any changes targeting the original code should remove the line number, colon, and leading space.
+43: class MapPinShape extends StatefulWidget {
+44:   static const double headSize = 44;
+45:   static const double tailHeight = 16;
+46:   static const double totalHeight = headSize + tailHeight;
+47:   static const double boxWidth = headSize + 20;
+48:   static const double boxHeight = totalHeight * 2;
+49: 
+50:   final IconData icon;
+51:   final Color color;
+52:   final Color glowColor;
+53:   final bool isEditing;
+54:   final bool isPending;
+55: 
+56:   const MapPinShape({
+57:     super.key,
+58:     required this.icon,
+59:     required this.color,
+60:     required this.glowColor,
+61:     this.isEditing = false,
+62:     this.isPending = false,
+63:   });
+64: 
+65:   @override
+66:   State<MapPinShape> createState() => _MapPinShapeState();
+67: }
+68: 
+69: class _MapPinShapeState extends State<MapPinShape> with SingleTickerProviderStateMixin {
+70:   late AnimationController _pulseController;
+71: 
+72:   bool get _isAnimated => widget.isPending || widget.isEditing;
+73: 
+74:   @override
+75:   void initState() {
+76:     super.initState();
+77:     _pulseController = AnimationController(
+78:       vsync: this,
+79:       duration: const Duration(seconds: 2),
+80:     );
+81:     // Only static (non-interactive) pins skip the ticker entirely, so a map
+82:     // full of existing reports doesn't pay for dozens of idle animations.
+83:     if (_isAnimated) _pulseController.repeat(reverse: true);
+84:   }
+85: 
+86:   @override
+87:   void didUpdateWidget(covariant MapPinShape oldWidget) {
+88:     super.didUpdateWidget(oldWidget);
+89:     if (_isAnimated && !_pulseController.isAnimating) {
+90:       _pulseController.repeat(reverse: true);
+91:     } else if (!_isAnimated && _pulseController.isAnimating) {
+92:       _pulseController.stop();
+93:       _pulseController.value = 0;
+94:     }
+95:   }
+96: 
+97:   @override
+98:   void dispose() {
+99:     _pulseController.dispose();
+100:     super.dispose();
+101:   }
+102: 
+103:   @override
+104:   Widget build(BuildContext context) {
+105:     final ringColor = widget.isEditing ? const Color(0xFFF59E0B) : Colors.white;
+106:     
+107:     return SizedBox(
+108:       width: MapPinShape.boxWidth,
+109:       height: MapPinShape.boxHeight,
+110:       child: Align(
+111:         alignment: Alignment.topCenter,
+112:         child: Column(
+113:           mainAxisSize: MainAxisSize.min,
+114:           children: [
+115:             AnimatedBuilder(
+116:               animation: _pulseController,
+117:               builder: (context, child) {
+118:                 final scale = widget.isPending || widget.isEditing 
+119:                     ? 1.0 + (_pulseController.value * 0.1) 
+120:                     : 1.0;
+121:                 return Transform.scale(
+122:                   scale: scale,
+123:                   child: Container(
+124:                     width: MapPinShape.headSize,
+125:                     height: MapPinShape.headSize,
+126:                     decoration: BoxDecoration(
+127:                       color: widget.color,
+128:                       shape: BoxShape.circle,
+129:                       border: Border.all(color: ringColor, width: widget.isEditing ? 3 : 2.5),
+130:                       boxShadow: [
+131:                         BoxShadow(
+132:                           color: widget.glowColor,
+133:                           blurRadius: (widget.isPending || widget.isEditing) ? 15 : 8,
+134:                           spreadRadius: (widget.isPending || widget.isEditing) ? 4 : 1,
+135:                           offset: const Offset(0, 4),
+136:                         ),
+137:                       ],
+138:                     ),
+139:                     child: Icon(widget.icon, color: Colors.white, size: MapPinShape.headSize * 0.5),
+140:                   ),
+141:                 );
+142:               },
+143:             ),
+The above content does NOT show the entire file contents. If you need to view any lines of the file which were not shown to complete your task, call this tool again to view those lines.

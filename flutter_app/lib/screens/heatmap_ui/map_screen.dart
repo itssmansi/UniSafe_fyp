@@ -345,6 +345,7 @@ class _MapScreenState extends ConsumerState<MapScreen> {
                   options: MapOptions(
               initialCenter: const LatLng(28.6139, 77.2090),
               initialZoom: 14.0,
+              onTap: (_, __) => FocusScope.of(context).unfocus(),
               interactionOptions: InteractionOptions(
                 flags: (_editingReportId != null || _droppedLocation != null)
                     ? InteractiveFlag.pinchZoom | InteractiveFlag.doubleTapZoom
@@ -406,14 +407,22 @@ class _MapScreenState extends ConsumerState<MapScreen> {
                   if (_myLocation != null)
                     Marker(
                       point: _myLocation!,
-                      width: 24,
-                      height: 24,
-                      child: Container(
-                        decoration: BoxDecoration(
-                          color: Colors.blue,
-                          shape: BoxShape.circle,
-                          border: Border.all(color: Colors.white, width: 3),
-                          boxShadow: const [BoxShadow(color: Colors.black26, blurRadius: 4)],
+                      width: 48,
+                      height: 48,
+                      alignment: Alignment.center,
+                      child: Align(
+                        alignment: Alignment.center,
+                        child: Container(
+                          width: 24,
+                          height: 24,
+                          decoration: BoxDecoration(
+                            color: Colors.blue.shade600,
+                            shape: BoxShape.circle,
+                            border: Border.all(color: Colors.white, width: 3.5),
+                            boxShadow: [
+                              BoxShadow(color: Colors.blue.shade300.withOpacity(0.5), blurRadius: 12, spreadRadius: 4),
+                            ],
+                          ),
                         ),
                       ),
                     ),
@@ -534,13 +543,13 @@ class _MapScreenState extends ConsumerState<MapScreen> {
                         ),
                         Expanded(
                           child: ClipRRect(
-                            borderRadius: BorderRadius.circular(24),
+                            borderRadius: BorderRadius.circular(50),
                             child: BackdropFilter(
                               filter: ImageFilter.blur(sigmaX: 20, sigmaY: 20),
                               child: Container(
                                 decoration: BoxDecoration(
                                   color: Colors.white.withOpacity(0.65),
-                                  borderRadius: BorderRadius.circular(24),
+                                  borderRadius: BorderRadius.circular(50),
                                   border: Border.all(color: Colors.white.withOpacity(0.8), width: 1.5),
                                   boxShadow: [
                                     BoxShadow(color: Colors.black.withOpacity(0.1), blurRadius: 24, offset: const Offset(0, 8)),
@@ -665,7 +674,7 @@ class _MapScreenState extends ConsumerState<MapScreen> {
                             ),
                             child: const Text(
                               'Tap or drag a category below to report an issue',
-                              style: TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.w600),
+                              style: TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.w600),
                             ),
                           ),
                         ),
@@ -683,12 +692,15 @@ class _MapScreenState extends ConsumerState<MapScreen> {
                                 BoxShadow(color: Colors.black.withOpacity(0.08), blurRadius: 30, offset: const Offset(0, 10)),
                               ],
                             ),
-                            child: Row(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                for (var category in IssueCategory.values)
-                                  _buildCategoryButton(category),
-                              ],
+                            child: FittedBox(
+                              fit: BoxFit.scaleDown,
+                              child: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  for (var category in IssueCategory.values)
+                                    _buildCategoryButton(category),
+                                ],
+                              ),
                             ),
                           ),
                         ),
@@ -791,7 +803,7 @@ class _MapScreenState extends ConsumerState<MapScreen> {
         const SizedBox(height: 4),
         Text(
           style.label,
-          style: TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: Colors.grey.shade700),
+          style: TextStyle(fontSize: 9, fontWeight: FontWeight.w600, color: Colors.grey.shade700),
         ),
       ],
     );
@@ -1152,7 +1164,7 @@ class _MapScreenState extends ConsumerState<MapScreen> {
                 ],
               ),
               content: SizedBox(
-                width: 340,
+                width: double.maxFinite,
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
                   children: IssueCategory.values.map((category) {
@@ -1201,10 +1213,12 @@ class _MapScreenState extends ConsumerState<MapScreen> {
                             Expanded(
                               child: Text(
                                 style.label,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
                                 style: TextStyle(
-                                  fontWeight: isVisible ? FontWeight.w700 : FontWeight.w600,
+                                  fontSize: 15,
+                                  fontWeight: isVisible ? FontWeight.w700 : FontWeight.w500,
                                   color: isVisible ? Colors.black87 : Colors.grey.shade600,
-                                  fontSize: 16,
                                 ),
                               ),
                             ),

@@ -1,0 +1,69 @@
+Created At: 2026-08-06T08:47:47+05:30
+Completed At: 2026-08-06T08:47:48+05:30
+File Path: `file:///c:/projects/Unisafe/flutter_app/lib/screens/heatmap_ui/map_screen.dart`
+Total Lines: 1554
+Total Bytes: 64216
+Showing lines 100 to 160
+The following code has been modified to include a line number before every line, in the format: <line_number>: <original_line>. Please note that any changes targeting the original code should remove the line number, colon, and leading space.
+100:   Widget build(BuildContext context) {
+101:     final ringColor = widget.isEditing ? const Color(0xFFF59E0B) : Colors.white;
+102:     
+103:     return SizedBox(
+104:       width: MapPinShape.boxWidth,
+105:       height: MapPinShape.boxHeight,
+106:       child: Center(
+107:         child: AnimatedBuilder(
+108:           animation: _pulseController,
+109:           builder: (context, child) {
+110:             final scale = widget.isPending || widget.isEditing 
+111:                 ? 1.0 + (_pulseController.value * 0.1) 
+112:                 : 1.0;
+113:             return Transform.scale(
+114:               scale: scale,
+115:               child: Transform.rotate(
+116:                 angle: 45 * 3.14159265359 / 180,
+117:                 child: Container(
+118:                   width: MapPinShape.headSize,
+119:                   height: MapPinShape.headSize,
+120:                   decoration: BoxDecoration(
+121:                     color: widget.color,
+122:                     borderRadius: const BorderRadius.only(
+123:                       topLeft: Radius.circular(24),
+124:                       topRight: Radius.circular(24),
+125:                       bottomLeft: Radius.circular(24),
+126:                       bottomRight: Radius.circular(4),
+127:                     ),
+128:                     border: Border.all(color: ringColor, width: widget.isEditing ? 3 : 2.5),
+129:                     boxShadow: [
+130:                       BoxShadow(
+131:                         color: widget.glowColor,
+132:                         blurRadius: (widget.isPending || widget.isEditing) ? 12 : 8,
+133:                         spreadRadius: (widget.isPending || widget.isEditing) ? 4 : 1,
+134:                         offset: const Offset(3, 3),
+135:                       ),
+136:                     ],
+137:                   ),
+138:                   child: Center(
+139:                     child: Transform.rotate(
+140:                       angle: -45 * 3.14159265359 / 180,
+141:                       child: Icon(widget.icon, color: Colors.white, size: MapPinShape.headSize * 0.5),
+142:                     ),
+143:                   ),
+144:                 ),
+145:               ),
+146:             );
+147:           },
+148:         ),
+149:       ),
+150:     );
+151:   }
+152: }
+153: 
+154: class MapScreen extends ConsumerStatefulWidget {
+155:   const MapScreen({super.key});
+156: 
+157:   @override
+158:   ConsumerState<MapScreen> createState() => _MapScreenState();
+159: }
+160: 
+The above content does NOT show the entire file contents. If you need to view any lines of the file which were not shown to complete your task, call this tool again to view those lines.

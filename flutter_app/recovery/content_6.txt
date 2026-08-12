@@ -1,0 +1,30 @@
+Created At: 2026-08-06T08:40:20+05:30
+Completed At: 2026-08-06T08:40:21+05:30
+File Path: `file:///c:/projects/Unisafe/flutter_app/lib/screens/heatmap_ui/map_screen.dart`
+Total Lines: 1574
+Total Bytes: 64890
+Showing lines 144 to 165
+The following code has been modified to include a line number before every line, in the format: <line_number>: <original_line>. Please note that any changes targeting the original code should remove the line number, colon, and leading space.
+144:             CustomPaint(
+145:               size: const Size(MapPinShape.headSize * 0.34, MapPinShape.tailHeight),
+146:               painter: _PinTailPainter(color: widget.isEditing ? const Color(0xFFF59E0B) : widget.color),
+147:             ),
+148:           ],
+149:         ),
+150:       ),
+151:     );
+152:   }
+153: }
+154: 
+155: class _PinTailPainter extends CustomPainter {
+156:   final Color color;
+157:   _PinTailPainter({required this.color});
+158: 
+159:   @override
+160:   void paint(Canvas canvas, Size size) {
+161:     final paint = Paint()..color = color;
+162:     final path = Path()
+163:       ..moveTo(0, 0)
+164:       ..lineTo(size.width, 0)
+165:       ..lineTo(size.width / 2, size.height)
+The above content does NOT show the entire file contents. If you need to view any lines of the file which were not shown to complete your task, call this tool again to view those lines.
