@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'screens/heatmap_ui/map_screen.dart';
+import 'screens/kanban_board_ui/kanban_board_screen.dart';
 
 void main() {
   WidgetsFlutterBinding.ensureInitialized();
@@ -47,19 +48,41 @@ class HomePage extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      appBar: AppBar(
+        title: const Text('UniSafe Home'),
+      ),
       body: Center(
-        child: ElevatedButton.icon(
-          onPressed: () {
-            Navigator.of(context).push(
-              MaterialPageRoute(builder: (context) => const MapScreen()),
-            );
-          },
-          icon: const Icon(Icons.map),
-          label: const Text('Open Heatmap'),
-          style: ElevatedButton.styleFrom(
-            padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
-            textStyle: const TextStyle(fontSize: 18, fontWeight: FontWeight.w600),
-          ),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            ElevatedButton.icon(
+              onPressed: () {
+                Navigator.of(context).push(
+                  MaterialPageRoute(builder: (context) => const MapScreen()),
+                );
+              },
+              icon: const Icon(Icons.map),
+              label: const Text('Open Heatmap'),
+              style: ElevatedButton.styleFrom(
+                padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
+                textStyle: const TextStyle(fontSize: 18, fontWeight: FontWeight.w600),
+              ),
+            ),
+            const SizedBox(height: 20),
+            ElevatedButton.icon(
+              onPressed: () {
+                Navigator.of(context).push(
+                  MaterialPageRoute(builder: (context) => const KanbanBoardScreen()),
+                );
+              },
+              icon: const Icon(Icons.view_kanban),
+              label: const Text('Open Kanban Board'),
+              style: ElevatedButton.styleFrom(
+                padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
+                textStyle: const TextStyle(fontSize: 18, fontWeight: FontWeight.w600),
+              ),
+            ),
+          ],
         ),
       ),
     );

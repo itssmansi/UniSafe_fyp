@@ -602,110 +602,120 @@ class _MapScreenState extends ConsumerState<MapScreen> {
                     ),
                     
                     
-                    // Suggestions List
-                    if (_suggestions.isNotEmpty)
-                      Container(
-                        margin: const EdgeInsets.only(top: 12),
-                        decoration: BoxDecoration(
-                          boxShadow: [
-                            BoxShadow(color: Colors.black.withOpacity(0.08), blurRadius: 24, offset: const Offset(0, 10)),
-                          ],
-                        ),
-                        child: ClipRRect(
-                          borderRadius: BorderRadius.circular(24),
-                          child: BackdropFilter(
-                            filter: ImageFilter.blur(sigmaX: 20, sigmaY: 20),
-                            child: Container(
-                              constraints: const BoxConstraints(maxHeight: 280),
-                              decoration: BoxDecoration(
-                                color: Colors.white.withOpacity(0.65),
-                                borderRadius: BorderRadius.circular(24),
-                                border: Border.all(color: Colors.white.withOpacity(0.8), width: 1.5),
-                              ),
-                              child: ListView.separated(
-                                shrinkWrap: true,
-                                padding: const EdgeInsets.symmetric(vertical: 8),
-                                itemCount: _suggestions.length,
-                                separatorBuilder: (context, index) => Divider(
-                                  height: 1, 
-                                  indent: 64, 
-                                  endIndent: 16, 
-                                  color: Colors.grey.withOpacity(0.25)
+                    Stack(
+                      clipBehavior: Clip.none,
+                      alignment: Alignment.topCenter,
+                      children: [
+                        // Pin Categories Bar (When idle)
+                        if (_droppedLocation == null && _editingReportId == null)
+                          Column(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              const SizedBox(height: 12),
+                              if (reports.isEmpty && _suggestions.isEmpty)
+                                Padding(
+                                  padding: const EdgeInsets.only(bottom: 8),
+                                  child: Container(
+                                    padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                                    decoration: BoxDecoration(
+                                      color: Colors.black.withOpacity(0.55),
+                                      borderRadius: BorderRadius.circular(20),
+                                    ),
+                                    child: const Text(
+                                      'Tap or drag a category below to report an issue',
+                                      style: TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.w600),
+                                    ),
+                                  ),
                                 ),
-                                itemBuilder: (context, index) {
-                                  final suggestion = _suggestions[index];
-                                  return ListTile(
-                                    contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
-                                    leading: Container(
-                                      padding: const EdgeInsets.all(10),
-                                      decoration: BoxDecoration(
-                                        color: Colors.blue.withOpacity(0.15),
-                                        shape: BoxShape.circle,
-                                        border: Border.all(color: Colors.white.withOpacity(0.5), width: 1.0),
+                              ClipRRect(
+                                borderRadius: BorderRadius.circular(36),
+                                child: BackdropFilter(
+                                  filter: ImageFilter.blur(sigmaX: 16, sigmaY: 16),
+                                  child: Container(
+                                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                                    decoration: BoxDecoration(
+                                      color: Colors.white.withOpacity(0.85),
+                                      borderRadius: BorderRadius.circular(36),
+                                      border: Border.all(color: Colors.white.withOpacity(0.6), width: 1.0),
+                                      boxShadow: [
+                                        BoxShadow(color: Colors.black.withOpacity(0.08), blurRadius: 30, offset: const Offset(0, 10)),
+                                      ],
+                                    ),
+                                    child: FittedBox(
+                                      fit: BoxFit.scaleDown,
+                                      child: Row(
+                                        mainAxisSize: MainAxisSize.min,
+                                        children: [
+                                          for (var category in IssueCategory.values)
+                                            _buildCategoryButton(category),
+                                        ],
                                       ),
-                                      child: Icon(LucideIcons.mapPin, color: Colors.blue.shade700, size: 20),
                                     ),
-                                    title: Text(
-                                      suggestion['display_name'],
-                                      maxLines: 2,
-                                      overflow: TextOverflow.ellipsis,
-                                      style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: Color(0xFF2D3748), height: 1.3),
-                                    ),
-                                    onTap: () => _selectSuggestion(suggestion),
-                                  );
-                                },
+                                  ),
+                                ),
                               ),
-                            ),
+                            ],
                           ),
-                        ),
-                      ),
-                    
-                    // Pin Categories Bar (When idle)
-                    if (_droppedLocation == null && _editingReportId == null) ...[
-                      const SizedBox(height: 12),
-                      if (reports.isEmpty && _suggestions.isEmpty)
-                        Padding(
-                          padding: const EdgeInsets.only(bottom: 8),
-                          child: Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                        
+                        // Suggestions List
+                        if (_suggestions.isNotEmpty)
+                          Container(
+                            margin: const EdgeInsets.only(top: 12),
                             decoration: BoxDecoration(
-                              color: Colors.black.withOpacity(0.55),
-                              borderRadius: BorderRadius.circular(20),
-                            ),
-                            child: const Text(
-                              'Tap or drag a category below to report an issue',
-                              style: TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.w600),
-                            ),
-                          ),
-                        ),
-                      ClipRRect(
-                        borderRadius: BorderRadius.circular(36),
-                        child: BackdropFilter(
-                          filter: ImageFilter.blur(sigmaX: 16, sigmaY: 16),
-                          child: Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-                            decoration: BoxDecoration(
-                              color: Colors.white.withOpacity(0.85),
-                              borderRadius: BorderRadius.circular(36),
-                              border: Border.all(color: Colors.white.withOpacity(0.6), width: 1.0),
                               boxShadow: [
-                                BoxShadow(color: Colors.black.withOpacity(0.08), blurRadius: 30, offset: const Offset(0, 10)),
+                                BoxShadow(color: Colors.black.withOpacity(0.08), blurRadius: 24, offset: const Offset(0, 10)),
                               ],
                             ),
-                            child: FittedBox(
-                              fit: BoxFit.scaleDown,
-                              child: Row(
-                                mainAxisSize: MainAxisSize.min,
-                                children: [
-                                  for (var category in IssueCategory.values)
-                                    _buildCategoryButton(category),
-                                ],
+                            child: ClipRRect(
+                              borderRadius: BorderRadius.circular(24),
+                              child: BackdropFilter(
+                                filter: ImageFilter.blur(sigmaX: 20, sigmaY: 20),
+                                child: Container(
+                                  constraints: const BoxConstraints(maxHeight: 280),
+                                  decoration: BoxDecoration(
+                                    color: Colors.white.withOpacity(0.65),
+                                    borderRadius: BorderRadius.circular(24),
+                                    border: Border.all(color: Colors.white.withOpacity(0.8), width: 1.5),
+                                  ),
+                                  child: ListView.separated(
+                                    shrinkWrap: true,
+                                    padding: const EdgeInsets.symmetric(vertical: 8),
+                                    itemCount: _suggestions.length,
+                                    separatorBuilder: (context, index) => Divider(
+                                      height: 1, 
+                                      indent: 64, 
+                                      endIndent: 16, 
+                                      color: Colors.grey.withOpacity(0.25)
+                                    ),
+                                    itemBuilder: (context, index) {
+                                      final suggestion = _suggestions[index];
+                                      return ListTile(
+                                        contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+                                        leading: Container(
+                                          padding: const EdgeInsets.all(10),
+                                          decoration: BoxDecoration(
+                                            color: Colors.blue.withOpacity(0.15),
+                                            shape: BoxShape.circle,
+                                            border: Border.all(color: Colors.white.withOpacity(0.5), width: 1.0),
+                                          ),
+                                          child: Icon(LucideIcons.mapPin, color: Colors.blue.shade700, size: 20),
+                                        ),
+                                        title: Text(
+                                          suggestion['display_name'],
+                                          maxLines: 2,
+                                          overflow: TextOverflow.ellipsis,
+                                          style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: Color(0xFF2D3748), height: 1.3),
+                                        ),
+                                        onTap: () => _selectSuggestion(suggestion),
+                                      );
+                                    },
+                                  ),
+                                ),
                               ),
                             ),
                           ),
-                        ),
-                      ),
-                    ],
+                      ],
+                    ),
                   ],
                 ),
               ),
