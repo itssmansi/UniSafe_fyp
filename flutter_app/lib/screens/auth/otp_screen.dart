@@ -1,17 +1,26 @@
 import 'package:flutter/material.dart';
+
 import '../../services/auth_service.dart';
 
 class OtpScreen extends StatefulWidget {
-  final String phoneNumber;
+  final String phone;
   final String name;
-  final String aadhaarNumber;
+  final String aadhaar;
+  final String address;
+  final String gender;
+  final String email;
+  final String username;
   final String password;
 
   const OtpScreen({
     super.key,
-    required this.phoneNumber,
+    required this.phone,
     required this.name,
-    required this.aadhaarNumber,
+    required this.aadhaar,
+    required this.address,
+    required this.gender,
+    required this.email,
+    required this.username,
     required this.password,
   });
 
@@ -20,7 +29,10 @@ class OtpScreen extends StatefulWidget {
 }
 
 class _OtpScreenState extends State<OtpScreen> {
-  final TextEditingController otpController = TextEditingController();
+  final _formKey = GlobalKey<FormState>();
+
+  final otpController = TextEditingController();
+
   final AuthService _authService = AuthService();
 
   bool isLoading = false;
@@ -31,15 +43,12 @@ class _OtpScreenState extends State<OtpScreen> {
     super.dispose();
   }
 
-  Future<void> _verifyOtp() async {
-    final otp = otpController.text.trim();
+  // ------------------------------------------------------------
+  // Verify OTP
+  // ------------------------------------------------------------
 
-    if (otp.length != 6) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Enter the 6-digit OTP.'),
-        ),
-      );
+  Future<void> _verifyOtp() async {
+    if (!_formKey.currentState!.validate()) {
       return;
     }
 
@@ -48,26 +57,52 @@ class _OtpScreenState extends State<OtpScreen> {
     });
 
     try {
-      await _authService.verifyOtp(
-        phone: widget.phoneNumber,
-        token: otp,
+      final result = await _authService.verifyOtp(
+        phone: widget.phone,
+        otp: otpController.text.trim(),
+        name: widget.name,
+        aadhaar: widget.aadhaar,
+        address: widget.address,
+        gender: widget.gender,
+        email: widget.email,
+        username: widget.username,
+        password: widget.password,
       );
 
       if (!mounted) return;
 
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Phone verified successfully.'),
-        ),
-      );
+      if (result['success'] == true) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text(
+              'OTP verified successfully!',
+            ),
+          ),
+        );
 
-      // Aadhaar verification will be added next.
+        // Account creation + dashboard navigation
+        // will be completed after the verify-otp
+        // Edge Function is created.
+      } else {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              result['message']?.toString() ??
+                  'OTP verification failed.',
+            ),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
     } catch (e) {
       if (!mounted) return;
 
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text('OTP verification failed: $e'),
+          content: Text(
+            'OTP verification failed: $e',
+          ),
+          backgroundColor: Colors.red,
         ),
       );
     } finally {
@@ -79,6 +114,65 @@ class _OtpScreenState extends State<OtpScreen> {
     }
   }
 
+  // ------------------------------------------------------------
+  // Resend OTP
+  // ------------------------------------------------------------
+
+  Future<void> _resendOtp() async {
+    setState(() {
+      isLoading = true;
+    });
+
+    try {
+      final result = await _authService.sendOtp(
+        phone: widget.phone,
+      );
+
+      if (!mounted) return;
+
+      if (result['success'] == true) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text(
+              'A new OTP has been sent.',
+            ),
+          ),
+        );
+      } else {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              result['message']?.toString() ??
+                  'Could not resend OTP.',
+            ),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    } catch (e) {
+      if (!mounted) return;
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            'Could not resend OTP: $e',
+          ),
+          backgroundColor: Colors.red,
+        ),
+      );
+    } finally {
+      if (mounted) {
+        setState(() {
+          isLoading = false;
+        });
+      }
+    }
+  }
+
+  // ------------------------------------------------------------
+  // UI
+  // ------------------------------------------------------------
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -86,66 +180,122 @@ class _OtpScreenState extends State<OtpScreen> {
         title: const Text('Verify Phone'),
       ),
       body: SafeArea(
-        child: Padding(
-          padding: const EdgeInsets.all(20),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              const SizedBox(height: 40),
+        child: SingleChildScrollView(
+          padding: const EdgeInsets.all(24),
+          child: Form(
+            key: _formKey,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                const SizedBox(height: 40),
 
-              const Text(
-                'Verify your phone number',
-                style: TextStyle(
-                  fontSize: 26,
-                  fontWeight: FontWeight.bold,
+                const Icon(
+                  Icons.sms,
+                  size: 70,
                 ),
-              ),
 
-              const SizedBox(height: 12),
+                const SizedBox(height: 24),
 
-              Text(
-                'Enter the 6-digit OTP sent to +91 ${widget.phoneNumber}',
-                style: const TextStyle(
-                  color: Colors.grey,
+                const Text(
+                  'Enter OTP',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(
+                    fontSize: 28,
+                    fontWeight: FontWeight.bold,
+                  ),
                 ),
-              ),
 
-              const SizedBox(height: 30),
+                const SizedBox(height: 12),
 
-              TextField(
-                controller: otpController,
-                keyboardType: TextInputType.number,
-                maxLength: 6,
-                textAlign: TextAlign.center,
-                decoration: const InputDecoration(
-                  labelText: 'OTP',
-                  hintText: '123456',
-                  border: OutlineInputBorder(),
-                  counterText: '',
+                Text(
+                  'We sent a 6-digit verification code to\n${widget.phone}',
+                  textAlign: TextAlign.center,
+                  style: const TextStyle(
+                    color: Colors.grey,
+                    fontSize: 15,
+                  ),
                 ),
-              ),
 
-              const SizedBox(height: 24),
+                const SizedBox(height: 35),
 
-              ElevatedButton(
-                onPressed: isLoading ? null : _verifyOtp,
-                child: Padding(
-                  padding: const EdgeInsets.symmetric(vertical: 14),
-                  child: isLoading
-                      ? const SizedBox(
-                          height: 20,
-                          width: 20,
-                          child: CircularProgressIndicator(
-                            strokeWidth: 2,
+                TextFormField(
+                  controller: otpController,
+                  keyboardType: TextInputType.number,
+                  maxLength: 6,
+                  textAlign: TextAlign.center,
+                  style: const TextStyle(
+                    fontSize: 24,
+                    letterSpacing: 8,
+                    fontWeight: FontWeight.bold,
+                  ),
+                  decoration: const InputDecoration(
+                    labelText: 'Enter OTP',
+                    border: OutlineInputBorder(),
+                    counterText: '',
+                  ),
+                  validator: (value) {
+                    final otp = value?.trim() ?? '';
+
+                    if (otp.isEmpty) {
+                      return 'Please enter the OTP';
+                    }
+
+                    if (!RegExp(r'^\d{6}$').hasMatch(otp)) {
+                      return 'OTP must contain 6 digits';
+                    }
+
+                    return null;
+                  },
+                ),
+
+                const SizedBox(height: 24),
+
+                SizedBox(
+                  height: 52,
+                  child: ElevatedButton(
+                    onPressed:
+                        isLoading ? null : _verifyOtp,
+                    child: isLoading
+                        ? const SizedBox(
+                            height: 24,
+                            width: 24,
+                            child:
+                                CircularProgressIndicator(
+                              strokeWidth: 2,
+                            ),
+                          )
+                        : const Text(
+                            'Verify OTP',
+                            style: TextStyle(
+                              fontSize: 16,
+                              fontWeight: FontWeight.bold,
+                            ),
                           ),
-                        )
-                      : const Text(
-                          'Verify OTP',
-                          style: TextStyle(fontSize: 16),
-                        ),
+                  ),
                 ),
-              ),
-            ],
+
+                const SizedBox(height: 20),
+
+                TextButton(
+                  onPressed:
+                      isLoading ? null : _resendOtp,
+                  child: const Text(
+                    'Resend OTP',
+                  ),
+                ),
+
+                const SizedBox(height: 20),
+
+                const Text(
+                  'The OTP is valid for 5 minutes.',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(
+                    color: Colors.grey,
+                    fontSize: 12,
+                  ),
+                ),
+              ],
+            ),
           ),
         ),
       ),

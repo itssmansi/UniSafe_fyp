@@ -1,9 +1,8 @@
 import 'package:flutter/material.dart';
-import 'otp_screen.dart';
-import '../../services/auth_service.dart';
 
-final AuthService _authService = AuthService();
-bool isLoading = false; 
+import '../../services/auth_service.dart';
+import 'otp_screen.dart';
+
 class SignupScreen extends StatefulWidget {
   const SignupScreen({super.key});
 
@@ -14,65 +13,172 @@ class SignupScreen extends StatefulWidget {
 class _SignupScreenState extends State<SignupScreen> {
   final _formKey = GlobalKey<FormState>();
 
-  final TextEditingController nameController = TextEditingController();
-  final TextEditingController phoneController = TextEditingController();
-  final TextEditingController aadhaarController = TextEditingController();
-  final TextEditingController passwordController = TextEditingController();
+  // ------------------------------------------------------------
+  // Controllers
+  // ------------------------------------------------------------
 
-  bool _obscurePassword = true;
+  final nameController = TextEditingController();
+  final aadhaarController = TextEditingController();
+  final addressController = TextEditingController();
+  final phoneController = TextEditingController();
+  final emailController = TextEditingController();
+  final usernameController = TextEditingController();
+  final passwordController = TextEditingController();
+
+  // ------------------------------------------------------------
+  // Services / state
+  // ------------------------------------------------------------
+
+  final AuthService _authService = AuthService();
+
+  String? selectedGender;
+
+  bool isLoading = false;
+  bool obscurePassword = true;
+
+  // ------------------------------------------------------------
+  // Dispose
+  // ------------------------------------------------------------
 
   @override
   void dispose() {
     nameController.dispose();
-    phoneController.dispose();
     aadhaarController.dispose();
+    addressController.dispose();
+    phoneController.dispose();
+    emailController.dispose();
+    usernameController.dispose();
     passwordController.dispose();
+
     super.dispose();
   }
 
-  Future<void> _continueSignup() async {
-  if (!_formKey.currentState!.validate()) {
-    return;
-  }
+  // ------------------------------------------------------------
+  // Verify identity + send OTP
+  // ------------------------------------------------------------
 
-  setState(() {
-    isLoading = true;
-  });
+  Future<void> _verifyIdentity() async {
+    if (!_formKey.currentState!.validate()) {
+      return;
+    }
 
-  try {
-    final phone = '+91${phoneController.text.trim()}';
-
-    await _authService.sendOtp(phone);
-
-    if (!mounted) return;
-
-    Navigator.push(
-      context,
-      MaterialPageRoute(
-        builder: (context) => OtpScreen(
-          phoneNumber: phoneController.text.trim(),
-          name: nameController.text.trim(),
-          aadhaarNumber: aadhaarController.text.trim(),
-          password: passwordController.text,
+    if (selectedGender == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Please select your gender.'),
+          backgroundColor: Colors.red,
         ),
-      ),
-    );
-  } catch (e) {
-    if (!mounted) return;
+      );
 
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text('Could not send OTP: $e'),
-      ),
-    );
-  } finally {
-    if (mounted) {
-      setState(() {
-        isLoading = false;
-      });
+      return;
+    }
+
+    setState(() {
+      isLoading = true;
+    });
+
+    try {
+      // --------------------------------------------------------
+      // STEP 1: Mock identity verification
+      // --------------------------------------------------------
+
+      final identityResult =
+          await _authService.verifyMockCitizen(
+        name: nameController.text.trim(),
+        aadhaar: aadhaarController.text.trim(),
+        address: addressController.text.trim(),
+        gender: selectedGender!,
+        phone: phoneController.text.trim(),
+        email: emailController.text.trim(),
+      );
+
+      if (!mounted) return;
+
+      final identityVerified =
+          identityResult['verified'] == true;
+
+      if (!identityVerified) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              identityResult['message']?.toString() ??
+                  'Identity verification failed.',
+            ),
+            backgroundColor: Colors.red,
+          ),
+        );
+
+        return;
+      }
+
+      // --------------------------------------------------------
+      // STEP 2: Send OTP through Pingram
+      // --------------------------------------------------------
+
+      final otpResult = await _authService.sendOtp(
+        phone: phoneController.text.trim(),
+      );
+
+      if (!mounted) return;
+
+      final otpSent = otpResult['success'] == true;
+
+      if (!otpSent) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              otpResult['message']?.toString() ??
+                  'Could not send OTP.',
+            ),
+            backgroundColor: Colors.red,
+          ),
+        );
+
+        return;
+      }
+
+      // --------------------------------------------------------
+      // STEP 3: Move to OTP screen
+      // --------------------------------------------------------
+
+      Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (context) => OtpScreen(
+            phone: phoneController.text.trim(),
+            name: nameController.text.trim(),
+            aadhaar: aadhaarController.text.trim(),
+            address: addressController.text.trim(),
+            gender: selectedGender!,
+            email: emailController.text.trim(),
+            username: usernameController.text.trim(),
+            password: passwordController.text,
+          ),
+        ),
+      );
+    } catch (e) {
+      if (!mounted) return;
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            'Something went wrong: $e',
+          ),
+          backgroundColor: Colors.red,
+        ),
+      );
+    } finally {
+      if (mounted) {
+        setState(() {
+          isLoading = false;
+        });
+      }
     }
   }
-}
+
+  // ------------------------------------------------------------
+  // UI
+  // ------------------------------------------------------------
 
   @override
   Widget build(BuildContext context) {
@@ -91,7 +197,7 @@ class _SignupScreenState extends State<SignupScreen> {
                 const SizedBox(height: 20),
 
                 const Text(
-                  'Citizen Registration',
+                  'Join the UniSafe Family',
                   style: TextStyle(
                     fontSize: 28,
                     fontWeight: FontWeight.bold,
@@ -101,31 +207,30 @@ class _SignupScreenState extends State<SignupScreen> {
                 const SizedBox(height: 8),
 
                 const Text(
-                  'Create your UniSafe citizen account.',
+                  'Enter your details to verify your identity and create your account.',
                   style: TextStyle(
-                    fontSize: 15,
                     color: Colors.grey,
+                    fontSize: 15,
                   ),
                 ),
 
-                const SizedBox(height: 30),
+                const SizedBox(height: 28),
 
-                // NAME
+                // ------------------------------------------------
+                // Name
+                // ------------------------------------------------
+
                 TextFormField(
                   controller: nameController,
                   textCapitalization: TextCapitalization.words,
                   decoration: const InputDecoration(
                     labelText: 'Full Name',
-                    hintText: 'Enter your full name',
                     border: OutlineInputBorder(),
+                    prefixIcon: Icon(Icons.person),
                   ),
                   validator: (value) {
                     if (value == null || value.trim().isEmpty) {
-                      return 'Enter your name';
-                    }
-
-                    if (value.trim().length < 2) {
-                      return 'Enter a valid name';
+                      return 'Please enter your name';
                     }
 
                     return null;
@@ -134,55 +239,29 @@ class _SignupScreenState extends State<SignupScreen> {
 
                 const SizedBox(height: 16),
 
-                // PHONE
-                TextFormField(
-                  controller: phoneController,
-                  keyboardType: TextInputType.phone,
-                  maxLength: 10,
-                  decoration: const InputDecoration(
-                    labelText: 'Phone Number',
-                    hintText: 'Enter 10-digit phone number',
-                    prefixText: '+91 ',
-                    border: OutlineInputBorder(),
-                    counterText: '',
-                  ),
-                  validator: (value) {
-                    final phone = value?.trim() ?? '';
+                // ------------------------------------------------
+                // Aadhaar
+                // ------------------------------------------------
 
-                    if (phone.isEmpty) {
-                      return 'Enter your phone number';
-                    }
-
-                    if (!RegExp(r'^[6-9][0-9]{9}$').hasMatch(phone)) {
-                      return 'Enter a valid 10-digit phone number';
-                    }
-
-                    return null;
-                  },
-                ),
-
-                const SizedBox(height: 16),
-
-                // AADHAAR
                 TextFormField(
                   controller: aadhaarController,
                   keyboardType: TextInputType.number,
                   maxLength: 12,
                   decoration: const InputDecoration(
                     labelText: 'Aadhaar Number',
-                    hintText: 'Enter 12-digit Aadhaar number',
                     border: OutlineInputBorder(),
+                    prefixIcon: Icon(Icons.badge),
                     counterText: '',
                   ),
                   validator: (value) {
                     final aadhaar = value?.trim() ?? '';
 
                     if (aadhaar.isEmpty) {
-                      return 'Enter your Aadhaar number';
+                      return 'Please enter Aadhaar number';
                     }
 
-                    if (!RegExp(r'^[0-9]{12}$').hasMatch(aadhaar)) {
-                      return 'Aadhaar must contain exactly 12 digits';
+                    if (!RegExp(r'^\d{12}$').hasMatch(aadhaar)) {
+                      return 'Aadhaar must contain 12 digits';
                     }
 
                     return null;
@@ -191,33 +270,198 @@ class _SignupScreenState extends State<SignupScreen> {
 
                 const SizedBox(height: 16),
 
-                // PASSWORD
+                // ------------------------------------------------
+                // Address
+                // ------------------------------------------------
+
+                TextFormField(
+                  controller: addressController,
+                  maxLines: 3,
+                  textCapitalization:
+                      TextCapitalization.sentences,
+                  decoration: const InputDecoration(
+                    labelText: 'Address',
+                    border: OutlineInputBorder(),
+                    prefixIcon: Icon(Icons.location_on),
+                    alignLabelWithHint: true,
+                  ),
+                  validator: (value) {
+                    if (value == null || value.trim().isEmpty) {
+                      return 'Please enter your address';
+                    }
+
+                    return null;
+                  },
+                ),
+
+                const SizedBox(height: 16),
+
+                // ------------------------------------------------
+                // Gender
+                // ------------------------------------------------
+
+                DropdownButtonFormField<String>(
+                  value: selectedGender,
+                  decoration: const InputDecoration(
+                    labelText: 'Gender',
+                    border: OutlineInputBorder(),
+                    prefixIcon: Icon(Icons.people),
+                  ),
+                  items: const [
+                    DropdownMenuItem(
+                      value: 'Male',
+                      child: Text('Male'),
+                    ),
+                    DropdownMenuItem(
+                      value: 'Female',
+                      child: Text('Female'),
+                    ),
+                    DropdownMenuItem(
+                      value: 'Other',
+                      child: Text('Other'),
+                    ),
+                  ],
+                  onChanged: (value) {
+                    setState(() {
+                      selectedGender = value;
+                    });
+                  },
+                  validator: (value) {
+                    if (value == null || value.isEmpty) {
+                      return 'Please select your gender';
+                    }
+
+                    return null;
+                  },
+                ),
+
+                const SizedBox(height: 16),
+
+                // ------------------------------------------------
+                // Phone
+                // ------------------------------------------------
+
+                TextFormField(
+                  controller: phoneController,
+                  keyboardType: TextInputType.phone,
+                  maxLength: 10,
+                  decoration: const InputDecoration(
+                    labelText: 'Phone Number',
+                    border: OutlineInputBorder(),
+                    prefixIcon: Icon(Icons.phone),
+                    counterText: '',
+                  ),
+                  validator: (value) {
+                    final phone = value?.trim() ?? '';
+
+                    if (phone.isEmpty) {
+                      return 'Please enter your phone number';
+                    }
+
+                    if (!RegExp(r'^\d{10}$').hasMatch(phone)) {
+                      return 'Phone number must contain 10 digits';
+                    }
+
+                    return null;
+                  },
+                ),
+
+                const SizedBox(height: 16),
+
+                // ------------------------------------------------
+                // Email
+                // ------------------------------------------------
+
+                TextFormField(
+                  controller: emailController,
+                  keyboardType: TextInputType.emailAddress,
+                  decoration: const InputDecoration(
+                    labelText: 'Email',
+                    border: OutlineInputBorder(),
+                    prefixIcon: Icon(Icons.email),
+                  ),
+                  validator: (value) {
+                    final email = value?.trim() ?? '';
+
+                    if (email.isEmpty) {
+                      return 'Please enter your email';
+                    }
+
+                    final emailRegex = RegExp(
+                      r'^[^@\s]+@[^@\s]+\.[^@\s]+$',
+                    );
+
+                    if (!emailRegex.hasMatch(email)) {
+                      return 'Please enter a valid email';
+                    }
+
+                    return null;
+                  },
+                ),
+
+                const SizedBox(height: 16),
+
+                // ------------------------------------------------
+                // Username
+                // ------------------------------------------------
+
+                TextFormField(
+                  controller: usernameController,
+                  decoration: const InputDecoration(
+                    labelText: 'Username',
+                    border: OutlineInputBorder(),
+                    prefixIcon: Icon(Icons.account_circle),
+                  ),
+                  validator: (value) {
+                    final username = value?.trim() ?? '';
+
+                    if (username.isEmpty) {
+                      return 'Please enter a username';
+                    }
+
+                    if (username.length < 3) {
+                      return 'Username must be at least 3 characters';
+                    }
+
+                    return null;
+                  },
+                ),
+
+                const SizedBox(height: 16),
+
+                // ------------------------------------------------
+                // Password
+                // ------------------------------------------------
+
                 TextFormField(
                   controller: passwordController,
-                  obscureText: _obscurePassword,
+                  obscureText: obscurePassword,
                   decoration: InputDecoration(
-                    labelText: 'Password',
-                    hintText: 'Enter your password',
+                    labelText: 'Create Password',
                     border: const OutlineInputBorder(),
+                    prefixIcon: const Icon(Icons.lock),
                     suffixIcon: IconButton(
                       icon: Icon(
-                        _obscurePassword
+                        obscurePassword
                             ? Icons.visibility
                             : Icons.visibility_off,
                       ),
                       onPressed: () {
                         setState(() {
-                          _obscurePassword = !_obscurePassword;
+                          obscurePassword =
+                              !obscurePassword;
                         });
                       },
                     ),
                   ),
                   validator: (value) {
-                    if (value == null || value.isEmpty) {
-                      return 'Enter a password';
+                    final password = value ?? '';
+
+                    if (password.isEmpty) {
+                      return 'Please enter a password';
                     }
 
-                    if (value.length < 6) {
+                    if (password.length < 6) {
                       return 'Password must be at least 6 characters';
                     }
 
@@ -227,26 +471,42 @@ class _SignupScreenState extends State<SignupScreen> {
 
                 const SizedBox(height: 28),
 
-                // CONTINUE BUTTON
-                ElevatedButton(
-                  onPressed: isLoading ? null : _continueSignup,
-                  style: ElevatedButton.styleFrom(
-                    padding: const EdgeInsets.symmetric(vertical: 15),
-                  ),
-                  child: const Text(
-                    'Continue',
-                    style: TextStyle(fontSize: 16),
+                // ------------------------------------------------
+                // Verify Identity Button
+                // ------------------------------------------------
+
+                SizedBox(
+                  height: 52,
+                  child: ElevatedButton(
+                    onPressed:
+                        isLoading ? null : _verifyIdentity,
+                    child: isLoading
+                        ? const SizedBox(
+                            height: 24,
+                            width: 24,
+                            child:
+                                CircularProgressIndicator(
+                              strokeWidth: 2,
+                            ),
+                          )
+                        : const Text(
+                            'Verify Identity',
+                            style: TextStyle(
+                              fontSize: 16,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
                   ),
                 ),
 
                 const SizedBox(height: 16),
 
                 const Text(
-                  'A 12-digit Aadhaar number and valid 10-digit mobile number are required.',
+                  'Your identity will be verified before an OTP is sent to your registered phone number.',
                   textAlign: TextAlign.center,
                   style: TextStyle(
-                    fontSize: 12,
                     color: Colors.grey,
+                    fontSize: 12,
                   ),
                 ),
               ],

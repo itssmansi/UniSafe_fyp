@@ -1,41 +1,35 @@
 import 'package:flutter/material.dart';
-import 'package:flutter_app/screens/auth/signup_screen.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
+
 import 'config/supabase_config.dart';
+import 'screens/auth/auth_choice_screen.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
-  await SupabaseConfig.initialize();
+ await Supabase.initialize(
+  url: SupabaseConfig.supabaseUrl,
+  publishableKey: SupabaseConfig.supabasePublishableKey,
+);
 
-  runApp(const MyApp());
+  runApp(const UniSafeApp());
 }
 
-class MyApp extends StatelessWidget {
-  const MyApp({super.key});
+class UniSafeApp extends StatelessWidget {
+  const UniSafeApp({super.key});
 
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
       debugShowCheckedModeBanner: false,
       title: 'UniSafe',
-      home: const SignupScreen(),
-    );
-  }
-}
-
-class HomeScreen extends StatelessWidget {
-  const HomeScreen({super.key});
-
-  @override
-  Widget build(BuildContext context) {
-    return const Scaffold(
-      body: Center(
-        child: Text(
-          'UniSafe\nSupabase Connected',
-          textAlign: TextAlign.center,
-          style: TextStyle(fontSize: 24),
+      theme: ThemeData(
+        colorScheme: ColorScheme.fromSeed(
+          seedColor: Colors.deepPurple,
         ),
+        useMaterial3: true,
       ),
+      home: const AuthChoiceScreen(),
     );
   }
 }
