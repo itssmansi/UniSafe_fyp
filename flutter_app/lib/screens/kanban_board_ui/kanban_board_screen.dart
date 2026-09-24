@@ -1,30 +1,51 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
+import 'package:appflowy_board/appflowy_board.dart';
+import 'package:intl/intl.dart';
+import 'package:faker/faker.dart' hide Color;
+import 'package:uuid/uuid.dart';
+import '../home_page.dart';
 
-class KanbanTask {
+class KanbanColumnData {
   final String id;
-  final String title;
-  final String description;
-  final String status;
-  final String priority;
+  final String name;
+  final Color color;
+
+  KanbanColumnData({required this.id, required this.name, required this.color});
+}
+
+class User {
+  final String id;
+  final String name;
+  final String image;
+
+  User({required this.id, required this.name, required this.image});
+}
+
+class DragData {
+  final KanbanTask task;
+  final String sourceColumnId;
+  DragData(this.task, this.sourceColumnId);
+}
+
+class KanbanTask extends AppFlowyGroupItem {
+  @override
+  final String id;
+  final String name;
+  final String? description;
+  final DateTime startAt;
+  final DateTime endAt;
+  final String columnId;
+  final User? owner;
 
   KanbanTask({
     required this.id,
-    required this.title,
-    required this.description,
-    required this.status,
-    required this.priority,
+    required this.name,
+    this.description,
+    required this.startAt,
+    required this.endAt,
+    required this.columnId,
+    this.owner,
   });
-
-  KanbanTask copyWith({String? status}) {
-    return KanbanTask(
-      id: id,
-      title: title,
-      description: description,
-      status: status ?? this.status,
-      priority: priority,
-    );
-  }
 }
 
 class KanbanBoardScreen extends StatefulWidget {
@@ -35,323 +56,161 @@ class KanbanBoardScreen extends StatefulWidget {
 }
 
 class _KanbanBoardScreenState extends State<KanbanBoardScreen> {
-  bool _isAuthority = true;
+  late AppFlowyBoardController controller;
 
-  final List<String> _columns = [
-    'Reported',
-    'Under Investigation',
-    'Action Taken',
-    'Resolved'
+  final List<KanbanColumnData> columns = [
+    KanbanColumnData(id: 'col-1', name: "Planned", color: const Color(0xFF6B7280)),
+    KanbanColumnData(id: 'col-2', name: "In Progress", color: const Color(0xFFF59E0B)),
+    KanbanColumnData(id: 'col-3', name: "In Review", color: const Color(0xFF3B82F6)),
+    KanbanColumnData(id: 'col-4', name: "Done", color: const Color(0xFF10B981)),
   ];
 
-  List<KanbanTask> _tasks = [
-    KanbanTask(
-      id: '1',
-      title: 'Suspicious Activity in Library',
-      description: 'A person was seen loitering around the library entrance.',
-      status: 'Reported',
-      priority: 'Low',
-    ),
-    KanbanTask(
-      id: '2',
-      title: 'Broken Streetlight near Gate B',
-      description: 'The main streetlight is out, causing poor visibility.',
-      status: 'Reported',
-      priority: 'Medium',
-    ),
-    KanbanTask(
-      id: '3',
-      title: 'Lost Backpack at Cafeteria',
-      description: 'A blue backpack was reported missing around 2 PM.',
-      status: 'Under Investigation',
-      priority: 'Low',
-    ),
-    KanbanTask(
-      id: '4',
-      title: 'Medical Emergency at Gym',
-      description: 'Student slipped and fell in the gym, requires assistance.',
-      status: 'Action Taken',
-      priority: 'High',
-    ),
-    KanbanTask(
-      id: '5',
-      title: 'Fire Alarm Test Issue',
-      description: 'Alarm did not go off in block C during the test.',
-      status: 'Resolved',
-      priority: 'Medium',
-    ),
-  ];
+  @override
+  void initState() {
+    super.initState();
+    final faker = Faker();
+    const uuid = Uuid();
 
-  void _updateTaskStatus(String taskId, String newStatus) {
-    HapticFeedback.mediumImpact();
-    setState(() {
-      final index = _tasks.indexWhere((t) => t.id == taskId);
-      if (index != -1) {
-        _tasks[index] = _tasks[index].copyWith(status: newStatus);
-      }
+    final users = List.generate(
+      4,
+      (index) => User(
+        id: uuid.v4(),
+        name: faker.person.name(),
+        image: 'https://i.pravatar.cc/150?u=${uuid.v4()}',
+      ),
+    );
+
+    final allFeatures = List.generate(20, (index) {
+      final start = faker.date.dateTime(minYear: 2023, maxYear: 2024);
+      final end = start.add(Duration(days: faker.randomGenerator.integer(60, min: 2)));
+      return KanbanTask(
+        id: uuid.v4(),
+        name: faker.company.position(),
+        description: faker.randomGenerator.boolean() ? faker.lorem.sentences(3).join(' ') : null,
+        startAt: start,
+        endAt: end,
+        columnId: faker.randomGenerator.element(columns).id,
+        owner: faker.randomGenerator.element(users),
+      );
     });
-  }
 
-  Color _getPriorityColor(String priority) {
-    switch (priority) {
-      case 'High':
-        return const Color(0xFFEF4444); // Tailwind Red 500
-      case 'Medium':
-        return const Color(0xFFF59E0B); // Tailwind Amber 500
-      case 'Low':
-        return const Color(0xFF10B981); // Tailwind Emerald 500
-      default:
-        return const Color(0xFF6B7280); // Tailwind Gray 500
+    controller = AppFlowyBoardController(
+      onMoveGroupItem: (groupId, fromIndex, toIndex) {},
+      onMoveGroupItemToGroup: (fromGroupId, fromIndex, toGroupId, toIndex) {},
+    );
+
+    for (var col in columns) {
+      final colTasks = allFeatures.where((t) => t.columnId == col.id).toList();
+      controller.addGroup(AppFlowyGroupData(
+        id: col.id,
+        name: col.name,
+        items: colTasks,
+        customData: col,
+      ));
     }
   }
 
-  IconData _getStatusIcon(String status) {
-    switch (status) {
-      case 'Reported':
-        return Icons.report_problem_rounded;
-      case 'Under Investigation':
-        return Icons.search_rounded;
-      case 'Action Taken':
-        return Icons.build_circle_rounded;
-      case 'Resolved':
-        return Icons.check_circle_rounded;
-      default:
-        return Icons.info_rounded;
-    }
-  }
-
-  Color _getStatusColor(String status) {
-    switch (status) {
-      case 'Reported':
-        return const Color(0xFF3B82F6); // Blue
-      case 'Under Investigation':
-        return const Color(0xFF8B5CF6); // Purple
-      case 'Action Taken':
-        return const Color(0xFFF97316); // Orange
-      case 'Resolved':
-        return const Color(0xFF10B981); // Emerald
-      default:
-        return Colors.grey;
+  void _handleBackNavigation(BuildContext context) {
+    if (Navigator.of(context).canPop()) {
+      Navigator.of(context).pop();
+    } else {
+      Navigator.of(context).pushReplacement(
+        MaterialPageRoute(builder: (context) => const HomePage()),
+      );
     }
   }
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: const Color(0xFFF9FAFB),
-      appBar: AppBar(
-        title: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const Text(
-              'Situations',
-              style: TextStyle(fontWeight: FontWeight.w800, fontSize: 18),
-            ),
-            Text(
-              _isAuthority ? 'Editing Enabled' : 'Read-Only Mode',
-              style: TextStyle(
-                fontSize: 11,
-                color: _isAuthority ? Colors.redAccent : Colors.grey.shade600,
-                fontWeight: FontWeight.w700,
-              ),
-            ),
-          ],
-        ),
-        backgroundColor: Colors.white,
-        foregroundColor: const Color(0xFF1F2937),
-        elevation: 0.5,
-        actions: [
-          Row(
-            children: [
-              Icon(
-                _isAuthority ? Icons.admin_panel_settings : Icons.visibility,
-                size: 16,
-                color: _isAuthority ? const Color(0xFF3B82F6) : Colors.grey.shade500,
-              ),
-              const SizedBox(width: 4),
-              Transform.scale(
-                scale: 0.8,
-                child: Switch(
-                  value: _isAuthority,
-                  activeColor: const Color(0xFF3B82F6),
-                  onChanged: (val) {
-                    setState(() {
-                      _isAuthority = val;
-                    });
-                  },
-                ),
-              ),
-              const SizedBox(width: 8),
-            ],
+    return PopScope(
+      canPop: false,
+      onPopInvokedWithResult: (didPop, result) {
+        if (didPop) return;
+        _handleBackNavigation(context);
+      },
+      child: Scaffold(
+        backgroundColor: const Color(0xFFF9FAFB),
+        appBar: AppBar(
+          title: const Text(
+            'Kanban Board',
+            style: TextStyle(fontWeight: FontWeight.w600),
           ),
-        ],
-      ),
-      body: SafeArea(
-        child: LayoutBuilder(
+          leading: IconButton(
+            icon: const Icon(Icons.arrow_back),
+            onPressed: () => _handleBackNavigation(context),
+          ),
+          backgroundColor: Colors.white,
+          elevation: 1,
+        ),
+        body: LayoutBuilder(
           builder: (context, constraints) {
-            final isMobile = constraints.maxWidth < 600;
-
-            if (isMobile) {
-              return Padding(
-                padding: const EdgeInsets.all(8.0),
-                child: Column(
-                  children: [
-                    Expanded(
-                      child: Row(
-                        children: [
-                          Expanded(child: _buildColumn(_columns[0], true)),
-                          Expanded(child: _buildColumn(_columns[1], true)),
-                        ],
-                      ),
-                    ),
-                    Expanded(
-                      child: Row(
-                        children: [
-                          Expanded(child: _buildColumn(_columns[2], true)),
-                          Expanded(child: _buildColumn(_columns[3], true)),
-                        ],
-                      ),
-                    ),
-                  ],
-                ),
-              );
+            if (constraints.maxWidth < 600) {
+              return _buildMobileGrid();
             }
-
-            double columnWidth = 320;
-            if (constraints.maxWidth > 1300) {
-              columnWidth = (constraints.maxWidth - 32) / _columns.length;
-            } else if (constraints.maxWidth > 800) {
-              columnWidth = constraints.maxWidth / 3;
-            } else {
-              columnWidth = constraints.maxWidth / 2.2;
-            }
-
-            return ListView.builder(
-              scrollDirection: Axis.horizontal,
-              padding: const EdgeInsets.all(16.0),
-              itemCount: _columns.length,
-              itemBuilder: (context, index) {
-                return SizedBox(
-                  width: columnWidth,
-                  child: _buildColumn(_columns[index], false),
-                );
-              },
-            );
+            return _buildDesktopBoard(constraints);
           },
         ),
       ),
     );
   }
 
-  Widget _buildColumn(String status, bool isGrid) {
-    if (!_isAuthority) {
-      return _buildColumnContent(status, isGrid, false);
-    }
+  // --- DESKTOP VIEW (AppFlowyBoard with drag-and-drop) ---
 
-    return DragTarget<String>(
-      onWillAcceptWithDetails: (details) {
-        // Find the task by ID and check if it's not already in this column
-        try {
-          final draggedTask = _tasks.firstWhere((t) => t.id == details.data);
-          return draggedTask.status != status;
-        } catch (e) {
-          return false;
-        }
-      },
-      onAcceptWithDetails: (details) {
-        _updateTaskStatus(details.data, status);
-      },
-      builder: (context, candidateData, rejectedData) {
-        return _buildColumnContent(status, isGrid, candidateData.isNotEmpty);
-      },
+  Widget _buildDesktopBoard(BoxConstraints constraints) {
+    final columnWidth = (constraints.maxWidth - 32) / 4.5; // Roughly fit 4 columns
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 16.0),
+      child: AppFlowyBoard(
+        controller: controller,
+        cardBuilder: (context, group, groupItem) {
+          return AppFlowyGroupCard(
+            key: ValueKey(groupItem.id),
+            decoration: const BoxDecoration(color: Colors.transparent),
+            child: _buildTaskCard(groupItem as KanbanTask),
+          );
+        },
+        headerBuilder: (context, columnData) {
+          final colMeta = columnData.customData as KanbanColumnData;
+          final currentItems = controller.getGroupController(columnData.id)?.items.length ?? 0;
+          return _buildHeader(colMeta, currentItems);
+        },
+        footerBuilder: (context, columnData) => const SizedBox(height: 16),
+        groupConstraints: BoxConstraints.tightFor(width: columnWidth > 280 ? columnWidth : 280),
+        config: const AppFlowyBoardConfig(
+          groupBackgroundColor: Colors.transparent,
+          stretchGroupHeight: false,
+        ),
+      ),
     );
   }
 
-  Widget _buildColumnContent(String status, bool isGrid, bool isHovering) {
-    final columnTasks = _tasks.where((t) => t.status == status).toList();
-    final statusColor = _getStatusColor(status);
-    final statusIcon = _getStatusIcon(status);
+  // --- MOBILE VIEW (2x2 Grid) ---
 
-    return AnimatedContainer(
-      duration: const Duration(milliseconds: 200),
-      margin: isGrid ? const EdgeInsets.all(4.0) : const EdgeInsets.only(right: 16.0),
-      decoration: BoxDecoration(
-        color: isHovering ? const Color(0xFF3B82F6).withOpacity(0.08) : Colors.white,
-        borderRadius: BorderRadius.circular(12),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.02),
-            blurRadius: 8,
-            offset: const Offset(0, 2),
-          ),
-        ],
-        border: Border.all(
-          color: isHovering ? const Color(0xFF3B82F6).withOpacity(0.5) : Colors.grey.shade200,
-          width: isHovering ? 2 : 1,
-        ),
-      ),
+  Widget _buildMobileGrid() {
+    final groups = controller.groupDatas;
+    if (groups.length != 4) return const SizedBox();
+
+    return Padding(
+      padding: const EdgeInsets.all(8.0),
       child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          // Column Header
-          Container(
-            padding: EdgeInsets.all(isGrid ? 8.0 : 14.0),
-            decoration: BoxDecoration(
-              color: statusColor.withOpacity(0.06),
-              borderRadius: const BorderRadius.vertical(top: Radius.circular(12)),
-              border: Border(bottom: BorderSide(color: statusColor.withOpacity(0.12))),
-            ),
+          Expanded(
             child: Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                Expanded(
-                  child: Row(
-                    children: [
-                      Icon(statusIcon, color: statusColor, size: isGrid ? 14 : 18),
-                      SizedBox(width: isGrid ? 4 : 8),
-                      Expanded(
-                        child: Text(
-                          status,
-                          style: TextStyle(
-                            fontSize: isGrid ? 11 : 14,
-                            fontWeight: FontWeight.w800,
-                            color: const Color(0xFF374151),
-                          ),
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-                Container(
-                  padding: EdgeInsets.symmetric(horizontal: isGrid ? 6 : 10, vertical: isGrid ? 2 : 4),
-                  decoration: BoxDecoration(
-                    color: statusColor.withOpacity(0.2),
-                    borderRadius: BorderRadius.circular(10),
-                  ),
-                  child: Text(
-                    '${columnTasks.length}',
-                    style: TextStyle(
-                      fontWeight: FontWeight.w800,
-                      color: statusColor.withOpacity(0.9),
-                      fontSize: isGrid ? 10 : 12,
-                    ),
-                  ),
-                ),
+                Expanded(child: _buildMobileColumn(groups[0])),
+                const SizedBox(width: 8),
+                Expanded(child: _buildMobileColumn(groups[1])),
               ],
             ),
           ),
-          
-          // Column Body
+          const SizedBox(height: 8),
           Expanded(
-            child: ListView.builder(
-              padding: EdgeInsets.all(isGrid ? 6 : 12),
-              itemCount: columnTasks.length,
-              itemBuilder: (context, index) {
-                final task = columnTasks[index];
-                return _isAuthority ? _buildDraggableCard(task, isGrid) : _buildStaticCard(task, isGrid);
-              },
+            child: Row(
+              children: [
+                Expanded(child: _buildMobileColumn(groups[2])),
+                const SizedBox(width: 8),
+                Expanded(child: _buildMobileColumn(groups[3])),
+              ],
             ),
           ),
         ],
@@ -359,155 +218,581 @@ class _KanbanBoardScreenState extends State<KanbanBoardScreen> {
     );
   }
 
-  Widget _buildDraggableCard(KanbanTask task, bool isGrid) {
-    return LongPressDraggable<String>(
-      key: ValueKey(task.id),
-      data: task.id, // Passing just the ID to avoid state reference bugs
-      dragAnchorStrategy: pointerDragAnchorStrategy,
-      hapticFeedbackOnStart: true,
-      feedback: Material(
-        color: Colors.transparent,
-        child: Material(
-          elevation: 8,
-          borderRadius: BorderRadius.circular(isGrid ? 8 : 12),
-          child: SizedBox(
-            width: isGrid ? 160 : 300,
-            child: _TaskCardContent(
-              task: task,
-              priorityColor: _getPriorityColor(task.priority),
-              isGrid: isGrid,
-              isDragging: true,
+  Widget _buildMobileColumn(AppFlowyGroupData group) {
+    final colMeta = group.customData as KanbanColumnData;
+    final groupController = controller.getGroupController(group.id);
+    final currentItems = groupController?.items ?? [];
+
+    return DragTarget<DragData>(
+      onAcceptWithDetails: (details) {
+        final data = details.data;
+        if (data.sourceColumnId != group.id) {
+          final oldGroup = controller.getGroupController(data.sourceColumnId);
+          if (oldGroup != null) {
+              controller.removeGroupItem(data.sourceColumnId, data.task.id);
+              controller.addGroupItem(group.id, data.task);
+              setState(() {});
+          }
+        }
+      },
+      builder: (context, candidateData, rejectedData) {
+        return Container(
+          decoration: BoxDecoration(
+            color: candidateData.isNotEmpty ? Colors.blue.withOpacity(0.05) : Colors.grey.shade50,
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(
+              color: candidateData.isNotEmpty ? Colors.blue.shade300 : Colors.grey.shade200,
+              width: candidateData.isNotEmpty ? 2 : 1,
             ),
           ),
-        ),
-      ),
-      childWhenDragging: Opacity(
-        opacity: 0.3,
-        child: _TaskCardContent(
-          task: task,
-          priorityColor: _getPriorityColor(task.priority),
-          isGrid: isGrid,
-        ),
-      ),
-      child: _TaskCardContent(
-        task: task,
-        priorityColor: _getPriorityColor(task.priority),
-        isGrid: isGrid,
-      ),
+          child: Column(
+            children: [
+              _buildHeader(colMeta, currentItems.length, true),
+              Divider(height: 1, thickness: 1, color: Colors.grey.shade200),
+              Expanded(
+                child: ListView.builder(
+                  padding: const EdgeInsets.symmetric(vertical: 4),
+                  itemCount: currentItems.length,
+                  itemBuilder: (context, index) {
+                    final task = currentItems[index] as KanbanTask;
+                    return Draggable<DragData>(
+                      data: DragData(task, group.id),
+                      feedback: Material(
+                        elevation: 8,
+                        color: Colors.transparent,
+                        child: SizedBox(
+                          width: MediaQuery.of(context).size.width / 2.2,
+                          child: _buildTaskCard(task),
+                        ),
+                      ),
+                      childWhenDragging: Opacity(
+                        opacity: 0.3,
+                        child: _buildTaskCard(task),
+                      ),
+                      child: _buildTaskCard(task),
+                    );
+                  },
+                ),
+              ),
+            ],
+          ),
+        );
+      },
     );
   }
 
-  Widget _buildStaticCard(KanbanTask task, bool isGrid) {
-    return _TaskCardContent(
-      key: ValueKey(task.id),
-      task: task,
-      priorityColor: _getPriorityColor(task.priority),
-      isGrid: isGrid,
-    );
-  }
-}
+  // --- COMMON WIDGETS (Header & Card) ---
 
-class _TaskCardContent extends StatelessWidget {
-  final KanbanTask task;
-  final Color priorityColor;
-  final bool isGrid;
-  final bool isDragging;
-
-  const _TaskCardContent({
-    super.key,
-    required this.task,
-    required this.priorityColor,
-    this.isGrid = false,
-    this.isDragging = false,
-  });
-
-  @override
-  Widget build(BuildContext context) {
+  Widget _buildHeader(KanbanColumnData col, [int count = 0, bool isMobile = false]) {
     return Container(
-      margin: EdgeInsets.only(bottom: isGrid ? 6 : 10),
+      margin: isMobile ? EdgeInsets.zero : const EdgeInsets.only(bottom: 8, left: 8, right: 8, top: 4),
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
       decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(isGrid ? 8 : 12),
-        border: Border.all(color: Colors.grey.shade200, width: 1),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(isDragging ? 0.12 : 0.03),
-            blurRadius: isDragging ? 12 : 4,
-            offset: isDragging ? const Offset(0, 8) : const Offset(0, 2),
+        color: col.color.withOpacity(0.08),
+        borderRadius: isMobile 
+            ? const BorderRadius.vertical(top: Radius.circular(11))
+            : BorderRadius.circular(12),
+        border: isMobile ? null : Border.all(color: col.color.withOpacity(0.2)),
+      ),
+      child: Row(
+        children: [
+          Container(
+            width: 8,
+            height: 8,
+            decoration: BoxDecoration(
+              color: col.color,
+              shape: BoxShape.circle,
+            ),
+          ),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(
+              col.name,
+              style: const TextStyle(
+                fontSize: 14,
+                fontWeight: FontWeight.w600,
+                color: Colors.black87,
+              ),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
+          ),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(10),
+              border: Border.all(color: col.color.withOpacity(0.2)),
+            ),
+            child: Text(
+              '$count',
+              style: TextStyle(
+                fontWeight: FontWeight.w700,
+                color: col.color.withOpacity(0.8),
+                fontSize: 11,
+              ),
+            ),
           ),
         ],
       ),
-      child: Padding(
-        padding: EdgeInsets.all(isGrid ? 10.0 : 16.0),
+    );
+  }
+
+  Widget _buildTaskCard(KanbanTask task) {
+    final shortDateFormatter = DateFormat('MMM d');
+    final dateFormatter = DateFormat('MMM d, yyyy');
+
+    return GestureDetector(
+      onTap: () => _showTaskDetails(task),
+      child: Container(
+        margin: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+        padding: const EdgeInsets.all(12),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(8),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withOpacity(0.04),
+              blurRadius: 4,
+              offset: const Offset(0, 2),
+            ),
+          ],
+          border: Border.all(color: Colors.grey.shade200),
+        ),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Expanded(
                   child: Text(
-                    task.title,
-                    style: TextStyle(
-                      fontWeight: FontWeight.w700,
-                      fontSize: isGrid ? 11 : 14,
-                      color: const Color(0xFF1F2937),
+                    task.name,
+                    style: const TextStyle(
+                      fontSize: 13,
+                      fontWeight: FontWeight.w500,
+                      color: Colors.black87,
                     ),
-                    maxLines: 2,
-                    overflow: TextOverflow.ellipsis,
                   ),
                 ),
+                if (task.owner != null) ...[
+                  const SizedBox(width: 8),
+                  CircleAvatar(
+                    radius: 10,
+                    backgroundImage: NetworkImage(task.owner!.image),
+                    backgroundColor: Colors.grey.shade200,
+                    onBackgroundImageError: (_, __) {},
+                    child: task.owner!.image.isEmpty
+                        ? Text(
+                            task.owner!.name.isNotEmpty ? task.owner!.name.substring(0, 1) : '?',
+                            style: const TextStyle(fontSize: 10, color: Colors.black54),
+                          )
+                        : null,
+                  ),
+                ]
               ],
             ),
-            const SizedBox(height: 6),
+            const SizedBox(height: 8),
             Text(
-              task.description,
+              '${shortDateFormatter.format(task.startAt)} - ${dateFormatter.format(task.endAt)}',
               style: TextStyle(
+                fontSize: 11,
                 color: Colors.grey.shade500,
-                fontSize: isGrid ? 10 : 12,
-                height: 1.3,
+                fontWeight: FontWeight.w500,
               ),
-              maxLines: isGrid ? 1 : 2,
-              overflow: TextOverflow.ellipsis,
-            ),
-            SizedBox(height: isGrid ? 8 : 12),
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Container(
-                  padding: EdgeInsets.symmetric(horizontal: isGrid ? 6 : 8, vertical: isGrid ? 3 : 4),
-                  decoration: BoxDecoration(
-                    color: priorityColor.withOpacity(0.1),
-                    borderRadius: BorderRadius.circular(4),
-                    border: Border.all(color: priorityColor.withOpacity(0.2)),
-                  ),
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Icon(Icons.flag_rounded, size: isGrid ? 10 : 12, color: priorityColor),
-                      SizedBox(width: isGrid ? 2 : 4),
-                      Text(
-                        task.priority,
-                        style: TextStyle(
-                          color: priorityColor,
-                          fontSize: isGrid ? 9 : 11,
-                          fontWeight: FontWeight.w800,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-                Text(
-                  '#${task.id}',
-                  style: TextStyle(
-                    color: Colors.grey.shade400,
-                    fontSize: isGrid ? 10 : 12,
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
-              ],
             ),
           ],
         ),
+      ),
+    );
+  }
+
+  void _showTaskDetails(KanbanTask task) {
+    final dateFormatter = DateFormat('MMM d, yyyy');
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.transparent,
+      isScrollControlled: true,
+      builder: (context) {
+        return Container(
+          decoration: const BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.vertical(top: Radius.circular(30)),
+          ),
+          padding: const EdgeInsets.all(24),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Center(
+                child: Container(
+                  width: 48,
+                  height: 5,
+                  margin: const EdgeInsets.only(bottom: 24),
+                  decoration: BoxDecoration(
+                    color: Colors.grey.shade300,
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                ),
+              ),
+              Row(
+                children: [
+                  Container(
+                    width: 48,
+                    height: 48,
+                    decoration: BoxDecoration(color: Colors.blue.withOpacity(0.15), shape: BoxShape.circle),
+                    child: const Icon(Icons.assignment, color: Colors.blue, size: 24),
+                  ),
+                  const SizedBox(width: 16),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          task.name,
+                          style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w800),
+                        ),
+                        const SizedBox(height: 4),
+                        Text(
+                          '${dateFormatter.format(task.startAt)} - ${dateFormatter.format(task.endAt)}',
+                          style: TextStyle(fontSize: 13, color: Colors.grey.shade500, fontWeight: FontWeight.w600),
+                        ),
+                      ],
+                    ),
+                  ),
+                  Container(
+                    decoration: BoxDecoration(
+                      color: Colors.grey.shade100,
+                      shape: BoxShape.circle,
+                    ),
+                    child: IconButton(
+                      icon: Icon(Icons.close, color: Colors.grey.shade600, size: 20),
+                      onPressed: () => Navigator.pop(context),
+                    ),
+                  ),
+                ],
+              ),
+              if (task.description != null && task.description!.isNotEmpty) ...[
+                const SizedBox(height: 24),
+                const Text(
+                  'Description',
+                  style: TextStyle(fontSize: 14, fontWeight: FontWeight.w700, color: Colors.black87),
+                ),
+                const SizedBox(height: 8),
+                Container(
+                  padding: const EdgeInsets.all(16),
+                  decoration: BoxDecoration(
+                    color: Colors.grey.shade50,
+                    borderRadius: BorderRadius.circular(16),
+                  ),
+                  child: Text(
+                    task.description!,
+                    style: TextStyle(fontSize: 15, color: Colors.grey.shade800, height: 1.4),
+                  ),
+                ),
+              ],
+              if (task.owner != null) ...[
+                const SizedBox(height: 24),
+                const Text(
+                  'Assignee',
+                  style: TextStyle(fontSize: 14, fontWeight: FontWeight.w700, color: Colors.black87),
+                ),
+                const SizedBox(height: 8),
+                Row(
+                  children: [
+                    CircleAvatar(
+                      radius: 16,
+                      backgroundImage: NetworkImage(task.owner!.image),
+                      backgroundColor: Colors.grey.shade200,
+                    ),
+                    const SizedBox(width: 12),
+                    Text(
+                      task.owner!.name,
+                      style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w600, color: Colors.black87),
+                    ),
+                  ],
+                ),
+              ],
+              const SizedBox(height: 32),
+            ],
+          ),
+        );
+      },
+    );
+  }
+}
+
+class KanbanTaskFormWidget extends StatefulWidget {
+  final KanbanColumnData category;
+  final Function(String title, String description, DateTime startAt, DateTime endAt) onSubmit;
+  final VoidCallback onCancel;
+
+  const KanbanTaskFormWidget({
+    super.key,
+    required this.category,
+    required this.onSubmit,
+    required this.onCancel,
+  });
+
+  @override
+  State<KanbanTaskFormWidget> createState() => _KanbanTaskFormWidgetState();
+}
+
+class _KanbanTaskFormWidgetState extends State<KanbanTaskFormWidget> {
+  final _titleController = TextEditingController();
+  final _descController = TextEditingController();
+  late DateTime _startAt;
+  late DateTime _endAt;
+
+  bool get _isValid => _titleController.text.trim().isNotEmpty && _endAt.isAfter(_startAt.subtract(const Duration(days: 1)));
+
+  @override
+  void initState() {
+    super.initState();
+    _startAt = DateTime.now();
+    _endAt = _startAt.add(const Duration(days: 7));
+    _titleController.addListener(() => setState(() {}));
+  }
+
+  @override
+  void dispose() {
+    _titleController.dispose();
+    _descController.dispose();
+    super.dispose();
+  }
+
+  Future<void> _selectDate(BuildContext context, bool isStart) async {
+    final initialDate = isStart ? _startAt : _endAt;
+    final picked = await showDatePicker(
+      context: context,
+      initialDate: initialDate,
+      firstDate: DateTime(2020),
+      lastDate: DateTime(2030),
+      builder: (context, child) {
+        return Theme(
+          data: Theme.of(context).copyWith(
+            colorScheme: const ColorScheme.light(
+              primary: Color(0xFF2563EB), 
+              onPrimary: Colors.white,
+              onSurface: Colors.black87,
+            ),
+          ),
+          child: child!,
+        );
+      },
+    );
+    if (picked != null) {
+      setState(() {
+        if (isStart) {
+          _startAt = picked;
+          if (_endAt.isBefore(_startAt)) {
+            _endAt = _startAt;
+          }
+        } else {
+          _endAt = picked;
+        }
+      });
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final dateFormatter = DateFormat('MMM d, yyyy');
+    
+    return SingleChildScrollView(
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Center(
+            child: Container(
+              width: 48,
+              height: 5,
+              margin: const EdgeInsets.only(bottom: 24),
+              decoration: BoxDecoration(
+                color: Colors.grey.shade300,
+                borderRadius: BorderRadius.circular(10),
+              ),
+            ),
+          ),
+          Row(
+            children: [
+              Container(
+                width: 48,
+                height: 48,
+                decoration: BoxDecoration(color: widget.category.color.withOpacity(0.15), shape: BoxShape.circle),
+                child: Icon(Icons.assignment, color: widget.category.color, size: 24),
+              ),
+              const SizedBox(width: 16),
+              Expanded(
+                child: Text(
+                  'Add to ${widget.category.name}',
+                  style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w800),
+                ),
+              ),
+              Container(
+                decoration: BoxDecoration(
+                  color: Colors.grey.shade100,
+                  shape: BoxShape.circle,
+                ),
+                child: IconButton(
+                  icon: Icon(Icons.close, color: Colors.grey.shade600, size: 20),
+                  onPressed: widget.onCancel,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 24),
+          TextField(
+            controller: _titleController,
+            style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 16),
+            autofocus: true,
+            decoration: InputDecoration(
+              labelText: 'Task Title',
+              labelStyle: TextStyle(color: Colors.grey.shade600),
+              hintText: 'What needs to be done?',
+              hintStyle: TextStyle(color: Colors.grey.shade400),
+              filled: true,
+              fillColor: Colors.grey.shade50,
+              border: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(16),
+                borderSide: BorderSide.none,
+              ),
+              enabledBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(16),
+                borderSide: BorderSide.none,
+              ),
+              focusedBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(16),
+                borderSide: const BorderSide(color: Colors.blue, width: 2),
+              ),
+            ),
+          ),
+          const SizedBox(height: 16),
+          TextField(
+            controller: _descController,
+            maxLines: 4,
+            style: const TextStyle(fontSize: 15),
+            decoration: InputDecoration(
+              labelText: 'Description (Optional)',
+              labelStyle: TextStyle(color: Colors.grey.shade600),
+              hintText: 'Add more details about this task...',
+              hintStyle: TextStyle(color: Colors.grey.shade400),
+              alignLabelWithHint: true,
+              filled: true,
+              fillColor: Colors.grey.shade50,
+              border: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(16),
+                borderSide: BorderSide.none,
+              ),
+              enabledBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(16),
+                borderSide: BorderSide.none,
+              ),
+              focusedBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(16),
+                borderSide: const BorderSide(color: Colors.blue, width: 2),
+              ),
+            ),
+          ),
+          const SizedBox(height: 16),
+          Row(
+            children: [
+              Expanded(
+                child: InkWell(
+                  onTap: () => _selectDate(context, true),
+                  borderRadius: BorderRadius.circular(16),
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+                    decoration: BoxDecoration(
+                      color: Colors.grey.shade50,
+                      borderRadius: BorderRadius.circular(16),
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text('Start Date', style: TextStyle(color: Colors.grey.shade600, fontSize: 12)),
+                        const SizedBox(height: 4),
+                        Row(
+                          children: [
+                            Icon(Icons.calendar_today, size: 16, color: Colors.grey.shade700),
+                            const SizedBox(width: 8),
+                            Text(dateFormatter.format(_startAt), style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 14)),
+                          ],
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: InkWell(
+                  onTap: () => _selectDate(context, false),
+                  borderRadius: BorderRadius.circular(16),
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+                    decoration: BoxDecoration(
+                      color: Colors.grey.shade50,
+                      borderRadius: BorderRadius.circular(16),
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text('End Date', style: TextStyle(color: Colors.grey.shade600, fontSize: 12)),
+                        const SizedBox(height: 4),
+                        Row(
+                          children: [
+                            Icon(Icons.event, size: 16, color: Colors.grey.shade700),
+                            const SizedBox(width: 8),
+                            Text(dateFormatter.format(_endAt), style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 14)),
+                          ],
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 24),
+          Row(
+            children: [
+              Expanded(
+                child: OutlinedButton(
+                  onPressed: widget.onCancel,
+                  style: OutlinedButton.styleFrom(
+                    padding: const EdgeInsets.symmetric(vertical: 18),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+                    side: BorderSide(color: Colors.grey.shade300, width: 1.5),
+                    foregroundColor: Colors.grey.shade700,
+                  ),
+                  child: const Text('Cancel', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700)),
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                flex: 2,
+                child: ElevatedButton(
+                  onPressed: _isValid
+                      ? () => widget.onSubmit(_titleController.text.trim(), _descController.text.trim(), _startAt, _endAt)
+                      : null,
+                  style: ElevatedButton.styleFrom(
+                    padding: const EdgeInsets.symmetric(vertical: 18),
+                    backgroundColor: const Color(0xFF2563EB),
+                    disabledBackgroundColor: Colors.grey.shade300,
+                    foregroundColor: Colors.white,
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+                    elevation: 6,
+                    shadowColor: const Color(0xFF2563EB).withOpacity(0.5),
+                  ),
+                  child: const Text('Add Task', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700)),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 32),
+        ],
       ),
     );
   }
