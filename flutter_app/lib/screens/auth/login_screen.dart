@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
-
+import '../women_safety/trusted_contacts_screen.dart';
 import '../../services/auth_service.dart';
 
 class LoginScreen extends StatefulWidget {
@@ -64,13 +64,38 @@ class _LoginScreenState extends State<LoginScreen> {
       if (!mounted) return;
 
       if (response.user != null) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text(
-              'Login successful!',
-            ),
-          ),
-        );
+       if (!mounted) return;
+
+final user = AuthService().currentUser;
+
+if (user == null) {
+  return;
+}
+
+final citizen = await Supabase.instance.client
+    .from('citizens')
+    .select('gender')
+    .eq('auth_user_id', user.id)
+    .single();
+
+final gender = citizen['gender']?.toString().toLowerCase();
+
+if (gender == 'female') {
+  Navigator.pushReplacement(
+    context,
+    MaterialPageRoute(
+      builder: (context) => const TrustedContactsScreen(),
+    ),
+  );
+} else {
+  ScaffoldMessenger.of(context).showSnackBar(
+    const SnackBar(
+      content: Text(
+        'Women Safety features are available for female citizens.',
+      ),
+    ),
+  );
+}
 
         // We will connect this to your actual
         // UniSafe home screen later.

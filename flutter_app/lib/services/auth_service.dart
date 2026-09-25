@@ -5,7 +5,7 @@ class AuthService {
   final SupabaseClient _supabase = SupabaseConfig.client;
 
   // ============================================================
-  // CURRENT USER / SESSION
+  // AUTH STATE
   // ============================================================
 
   User? get currentUser => _supabase.auth.currentUser;
@@ -19,7 +19,7 @@ class AuthService {
       _supabase.auth.currentSession != null;
 
   // ============================================================
-  // CITIZEN - MOCK IDENTITY VERIFICATION
+  // MOCK CITIZEN IDENTITY VERIFICATION
   // ============================================================
 
   Future<Map<String, dynamic>> verifyMockCitizen({
@@ -52,7 +52,89 @@ class AuthService {
   }
 
   // ============================================================
-  // CITIZEN - SEND OTP
+  // SIMULATED AADHAAR OTP
+  // ============================================================
+
+  Future<Map<String, dynamic>> sendAadhaarOtp({
+    required String aadhaar,
+  }) async {
+    final response = await _supabase.functions.invoke(
+      'send-aadhar-otp',
+      body: {
+        'aadhaar': aadhaar.trim(),
+      },
+    );
+
+    if (response.data is Map) {
+      return Map<String, dynamic>.from(
+        response.data,
+      );
+    }
+
+    throw Exception(
+      'Invalid Aadhaar OTP response.',
+    );
+  }
+
+  // ============================================================
+  // VERIFY SIMULATED AADHAAR OTP
+  // ============================================================
+
+  Future<Map<String, dynamic>> verifyAadhaarOtp({
+    required String aadhaar,
+    required String otp,
+  }) async {
+    final response = await _supabase.functions.invoke(
+      'verify-aadhaar-otp',
+      body: {
+        'aadhaar': aadhaar.trim(),
+        'otp': otp.trim(),
+      },
+    );
+
+    if (response.data is Map) {
+      return Map<String, dynamic>.from(
+        response.data,
+      );
+    }
+
+    throw Exception(
+      'Invalid Aadhaar OTP verification response.',
+    );
+  }
+
+  // ============================================================
+  // REAL SUPABASE EMAIL OTP
+  // ============================================================
+
+  Future<void> sendEmailVerificationOtp({
+    required String email,
+  }) async {
+    await _supabase.auth.signInWithOtp(
+      email: email.trim().toLowerCase(),
+      shouldCreateUser: true,
+    );
+  }
+
+  // ============================================================
+  // VERIFY REAL SUPABASE EMAIL OTP
+  // ============================================================
+
+  Future<bool> verifyEmailVerificationOtp({
+    required String email,
+    required String otp,
+  }) async {
+    final response = await _supabase.auth.verifyOTP(
+      email: email.trim().toLowerCase(),
+      token: otp.trim(),
+      type: OtpType.email,
+    );
+
+    return response.user != null;
+  }
+
+  // ============================================================
+  // PINGRAM PHONE OTP
   // ============================================================
 
   Future<Map<String, dynamic>> sendOtp({
@@ -66,16 +148,18 @@ class AuthService {
     );
 
     if (response.data is Map) {
-      return Map<String, dynamic>.from(response.data);
+      return Map<String, dynamic>.from(
+        response.data,
+      );
     }
 
     throw Exception(
-      'Invalid OTP response from server.',
+      'Invalid phone OTP response from server.',
     );
   }
 
   // ============================================================
-  // CITIZEN - VERIFY OTP + CREATE ACCOUNT
+  // VERIFY PINGRAM PHONE OTP
   // ============================================================
 
   Future<Map<String, dynamic>> verifyOtp({
@@ -105,16 +189,18 @@ class AuthService {
     );
 
     if (response.data is Map) {
-      return Map<String, dynamic>.from(response.data);
+      return Map<String, dynamic>.from(
+        response.data,
+      );
     }
 
     throw Exception(
-      'Invalid OTP verification response.',
+      'Invalid phone OTP verification response.',
     );
   }
 
   // ============================================================
-  // CITIZEN - LOGIN WITH EMAIL
+  // LOGIN WITH EMAIL
   // ============================================================
 
   Future<AuthResponse> loginWithEmail({
@@ -128,7 +214,7 @@ class AuthService {
   }
 
   // ============================================================
-  // CITIZEN - LOGIN WITH PHONE
+  // LOGIN WITH PHONE
   // ============================================================
 
   Future<AuthResponse> loginWithPhone({
@@ -137,7 +223,6 @@ class AuthService {
   }) async {
     String formattedPhone = phone.trim();
 
-    // Convert 10-digit Indian phone number to +91 format.
     if (RegExp(r'^\d{10}$').hasMatch(formattedPhone)) {
       formattedPhone = '+91$formattedPhone';
     }
@@ -149,7 +234,7 @@ class AuthService {
   }
 
   // ============================================================
-  // AUTHORITY - LOGIN
+  // AUTHORITY LOGIN
   // ============================================================
 
   Future<Map<String, dynamic>> loginAuthority({
@@ -177,10 +262,6 @@ class AuthService {
 
       final result =
           Map<String, dynamic>.from(response.data);
-
-      // --------------------------------------------------------
-      // Establish Supabase session in Flutter
-      // --------------------------------------------------------
 
       if (result['success'] == true) {
         final refreshToken =

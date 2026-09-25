@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../services/auth_service.dart';
-import 'otp_screen.dart';
+import 'aadhaar_otp_screen.dart';
 
 class SignupScreen extends StatefulWidget {
   const SignupScreen({super.key});
@@ -54,7 +54,7 @@ class _SignupScreenState extends State<SignupScreen> {
   }
 
   // ------------------------------------------------------------
-  // Verify identity + send OTP
+  // Verify identity + send Aadhaar OTP
   // ------------------------------------------------------------
 
   Future<void> _verifyIdentity() async {
@@ -112,23 +112,43 @@ class _SignupScreenState extends State<SignupScreen> {
       }
 
       // --------------------------------------------------------
-      // STEP 2: Send OTP through Pingram
+      // STEP 2: Send simulated Aadhaar OTP
       // --------------------------------------------------------
 
-      final otpResult = await _authService.sendOtp(
-        phone: phoneController.text.trim(),
+      final aadhaarOtpResult =
+          await _authService.sendAadhaarOtp(
+        aadhaar: aadhaarController.text.trim(),
       );
 
       if (!mounted) return;
 
-      final otpSent = otpResult['success'] == true;
+      final aadhaarOtpSent =
+          aadhaarOtpResult['success'] == true;
 
-      if (!otpSent) {
+      if (!aadhaarOtpSent) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text(
-              otpResult['message']?.toString() ??
-                  'Could not send OTP.',
+              aadhaarOtpResult['message']?.toString() ??
+                  'Could not generate Aadhaar OTP.',
+            ),
+            backgroundColor: Colors.red,
+          ),
+        );
+
+        return;
+      }
+
+      // The OTP is returned by the Edge Function because
+      // this is a simulated OTP flow for the FYP demo.
+      final demoOtp =
+          aadhaarOtpResult['demo_otp']?.toString();
+
+      if (demoOtp == null || demoOtp.isEmpty) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text(
+              'Aadhaar OTP was generated but could not be displayed.',
             ),
             backgroundColor: Colors.red,
           ),
@@ -138,21 +158,22 @@ class _SignupScreenState extends State<SignupScreen> {
       }
 
       // --------------------------------------------------------
-      // STEP 3: Move to OTP screen
+      // STEP 3: Move to Aadhaar OTP screen
       // --------------------------------------------------------
 
       Navigator.push(
         context,
         MaterialPageRoute(
-          builder: (context) => OtpScreen(
-            phone: phoneController.text.trim(),
+          builder: (context) => AadhaarOtpScreen(
             name: nameController.text.trim(),
             aadhaar: aadhaarController.text.trim(),
             address: addressController.text.trim(),
             gender: selectedGender!,
+            phone: phoneController.text.trim(),
             email: emailController.text.trim(),
             username: usernameController.text.trim(),
             password: passwordController.text,
+            demoOtp: demoOtp,
           ),
         ),
       );
@@ -301,7 +322,7 @@ class _SignupScreenState extends State<SignupScreen> {
                 // ------------------------------------------------
 
                 DropdownButtonFormField<String>(
-                  value: selectedGender,
+                  initialValue: selectedGender,
                   decoration: const InputDecoration(
                     labelText: 'Gender',
                     border: OutlineInputBorder(),
@@ -502,7 +523,7 @@ class _SignupScreenState extends State<SignupScreen> {
                 const SizedBox(height: 16),
 
                 const Text(
-                  'Your identity will be verified before an OTP is sent to your registered phone number.',
+                  'Your identity will be verified before Aadhaar OTP verification.',
                   textAlign: TextAlign.center,
                   style: TextStyle(
                     color: Colors.grey,
