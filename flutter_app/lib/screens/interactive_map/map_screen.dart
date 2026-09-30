@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:typed_data';
 import 'dart:ui';
+import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:latlong2/latlong.dart' hide Path;
@@ -361,6 +362,7 @@ class _InteractiveMapScreenState extends ConsumerState<InteractiveMapScreen> {
   LatLng? _myLocation;
   MapStyle _selectedMapStyle = MapStyle.streets;
   final Set<MapOverlayType> _activeOverlays = {MapOverlayType.hybridLabels};
+  bool _showCategoryHint = true;
   @override
   void initState() {
     super.initState();
@@ -494,6 +496,7 @@ class _InteractiveMapScreenState extends ConsumerState<InteractiveMapScreen> {
   }
     void _onCategoryTapped(IssueCategory category) {
     setState(() {
+      _showCategoryHint = false;
       _selectedCategory = category;
       _droppedLocation = _mapController.camera.center;
       _editingReportId = null;
@@ -510,6 +513,7 @@ class _InteractiveMapScreenState extends ConsumerState<InteractiveMapScreen> {
     final localOffset = renderBox.globalToLocal(globalCenter);
     final latLng = _mapController.camera.screenOffsetToLatLng(localOffset);
     setState(() {
+      _showCategoryHint = false;
       _selectedCategory = details.data;
       _droppedLocation = latLng;
       _editingReportId = null;
@@ -545,6 +549,14 @@ class _InteractiveMapScreenState extends ConsumerState<InteractiveMapScreen> {
       canPop: false,
       onPopInvokedWithResult: (didPop, result) {
         if (didPop) return;
+        if (_searchFocusNode.hasFocus) {
+          _searchFocusNode.unfocus();
+          setState(() {
+            _searchController.clear();
+            _suggestions = [];
+          });
+          return;
+        }
         _handleBackNavigation();
       },
       child: Scaffold(
@@ -744,124 +756,23 @@ class _InteractiveMapScreenState extends ConsumerState<InteractiveMapScreen> {
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    // Search Bar
-                    Row(
-                      children: [
-                        AnimatedContainer(
-                          duration: const Duration(milliseconds: 350),
-                          curve: Curves.easeOutCubic,
-                          width: _searchFocusNode.hasFocus ? 0 : 52, // 44 width + 8 padding
-                          child: SingleChildScrollView(
-                            scrollDirection: Axis.horizontal,
-                            physics: const NeverScrollableScrollPhysics(),
-                            reverse: true, // Aligns to the right, creating a slide-out effect
-                            child: SizedBox(
-                              width: 52,
-                              child: Padding(
-                                padding: const EdgeInsets.only(right: 8.0),
-                                child: ClipRRect(
-                                  borderRadius: BorderRadius.circular(22),
-                                  child: BackdropFilter(
-                                    filter: ImageFilter.blur(sigmaX: 16, sigmaY: 16),
-                                    child: Container(
-                                      width: 44,
-                                      height: 44,
-                                      decoration: BoxDecoration(
-                                        color: Colors.white.withOpacity(0.8),
-                                        shape: BoxShape.circle,
-                                        border: Border.all(color: Colors.white.withOpacity(0.6), width: 1.0),
-                                        boxShadow: [
-                                          BoxShadow(color: Colors.black.withOpacity(0.08), blurRadius: 20, offset: const Offset(0, 6)),
-                                        ],
-                                      ),
-                                      child: IconButton(
-                                        padding: EdgeInsets.zero,
-                                        constraints: const BoxConstraints(minWidth: 44, minHeight: 44),
-                                        icon: Icon(LucideIcons.arrowLeft, color: Colors.grey.shade800, size: 21),
-                                        onPressed: _handleBackNavigation,
-                                      ),
-                                    ),
-                                  ),
-                                ),
-                              ),
-                            ),
-                          ),
-                        ),
-                        Expanded(
-                          child: ClipRRect(
-                            borderRadius: BorderRadius.circular(44),
-                            child: BackdropFilter(
-                              filter: ImageFilter.blur(sigmaX: 20, sigmaY: 20),
-                              child: Container(
-                                height: 44,
-                                decoration: BoxDecoration(
-                                  color: Colors.white.withOpacity(0.75),
-                                  borderRadius: BorderRadius.circular(44),
-                                  border: Border.all(color: Colors.white.withOpacity(0.85), width: 1.2),
-                                  boxShadow: [
-                                    BoxShadow(color: Colors.black.withOpacity(0.08), blurRadius: 20, offset: const Offset(0, 6)),
-                                  ],
-                                ),
-                                child: TextField(
-                                  focusNode: _searchFocusNode,
-                                  controller: _searchController,
-                                  onChanged: _onSearchChanged,
-                                  textAlignVertical: TextAlignVertical.center,
-                                  style: const TextStyle(
-                                    fontSize: 14.5,
-                                    fontWeight: FontWeight.w600,
-                                    color: Color(0xFF1A202C),
-                                    height: 1.2,
-                                  ),
-                                  decoration: InputDecoration(
-                                    isDense: true,
-                                    hintText: 'Search anywhere...',
-                                    hintStyle: TextStyle(
-                                      color: Colors.grey.shade500,
-                                      fontSize: 14.5,
-                                      fontWeight: FontWeight.w500,
-                                      height: 1.2,
-                                    ),
-                                    prefixIcon: const Padding(
-                                      padding: EdgeInsets.only(left: 14.0, right: 8.0),
-                                      child: Icon(LucideIcons.search, color: Color(0xFF64748B), size: 20),
-                                    ),
-                                    prefixIconConstraints: const BoxConstraints(minWidth: 42, minHeight: 44),
-                                    suffixIcon: _isSearching
-                                        ? const Padding(
-                                            padding: EdgeInsets.all(12.0),
-                                            child: SizedBox(
-                                              width: 18,
-                                              height: 18,
-                                              child: CircularProgressIndicator(strokeWidth: 2.0),
-                                            ),
-                                          )
-                                        : Row(
-                                            mainAxisSize: MainAxisSize.min,
-                                            children: [
-                                              if (_searchController.text.isNotEmpty)
-                                                IconButton(
-                                                  padding: EdgeInsets.zero,
-                                                  constraints: const BoxConstraints(minWidth: 34, minHeight: 44),
-                                                  icon: Icon(LucideIcons.x, size: 18, color: Colors.grey.shade600),
-                                                  onPressed: () {
-                                                    _searchController.clear();
-                                                    setState(() => _suggestions = []);
-                                                  },
-                                                ),
-                                            ],
-                                          ),
-                                    suffixIconConstraints: const BoxConstraints(minWidth: 38, minHeight: 44),
-                                    border: InputBorder.none,
-                                    contentPadding: const EdgeInsets.symmetric(horizontal: 4, vertical: 0),
-                                  ),
-                                  onSubmitted: _searchLocation,
-                                ),
-                              ),
-                            ),
-                          ),
-                        ),
-                      ],
+                    // Fluid Merging & Splitting Search Bar Header
+                    FluidMergeSearchBar(
+                      focusNode: _searchFocusNode,
+                      controller: _searchController,
+                      isSearching: _isSearching,
+                      onSearchChanged: _onSearchChanged,
+                      onSearchSubmitted: _searchLocation,
+                      onBack: _handleBackNavigation,
+                      onCancelSearch: () {
+                        _searchFocusNode.unfocus();
+                        _searchController.clear();
+                        setState(() => _suggestions = []);
+                      },
+                      onClearText: () {
+                        _searchController.clear();
+                        setState(() => _suggestions = []);
+                      },
                     ),
                     
                     
@@ -875,24 +786,6 @@ class _InteractiveMapScreenState extends ConsumerState<InteractiveMapScreen> {
                             mainAxisSize: MainAxisSize.min,
                             children: [
                               const SizedBox(height: 10),
-                              if (reports.isEmpty && _suggestions.isEmpty)
-                                Container(
-                                  margin: const EdgeInsets.only(bottom: 6),
-                                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4.5),
-                                  decoration: BoxDecoration(
-                                    color: Colors.black.withOpacity(0.55),
-                                    borderRadius: BorderRadius.circular(14),
-                                  ),
-                                  child: const Text(
-                                    'Tap or drag a category to report',
-                                    style: TextStyle(
-                                      color: Colors.white,
-                                      fontSize: 10.5,
-                                      fontWeight: FontWeight.w600,
-                                      letterSpacing: 0.2,
-                                    ),
-                                  ),
-                                ),
                               ClipRRect(
                                 borderRadius: BorderRadius.circular(36),
                                 child: BackdropFilter(
@@ -900,11 +793,11 @@ class _InteractiveMapScreenState extends ConsumerState<InteractiveMapScreen> {
                                   child: Container(
                                     padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 10),
                                     decoration: BoxDecoration(
-                                      color: Colors.white.withOpacity(0.88),
+                                      color: Colors.white.withValues(alpha: 0.88),
                                       borderRadius: BorderRadius.circular(36),
-                                      border: Border.all(color: Colors.white.withOpacity(0.6), width: 1.0),
+                                      border: Border.all(color: Colors.white.withValues(alpha: 0.6), width: 1.0),
                                       boxShadow: [
-                                        BoxShadow(color: Colors.black.withOpacity(0.08), blurRadius: 30, offset: const Offset(0, 10)),
+                                        BoxShadow(color: Colors.black.withValues(alpha: 0.08), blurRadius: 30, offset: const Offset(0, 10)),
                                       ],
                                     ),
                                     child: Row(
@@ -918,6 +811,35 @@ class _InteractiveMapScreenState extends ConsumerState<InteractiveMapScreen> {
                                   ),
                                 ),
                               ),
+                              if (_showCategoryHint && _suggestions.isEmpty)
+                                AnimatedOpacity(
+                                  duration: const Duration(milliseconds: 250),
+                                  opacity: _showCategoryHint ? 1.0 : 0.0,
+                                  child: Container(
+                                    margin: const EdgeInsets.only(top: 8),
+                                    padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 5),
+                                    decoration: BoxDecoration(
+                                      color: Colors.black.withValues(alpha: 0.60),
+                                      borderRadius: BorderRadius.circular(14),
+                                      boxShadow: [
+                                        BoxShadow(
+                                          color: Colors.black.withValues(alpha: 0.15),
+                                          blurRadius: 8,
+                                          offset: const Offset(0, 3),
+                                        ),
+                                      ],
+                                    ),
+                                    child: const Text(
+                                      'Tap or drag a category to report',
+                                      style: TextStyle(
+                                        color: Colors.white,
+                                        fontSize: 10.5,
+                                        fontWeight: FontWeight.w600,
+                                        letterSpacing: 0.2,
+                                      ),
+                                    ),
+                                  ),
+                                ),
                             ],
                           ),
                         
@@ -1074,6 +996,11 @@ class _InteractiveMapScreenState extends ConsumerState<InteractiveMapScreen> {
     return EmbossedCategoryButton(
       category: category,
       onTap: () => _onCategoryTapped(category),
+      onDragStarted: () {
+        if (_showCategoryHint) {
+          setState(() => _showCategoryHint = false);
+        }
+      },
     );
   }
 
@@ -1604,129 +1531,179 @@ class _InteractiveMapScreenState extends ConsumerState<InteractiveMapScreen> {
     );
   }
     void _showFilterDialog() {
-
     Set<IssueCategory> tempHidden = Set.from(_hiddenCategories);
     showDialog<bool>(
       context: context,
+      barrierColor: Colors.black.withValues(alpha: 0.45),
       builder: (context) {
         return StatefulBuilder(
           builder: (context, setStateDialog) {
-            return AlertDialog(
-              backgroundColor: Colors.white,
-              surfaceTintColor: Colors.transparent,
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(28)),
-              
-              titlePadding: const EdgeInsets.fromLTRB(24, 24, 24, 12),
-              contentPadding: const EdgeInsets.symmetric(horizontal: 24, vertical: 8),
-              title: Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  const Text('Filter Categories', style: TextStyle(fontWeight: FontWeight.w800, fontSize: 22)),
-                  
-                  if (tempHidden.isNotEmpty)
-                    TextButton(
-                      onPressed: () {
-                        setStateDialog(() {
-                          tempHidden.clear();
-                        });
-                        
-                      },
-                      style: TextButton.styleFrom(
-                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                        minimumSize: Size.zero,
-                        tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+            return Dialog(
+              backgroundColor: Colors.transparent,
+              elevation: 0,
+              insetPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 24),
+              child: ClipRRect(
+                borderRadius: BorderRadius.circular(28),
+                child: BackdropFilter(
+                  filter: ImageFilter.blur(sigmaX: 20, sigmaY: 20),
+                  child: Container(
+                    constraints: const BoxConstraints(maxWidth: 420),
+                    decoration: BoxDecoration(
+                      gradient: LinearGradient(
+                        colors: [
+                          Colors.white.withValues(alpha: 0.96),
+                          const Color(0xFFF8FAFC).withValues(alpha: 0.96),
+                        ],
+                        begin: Alignment.topCenter,
+                        end: Alignment.bottomCenter,
                       ),
-                      child: Text('Reset', style: TextStyle(color: Colors.blue.shade700, fontWeight: FontWeight.w700, fontSize: 14)),
-                    ),
-                ],
-              ),
-              content: SizedBox(
-                width: double.maxFinite,
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: IssueCategory.values.map((category) {
-                  final style = kCategoryStyles[category]!;
-
-                  final isVisible = !tempHidden.contains(category);
-                  return Padding(
-                    padding: const EdgeInsets.only(bottom: 12.0),
-                    child: GestureDetector(
-                      onTap: () {
-                        setStateDialog(() {
-                          if (isVisible) {
-                            tempHidden.add(category);
-                          } else {
-                            tempHidden.remove(category);
-                          }
-                        });
-                        
-                      },
-                      child: AnimatedContainer(
-                        duration: const Duration(milliseconds: 200),
-                        curve: Curves.easeOutCubic,
-                        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-                        decoration: BoxDecoration(
-                          color: isVisible ? style.color.withOpacity(0.08) : Colors.white,
-                          borderRadius: BorderRadius.circular(20),
-                          border: Border.all(
-                            color: isVisible ? style.color.withOpacity(0.3) : Colors.grey.shade200,
-                            width: 1.5,
-                          ),
-                          boxShadow: isVisible ? [] : [
-                            BoxShadow(color: Colors.black.withOpacity(0.02), blurRadius: 10, offset: const Offset(0, 4))
-                          ],
+                      borderRadius: BorderRadius.circular(28),
+                      border: Border.all(
+                        color: Colors.white.withValues(alpha: 0.9),
+                        width: 1.5,
+                      ),
+                      boxShadow: [
+                        BoxShadow(
+                          color: Colors.black.withValues(alpha: 0.18),
+                          blurRadius: 36,
+                          offset: const Offset(0, 16),
                         ),
-                        child: Row(
+                        BoxShadow(
+                          color: Colors.white.withValues(alpha: 0.9),
+                          offset: const Offset(0, -1),
+                          blurRadius: 2,
+                        ),
+                      ],
+                    ),
+                    padding: const EdgeInsets.fromLTRB(20, 20, 20, 20),
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        // Header
+                        Row(
                           children: [
                             Container(
-                              padding: const EdgeInsets.all(10),
+                              width: 38,
+                              height: 38,
                               decoration: BoxDecoration(
-                                color: isVisible ? style.color : Colors.grey.shade100,
                                 shape: BoxShape.circle,
+                                gradient: const LinearGradient(
+                                  colors: [
+                                    Color(0xFFFFFFFF),
+                                    Color(0xFFF8FAFC),
+                                    Color(0xFFE2E8F0),
+                                  ],
+                                  begin: Alignment.topLeft,
+                                  end: Alignment.bottomRight,
+                                ),
+                                border: Border.all(color: Colors.white, width: 1.2),
+                                boxShadow: [
+                                  BoxShadow(
+                                    color: Colors.black.withValues(alpha: 0.10),
+                                    blurRadius: 4,
+                                    offset: const Offset(0, 2),
+                                  ),
+                                ],
                               ),
-                              child: Icon(style.icon, color: isVisible ? Colors.white : Colors.grey.shade500, size: 20),
+                              child: const Center(
+                                child: Icon(LucideIcons.filter, color: Color(0xFF1E293B), size: 18),
+                              ),
                             ),
-                            const SizedBox(width: 16),
-                            Expanded(
-                              child: Text(
-                                style.label,
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
-                                style: TextStyle(
-                                  fontSize: 15,
-                                  fontWeight: isVisible ? FontWeight.w700 : FontWeight.w500,
-                                  color: isVisible ? Colors.black87 : Colors.grey.shade600,
+                            const SizedBox(width: 12),
+                            const Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    'Filter Categories',
+                                    style: TextStyle(
+                                      fontWeight: FontWeight.w800,
+                                      fontSize: 18,
+                                      color: Color(0xFF0F172A),
+                                      letterSpacing: -0.2,
+                                    ),
+                                  ),
+                                  Text(
+                                    'Toggle visible issues on map',
+                                    style: TextStyle(
+                                      fontSize: 11,
+                                      color: Color(0xFF64748B),
+                                      fontWeight: FontWeight.w500,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                            if (tempHidden.isNotEmpty)
+                              Padding(
+                                padding: const EdgeInsets.only(right: 8.0),
+                                child: GestureDetector(
+                                  onTap: () {
+                                    setStateDialog(() {
+                                      tempHidden.clear();
+                                    });
+                                  },
+                                  child: Container(
+                                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                                    decoration: BoxDecoration(
+                                      color: const Color(0xFFEFF6FF),
+                                      borderRadius: BorderRadius.circular(10),
+                                      border: Border.all(color: const Color(0xFFBFDBFE), width: 1.0),
+                                    ),
+                                    child: const Text(
+                                      'Reset',
+                                      style: TextStyle(
+                                        color: Color(0xFF2563EB),
+                                        fontWeight: FontWeight.w700,
+                                        fontSize: 11.5,
+                                      ),
+                                    ),
+                                  ),
                                 ),
                               ),
+                            _EmbossedDialogCloseButton(
+                              onTap: () => Navigator.pop(context, false),
                             ),
-                            if (isVisible)
-                              Icon(LucideIcons.checkCircle2, color: style.color, size: 24)
-                            else
-                              Icon(LucideIcons.circle, color: Colors.grey.shade300, size: 24),
                           ],
                         ),
-                      ),
+                        const SizedBox(height: 16),
+                        // List of categories
+                        ...IssueCategory.values.map((category) {
+                          final isVisible = !tempHidden.contains(category);
+                          return _EmbossedFilterTile(
+                            key: ValueKey(category),
+                            category: category,
+                            isVisible: isVisible,
+                            onTap: () {
+                              setStateDialog(() {
+                                if (isVisible) {
+                                  tempHidden.add(category);
+                                } else {
+                                  tempHidden.remove(category);
+                                }
+                              });
+                            },
+                          );
+                        }),
+                        const SizedBox(height: 8),
+                        // Apply Filters button
+                        EmbossedActionButton(
+                          onTap: () => Navigator.pop(context, true),
+                          label: 'Apply Filters',
+                          icon: LucideIcons.checkCheck,
+                          height: 50,
+                          gradientColors: const [
+                            Color(0xFF334155),
+                            Color(0xFF1E293B),
+                            Color(0xFF0F172A),
+                          ],
+                        ),
+                      ],
                     ),
-                  );
-                }).toList(),
-              )),
-              actionsPadding: const EdgeInsets.all(20),
-              actions: [
-                SizedBox(
-                  width: double.infinity,
-                  child: ElevatedButton(
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: Colors.black87,
-                      foregroundColor: Colors.white,
-                      elevation: 0,
-                      padding: const EdgeInsets.symmetric(vertical: 16),
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-                    ),
-                    onPressed: () => Navigator.pop(context, true),
-                    child: const Text('Apply Filters', style: TextStyle(fontWeight: FontWeight.w700, fontSize: 16)),
                   ),
                 ),
-              ],
+              ),
             );
           },
         );
@@ -1743,297 +1720,969 @@ class _InteractiveMapScreenState extends ConsumerState<InteractiveMapScreen> {
   void _showMapStyleDialog() {
     showDialog<void>(
       context: context,
+      barrierColor: Colors.black.withValues(alpha: 0.45),
       builder: (context) {
         return StatefulBuilder(
           builder: (context, setDialogState) {
-            return AlertDialog(
-              backgroundColor: Colors.white,
-              surfaceTintColor: Colors.transparent,
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(28)),
-              titlePadding: const EdgeInsets.fromLTRB(20, 20, 20, 6),
-              contentPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 4),
-              title: Row(
-                children: [
-                  Container(
-                    padding: const EdgeInsets.all(7),
+            return Dialog(
+              backgroundColor: Colors.transparent,
+              elevation: 0,
+              insetPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 24),
+              child: ClipRRect(
+                borderRadius: BorderRadius.circular(28),
+                child: BackdropFilter(
+                  filter: ImageFilter.blur(sigmaX: 20, sigmaY: 20),
+                  child: Container(
+                    constraints: const BoxConstraints(maxWidth: 420, maxHeight: 620),
                     decoration: BoxDecoration(
-                      color: Colors.indigo.shade50,
-                      borderRadius: BorderRadius.circular(10),
+                      gradient: LinearGradient(
+                        colors: [
+                          Colors.white.withValues(alpha: 0.96),
+                          const Color(0xFFF8FAFC).withValues(alpha: 0.96),
+                        ],
+                        begin: Alignment.topCenter,
+                        end: Alignment.bottomCenter,
+                      ),
+                      borderRadius: BorderRadius.circular(28),
+                      border: Border.all(
+                        color: Colors.white.withValues(alpha: 0.9),
+                        width: 1.5,
+                      ),
+                      boxShadow: [
+                        BoxShadow(
+                          color: Colors.black.withValues(alpha: 0.18),
+                          blurRadius: 36,
+                          offset: const Offset(0, 16),
+                        ),
+                        BoxShadow(
+                          color: Colors.white.withValues(alpha: 0.9),
+                          offset: const Offset(0, -1),
+                          blurRadius: 2,
+                        ),
+                      ],
                     ),
-                    child: Icon(LucideIcons.layers, color: Colors.indigo.shade600, size: 20),
-                  ),
-                  const SizedBox(width: 10),
-                  const Expanded(
+                    padding: const EdgeInsets.fromLTRB(20, 20, 20, 20),
                     child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
+                      mainAxisSize: MainAxisSize.min,
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
                       children: [
-                        Text('Layers & Overlays', style: TextStyle(fontWeight: FontWeight.w800, fontSize: 18, color: Color(0xFF0F172A))),
-                        Text('Choose base style and active overlays', style: TextStyle(fontSize: 11, color: Color(0xFF64748B), fontWeight: FontWeight.w500)),
+                        // Header
+                        Row(
+                          children: [
+                            Container(
+                              width: 38,
+                              height: 38,
+                              decoration: BoxDecoration(
+                                shape: BoxShape.circle,
+                                gradient: const LinearGradient(
+                                  colors: [
+                                    Color(0xFFFFFFFF),
+                                    Color(0xFFF8FAFC),
+                                    Color(0xFFE2E8F0),
+                                  ],
+                                  begin: Alignment.topLeft,
+                                  end: Alignment.bottomRight,
+                                ),
+                                border: Border.all(color: Colors.white, width: 1.2),
+                                boxShadow: [
+                                  BoxShadow(
+                                    color: Colors.black.withValues(alpha: 0.10),
+                                    blurRadius: 4,
+                                    offset: const Offset(0, 2),
+                                  ),
+                                ],
+                              ),
+                              child: const Center(
+                                child: Icon(LucideIcons.layers, color: Color(0xFF2563EB), size: 18),
+                              ),
+                            ),
+                            const SizedBox(width: 12),
+                            const Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    'Layers & Overlays',
+                                    style: TextStyle(
+                                      fontWeight: FontWeight.w800,
+                                      fontSize: 18,
+                                      color: Color(0xFF0F172A),
+                                      letterSpacing: -0.2,
+                                    ),
+                                  ),
+                                  Text(
+                                    'Choose base style and active overlays',
+                                    style: TextStyle(
+                                      fontSize: 11,
+                                      color: Color(0xFF64748B),
+                                      fontWeight: FontWeight.w500,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                            _EmbossedDialogCloseButton(
+                              onTap: () => Navigator.pop(context),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 14),
+                        // Scrollable content
+                        Flexible(
+                          child: SingleChildScrollView(
+                            physics: const BouncingScrollPhysics(),
+                            child: Column(
+                              mainAxisSize: MainAxisSize.min,
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                // Section 1: Base Map
+                                Row(
+                                  children: [
+                                    Icon(LucideIcons.map, size: 14, color: Colors.grey.shade600),
+                                    const SizedBox(width: 6),
+                                    Text(
+                                      'BASE MAP',
+                                      style: TextStyle(
+                                        fontSize: 11,
+                                        fontWeight: FontWeight.w800,
+                                        letterSpacing: 1.0,
+                                        color: Colors.grey.shade600,
+                                      ),
+                                    ),
+                                    const Spacer(),
+                                    Container(
+                                      padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
+                                      decoration: BoxDecoration(
+                                        color: const Color(0xFFF1F5F9),
+                                        borderRadius: BorderRadius.circular(8),
+                                      ),
+                                      child: Text(
+                                        'Select 1',
+                                        style: TextStyle(
+                                          fontSize: 10,
+                                          color: Colors.grey.shade600,
+                                          fontWeight: FontWeight.w600,
+                                        ),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                                const SizedBox(height: 8),
+                                ...kMapStyles.map((option) {
+                                  final isSelected = _selectedMapStyle == option.style;
+                                  return _EmbossedMapStyleTile(
+                                    key: ValueKey(option.style),
+                                    option: option,
+                                    isSelected: isSelected,
+                                    onTap: () {
+                                      setDialogState(() {
+                                        _selectedMapStyle = option.style;
+                                      });
+                                      setState(() {});
+                                    },
+                                  );
+                                }),
+                                const SizedBox(height: 10),
+                                const Divider(color: Color(0xFFE2E8F0), height: 1),
+                                const SizedBox(height: 10),
+                                // Section 2: Overlays
+                                Row(
+                                  children: [
+                                    const Icon(LucideIcons.layers, size: 14, color: Color(0xFF2563EB)),
+                                    const SizedBox(width: 6),
+                                    const Text(
+                                      'MAP OVERLAYS',
+                                      style: TextStyle(
+                                        fontSize: 11,
+                                        fontWeight: FontWeight.w800,
+                                        letterSpacing: 1.0,
+                                        color: Color(0xFF1D4ED8),
+                                      ),
+                                    ),
+                                    const Spacer(),
+                                    Container(
+                                      padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
+                                      decoration: BoxDecoration(
+                                        color: _activeOverlays.isNotEmpty
+                                            ? const Color(0xFFEFF6FF)
+                                            : const Color(0xFFF1F5F9),
+                                        borderRadius: BorderRadius.circular(8),
+                                        border: Border.all(
+                                          color: _activeOverlays.isNotEmpty
+                                              ? const Color(0xFFBFDBFE)
+                                              : Colors.transparent,
+                                          width: 0.8,
+                                        ),
+                                      ),
+                                      child: Text(
+                                        '${_activeOverlays.length} active',
+                                        style: TextStyle(
+                                          fontSize: 10,
+                                          fontWeight: FontWeight.w700,
+                                          color: _activeOverlays.isNotEmpty
+                                              ? const Color(0xFF1D4ED8)
+                                              : Colors.grey.shade600,
+                                        ),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                                const SizedBox(height: 2),
+                                Text(
+                                  'Stacked transparently on top of any base map',
+                                  style: TextStyle(fontSize: 10.5, color: Colors.grey.shade500),
+                                ),
+                                const SizedBox(height: 8),
+                                ...kMapOverlays.map((overlay) {
+                                  final isOverlayActive = _activeOverlays.contains(overlay.type);
+                                  return _EmbossedOverlayTile(
+                                    key: ValueKey(overlay.type),
+                                    overlay: overlay,
+                                    isActive: isOverlayActive,
+                                    onChanged: (active) {
+                                      setDialogState(() {
+                                        if (active) {
+                                          _activeOverlays.add(overlay.type);
+                                        } else {
+                                          _activeOverlays.remove(overlay.type);
+                                        }
+                                      });
+                                      setState(() {});
+                                    },
+                                  );
+                                }),
+                              ],
+                            ),
+                          ),
+                        ),
+                        const SizedBox(height: 12),
+                        // Done button
+                        EmbossedActionButton(
+                          onTap: () => Navigator.pop(context),
+                          label: 'Done',
+                          icon: LucideIcons.check,
+                          height: 50,
+                          gradientColors: const [
+                            Color(0xFF3B82F6),
+                            Color(0xFF2563EB),
+                            Color(0xFF1D4ED8),
+                          ],
+                        ),
                       ],
                     ),
                   ),
-                ],
-              ),
-              content: ConstrainedBox(
-                constraints: const BoxConstraints(maxWidth: 420, maxHeight: 480),
-                child: SingleChildScrollView(
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      // Section 1: Base Map
-                      Row(
-                        children: [
-                          Icon(LucideIcons.map, size: 14, color: Colors.grey.shade600),
-                          const SizedBox(width: 6),
-                          Text(
-                            'BASE MAP',
-                            style: TextStyle(
-                              fontSize: 11,
-                              fontWeight: FontWeight.w800,
-                              letterSpacing: 1.0,
-                              color: Colors.grey.shade600,
-                            ),
-                          ),
-                          const Spacer(),
-                          Text(
-                            'Select 1',
-                            style: TextStyle(fontSize: 11, color: Colors.grey.shade400, fontWeight: FontWeight.w600),
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 8),
-                      ...kMapStyles.map((option) {
-                        final isSelected = _selectedMapStyle == option.style;
-                        return Padding(
-                          padding: const EdgeInsets.only(bottom: 6.0),
-                          child: InkWell(
-                            onTap: () {
-                              setDialogState(() {
-                                _selectedMapStyle = option.style;
-                              });
-                              setState(() {});
-                            },
-                            borderRadius: BorderRadius.circular(14),
-                            child: AnimatedContainer(
-                              duration: const Duration(milliseconds: 180),
-                              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                              decoration: BoxDecoration(
-                                color: isSelected ? Colors.indigo.shade50.withValues(alpha: 0.7) : Colors.grey.shade50,
-                                borderRadius: BorderRadius.circular(14),
-                                border: Border.all(
-                                  color: isSelected ? Colors.indigo.shade600 : Colors.grey.shade200,
-                                  width: isSelected ? 1.8 : 1.0,
-                                ),
-                              ),
-                              child: Row(
-                                children: [
-                                  Container(
-                                    width: 34,
-                                    height: 34,
-                                    decoration: BoxDecoration(
-                                      color: option.previewColor,
-                                      borderRadius: BorderRadius.circular(8),
-                                      border: Border.all(color: Colors.black.withValues(alpha: 0.1)),
-                                    ),
-                                    child: Icon(
-                                      option.icon,
-                                      color: option.style == MapStyle.darkMode || option.style == MapStyle.satellite
-                                          ? Colors.white
-                                          : Colors.grey.shade800,
-                                      size: 18,
-                                    ),
-                                  ),
-                                  const SizedBox(width: 10),
-                                  Expanded(
-                                    child: Column(
-                                      crossAxisAlignment: CrossAxisAlignment.start,
-                                      mainAxisSize: MainAxisSize.min,
-                                      children: [
-                                        Text(
-                                          option.title,
-                                          style: TextStyle(
-                                            fontWeight: FontWeight.w700,
-                                            fontSize: 13.5,
-                                            color: isSelected ? Colors.indigo.shade900 : const Color(0xFF1E293B),
-                                          ),
-                                        ),
-                                        Text(
-                                          option.subtitle,
-                                          style: TextStyle(
-                                            fontSize: 10.5,
-                                            color: Colors.grey.shade500,
-                                          ),
-                                        ),
-                                      ],
-                                    ),
-                                  ),
-                                  Icon(
-                                    isSelected ? Icons.radio_button_checked : Icons.radio_button_unchecked,
-                                    color: isSelected ? Colors.indigo.shade600 : Colors.grey.shade400,
-                                    size: 19,
-                                  ),
-                                ],
-                              ),
-                            ),
-                          ),
-                        );
-                      }),
-                      const SizedBox(height: 10),
-                      Divider(color: Colors.grey.shade200, height: 1),
-                      const SizedBox(height: 10),
-                      // Section 2: Overlays
-                      Row(
-                        children: [
-                          Icon(LucideIcons.layers, size: 14, color: Colors.blue.shade600),
-                          const SizedBox(width: 6),
-                          Text(
-                            'MAP OVERLAYS',
-                            style: TextStyle(
-                              fontSize: 11,
-                              fontWeight: FontWeight.w800,
-                              letterSpacing: 1.0,
-                              color: Colors.blue.shade800,
-                            ),
-                          ),
-                          const Spacer(),
-                          Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
-                            decoration: BoxDecoration(
-                              color: _activeOverlays.isNotEmpty ? Colors.blue.shade50 : Colors.grey.shade100,
-                              borderRadius: BorderRadius.circular(8),
-                            ),
-                            child: Text(
-                              '${_activeOverlays.length} active',
-                              style: TextStyle(
-                                fontSize: 10.5,
-                                fontWeight: FontWeight.w700,
-                                color: _activeOverlays.isNotEmpty ? Colors.blue.shade700 : Colors.grey.shade600,
-                              ),
-                            ),
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 2),
-                      Text(
-                        'Stacked transparently on top of any base map',
-                        style: TextStyle(fontSize: 10.5, color: Colors.grey.shade500),
-                      ),
-                      const SizedBox(height: 8),
-                      ...kMapOverlays.map((overlay) {
-                        final isOverlayActive = _activeOverlays.contains(overlay.type);
-                        return Padding(
-                          padding: const EdgeInsets.only(bottom: 6.0),
-                          child: InkWell(
-                            onTap: () {
-                              setDialogState(() {
-                                if (isOverlayActive) {
-                                  _activeOverlays.remove(overlay.type);
-                                } else {
-                                  _activeOverlays.add(overlay.type);
-                                }
-                              });
-                              setState(() {});
-                            },
-                            borderRadius: BorderRadius.circular(14),
-                            child: AnimatedContainer(
-                              duration: const Duration(milliseconds: 180),
-                              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                              decoration: BoxDecoration(
-                                color: isOverlayActive ? overlay.activeColor.withValues(alpha: 0.08) : Colors.grey.shade50,
-                                borderRadius: BorderRadius.circular(14),
-                                border: Border.all(
-                                  color: isOverlayActive ? overlay.activeColor : Colors.grey.shade200,
-                                  width: isOverlayActive ? 1.8 : 1.0,
-                                ),
-                              ),
-                              child: Row(
-                                children: [
-                                  Container(
-                                    width: 34,
-                                    height: 34,
-                                    decoration: BoxDecoration(
-                                      color: isOverlayActive ? overlay.activeColor : Colors.grey.shade200,
-                                      borderRadius: BorderRadius.circular(8),
-                                    ),
-                                    child: Icon(
-                                      overlay.icon,
-                                      color: isOverlayActive ? Colors.white : Colors.grey.shade600,
-                                      size: 18,
-                                    ),
-                                  ),
-                                  const SizedBox(width: 10),
-                                  Expanded(
-                                    child: Column(
-                                      crossAxisAlignment: CrossAxisAlignment.start,
-                                      mainAxisSize: MainAxisSize.min,
-                                      children: [
-                                        Text(
-                                          overlay.title,
-                                          style: TextStyle(
-                                            fontWeight: FontWeight.w700,
-                                            fontSize: 13,
-                                            color: isOverlayActive ? Colors.grey.shade900 : Colors.grey.shade700,
-                                          ),
-                                        ),
-                                        Text(
-                                          overlay.subtitle,
-                                          style: TextStyle(
-                                            fontSize: 10.5,
-                                            color: Colors.grey.shade500,
-                                          ),
-                                        ),
-                                      ],
-                                    ),
-                                  ),
-                                  Transform.scale(
-                                    scale: 0.82,
-                                    child: Switch(
-                                      value: isOverlayActive,
-                                      activeColor: overlay.activeColor,
-                                      onChanged: (val) {
-                                        setDialogState(() {
-                                          if (val) {
-                                            _activeOverlays.add(overlay.type);
-                                          } else {
-                                            _activeOverlays.remove(overlay.type);
-                                          }
-                                        });
-                                        setState(() {});
-                                      },
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ),
-                          ),
-                        );
-                      }),
-                    ],
-                  ),
                 ),
               ),
-              actionsPadding: const EdgeInsets.fromLTRB(20, 6, 20, 16),
-              actions: [
-                SizedBox(
-                  width: double.infinity,
-                  child: ElevatedButton(
-                    onPressed: () => Navigator.pop(context),
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: const Color(0xFF2563EB),
-                      foregroundColor: Colors.white,
-                      elevation: 0,
-                      padding: const EdgeInsets.symmetric(vertical: 12),
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
-                    ),
-                    child: const Text('Done', style: TextStyle(fontSize: 14, fontWeight: FontWeight.w700)),
-                  ),
-                ),
-              ],
             );
           },
         );
       },
+    );
+  }
+}
+
+class _EmbossedDialogCloseButton extends StatefulWidget {
+  final VoidCallback onTap;
+
+  const _EmbossedDialogCloseButton({required this.onTap});
+
+  @override
+  State<_EmbossedDialogCloseButton> createState() => _EmbossedDialogCloseButtonState();
+}
+
+class _EmbossedDialogCloseButtonState extends State<_EmbossedDialogCloseButton> {
+  bool _isPressed = false;
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTapDown: (_) => setState(() => _isPressed = true),
+      onTapUp: (_) {
+        setState(() => _isPressed = false);
+        widget.onTap();
+      },
+      onTapCancel: () => setState(() => _isPressed = false),
+      child: AnimatedScale(
+        scale: _isPressed ? 0.90 : 1.0,
+        duration: const Duration(milliseconds: 100),
+        curve: Curves.easeOutCubic,
+        child: Container(
+          width: 32,
+          height: 32,
+          decoration: BoxDecoration(
+            shape: BoxShape.circle,
+            gradient: const LinearGradient(
+              colors: [
+                Color(0xFFFFFFFF),
+                Color(0xFFF8FAFC),
+                Color(0xFFE2E8F0),
+              ],
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+            ),
+            border: Border.all(
+              color: Colors.white,
+              width: 1.0,
+            ),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withValues(alpha: 0.10),
+                offset: const Offset(0, 2),
+                blurRadius: 4,
+              ),
+              BoxShadow(
+                color: Colors.white.withValues(alpha: 0.8),
+                offset: const Offset(0, -0.8),
+                blurRadius: 1,
+              ),
+            ],
+          ),
+          child: const Center(
+            child: Icon(
+              LucideIcons.x,
+              size: 16,
+              color: Color(0xFF64748B),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _EmbossedToggleSwitch extends StatelessWidget {
+  final bool value;
+  final Color activeColor;
+  final ValueChanged<bool> onChanged;
+
+  const _EmbossedToggleSwitch({
+    required this.value,
+    required this.activeColor,
+    required this.onChanged,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: () => onChanged(!value),
+      behavior: HitTestBehavior.opaque,
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 200),
+        curve: Curves.easeOutCubic,
+        width: 44,
+        height: 25,
+        padding: const EdgeInsets.all(2.5),
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(13),
+          gradient: value
+              ? LinearGradient(
+                  colors: [
+                    activeColor,
+                    Color.lerp(activeColor, Colors.black, 0.15)!,
+                  ],
+                  begin: Alignment.topCenter,
+                  end: Alignment.bottomCenter,
+                )
+              : const LinearGradient(
+                  colors: [
+                    Color(0xFFCBD5E1),
+                    Color(0xFFE2E8F0),
+                  ],
+                  begin: Alignment.topCenter,
+                  end: Alignment.bottomCenter,
+                ),
+          border: Border.all(
+            color: value
+                ? Colors.white.withValues(alpha: 0.45)
+                : const Color(0xFFCBD5E1),
+            width: 1.0,
+          ),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withValues(alpha: 0.10),
+              offset: const Offset(0, 1.5),
+              blurRadius: 2.5,
+            ),
+            if (value)
+              BoxShadow(
+                color: activeColor.withValues(alpha: 0.35),
+                blurRadius: 6,
+                offset: const Offset(0, 2),
+              ),
+          ],
+        ),
+        child: AnimatedAlign(
+          duration: const Duration(milliseconds: 200),
+          curve: Curves.easeOutBack,
+          alignment: value ? Alignment.centerRight : Alignment.centerLeft,
+          child: Container(
+            width: 20,
+            height: 20,
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              gradient: const LinearGradient(
+                colors: [
+                  Color(0xFFFFFFFF),
+                  Color(0xFFF1F5F9),
+                ],
+                begin: Alignment.topCenter,
+                end: Alignment.bottomCenter,
+              ),
+              border: Border.all(
+                color: Colors.white,
+                width: 0.8,
+              ),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withValues(alpha: 0.18),
+                  offset: const Offset(0, 1.5),
+                  blurRadius: 3,
+                ),
+                BoxShadow(
+                  color: Colors.white.withValues(alpha: 0.8),
+                  offset: const Offset(0, -0.6),
+                  blurRadius: 1,
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _EmbossedFilterTile extends StatefulWidget {
+  final IssueCategory category;
+  final bool isVisible;
+  final VoidCallback onTap;
+
+  const _EmbossedFilterTile({
+    super.key,
+    required this.category,
+    required this.isVisible,
+    required this.onTap,
+  });
+
+  @override
+  State<_EmbossedFilterTile> createState() => _EmbossedFilterTileState();
+}
+
+class _EmbossedFilterTileState extends State<_EmbossedFilterTile> {
+  bool _isPressed = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final style = kCategoryStyles[widget.category]!;
+    final isVisible = widget.isVisible;
+
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 10.0),
+      child: GestureDetector(
+        onTapDown: (_) => setState(() => _isPressed = true),
+        onTapUp: (_) {
+          setState(() => _isPressed = false);
+          widget.onTap();
+        },
+        onTapCancel: () => setState(() => _isPressed = false),
+        behavior: HitTestBehavior.opaque,
+        child: AnimatedScale(
+          scale: _isPressed ? 0.97 : 1.0,
+          duration: const Duration(milliseconds: 100),
+          curve: Curves.easeOutCubic,
+          child: AnimatedContainer(
+            duration: const Duration(milliseconds: 180),
+            curve: Curves.easeOutCubic,
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 11),
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(18),
+              gradient: isVisible
+                  ? LinearGradient(
+                      colors: [
+                        Colors.white,
+                        style.color.withValues(alpha: 0.08),
+                      ],
+                      begin: Alignment.topLeft,
+                      end: Alignment.bottomRight,
+                    )
+                  : const LinearGradient(
+                      colors: [
+                        Color(0xFFFAFAFA),
+                        Color(0xFFF1F5F9),
+                      ],
+                      begin: Alignment.topLeft,
+                      end: Alignment.bottomRight,
+                    ),
+              border: Border.all(
+                color: isVisible
+                    ? style.color.withValues(alpha: 0.45)
+                    : const Color(0xFFE2E8F0),
+                width: isVisible ? 1.5 : 1.0,
+              ),
+              boxShadow: isVisible
+                  ? [
+                      BoxShadow(
+                        color: style.color.withValues(alpha: 0.14),
+                        blurRadius: 10,
+                        offset: const Offset(0, 3),
+                      ),
+                      BoxShadow(
+                        color: Colors.white.withValues(alpha: 0.8),
+                        offset: const Offset(0, -1),
+                        blurRadius: 1.5,
+                      ),
+                    ]
+                  : [
+                      BoxShadow(
+                        color: Colors.black.withValues(alpha: 0.03),
+                        blurRadius: 4,
+                        offset: const Offset(0, 1.5),
+                      ),
+                    ],
+            ),
+            child: Row(
+              children: [
+                // 3D Category Icon
+                if (isVisible)
+                  EmbossedCategoryIcon(
+                    category: widget.category,
+                    size: 40,
+                    iconSize: 20,
+                  )
+                else
+                  Container(
+                    width: 40,
+                    height: 40,
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      color: const Color(0xFFE2E8F0),
+                      border: Border.all(color: Colors.white, width: 1.0),
+                    ),
+                    child: Icon(
+                      style.icon,
+                      color: const Color(0xFF94A3B8),
+                      size: 20,
+                    ),
+                  ),
+                const SizedBox(width: 14),
+                Expanded(
+                  child: Text(
+                    style.label,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                      fontSize: 15,
+                      fontWeight: isVisible ? FontWeight.w700 : FontWeight.w600,
+                      color: isVisible ? const Color(0xFF0F172A) : const Color(0xFF64748B),
+                      letterSpacing: 0.2,
+                    ),
+                  ),
+                ),
+                // Embossed Checkmark Dial
+                AnimatedContainer(
+                  duration: const Duration(milliseconds: 180),
+                  width: 26,
+                  height: 26,
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    gradient: isVisible
+                        ? LinearGradient(
+                            colors: style.gradientColors.isNotEmpty
+                                ? style.gradientColors
+                                : [style.color, style.color],
+                            begin: Alignment.topCenter,
+                            end: Alignment.bottomCenter,
+                          )
+                        : const LinearGradient(
+                            colors: [
+                              Color(0xFFE2E8F0),
+                              Color(0xFFCBD5E1),
+                            ],
+                            begin: Alignment.topCenter,
+                            end: Alignment.bottomCenter,
+                          ),
+                    border: Border.all(
+                      color: isVisible
+                          ? Colors.white.withValues(alpha: 0.8)
+                          : const Color(0xFFCBD5E1),
+                      width: 1.2,
+                    ),
+                    boxShadow: isVisible
+                        ? [
+                            BoxShadow(
+                              color: style.color.withValues(alpha: 0.35),
+                              blurRadius: 5,
+                              offset: const Offset(0, 1.5),
+                            ),
+                            BoxShadow(
+                              color: Colors.white.withValues(alpha: 0.8),
+                              offset: const Offset(0, -0.6),
+                              blurRadius: 1,
+                            ),
+                          ]
+                        : null,
+                  ),
+                  child: Center(
+                    child: Icon(
+                      LucideIcons.check,
+                      color: isVisible ? Colors.white : Colors.transparent,
+                      size: 15,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _EmbossedMapStyleTile extends StatefulWidget {
+  final MapStyleOption option;
+  final bool isSelected;
+  final VoidCallback onTap;
+
+  const _EmbossedMapStyleTile({
+    super.key,
+    required this.option,
+    required this.isSelected,
+    required this.onTap,
+  });
+
+  @override
+  State<_EmbossedMapStyleTile> createState() => _EmbossedMapStyleTileState();
+}
+
+class _EmbossedMapStyleTileState extends State<_EmbossedMapStyleTile> {
+  bool _isPressed = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final option = widget.option;
+    final isSelected = widget.isSelected;
+
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 8.0),
+      child: GestureDetector(
+        onTapDown: (_) => setState(() => _isPressed = true),
+        onTapUp: (_) {
+          setState(() => _isPressed = false);
+          widget.onTap();
+        },
+        onTapCancel: () => setState(() => _isPressed = false),
+        behavior: HitTestBehavior.opaque,
+        child: AnimatedScale(
+          scale: _isPressed ? 0.97 : 1.0,
+          duration: const Duration(milliseconds: 100),
+          curve: Curves.easeOutCubic,
+          child: AnimatedContainer(
+            duration: const Duration(milliseconds: 180),
+            curve: Curves.easeOutCubic,
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(16),
+              gradient: isSelected
+                  ? const LinearGradient(
+                      colors: [
+                        Colors.white,
+                        Color(0xFFEFF6FF),
+                      ],
+                      begin: Alignment.topLeft,
+                      end: Alignment.bottomRight,
+                    )
+                  : const LinearGradient(
+                      colors: [
+                        Color(0xFFFFFFFF),
+                        Color(0xFFF8FAFC),
+                      ],
+                      begin: Alignment.topLeft,
+                      end: Alignment.bottomRight,
+                    ),
+              border: Border.all(
+                color: isSelected
+                    ? const Color(0xFF2563EB)
+                    : const Color(0xFFE2E8F0),
+                width: isSelected ? 1.6 : 1.0,
+              ),
+              boxShadow: isSelected
+                  ? [
+                      BoxShadow(
+                        color: const Color(0xFF2563EB).withValues(alpha: 0.14),
+                        blurRadius: 10,
+                        offset: const Offset(0, 3),
+                      ),
+                      BoxShadow(
+                        color: Colors.white.withValues(alpha: 0.9),
+                        offset: const Offset(0, -1),
+                        blurRadius: 1.5,
+                      ),
+                    ]
+                  : [
+                      BoxShadow(
+                        color: Colors.black.withValues(alpha: 0.03),
+                        blurRadius: 4,
+                        offset: const Offset(0, 1.5),
+                      ),
+                      BoxShadow(
+                        color: Colors.white.withValues(alpha: 0.8),
+                        offset: const Offset(0, -0.6),
+                        blurRadius: 1,
+                      ),
+                    ],
+            ),
+            child: Row(
+              children: [
+                // 3D Beveled Preview Squircle
+                Container(
+                  width: 36,
+                  height: 36,
+                  decoration: BoxDecoration(
+                    color: option.previewColor,
+                    borderRadius: BorderRadius.circular(10),
+                    border: Border.all(
+                      color: Colors.white,
+                      width: 1.2,
+                    ),
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.black.withValues(alpha: 0.12),
+                        offset: const Offset(0, 2),
+                        blurRadius: 4,
+                      ),
+                      BoxShadow(
+                        color: Colors.white.withValues(alpha: 0.8),
+                        offset: const Offset(0, -0.6),
+                        blurRadius: 1,
+                      ),
+                    ],
+                  ),
+                  child: Center(
+                    child: Icon(
+                      option.icon,
+                      color: option.style == MapStyle.darkMode || option.style == MapStyle.satellite
+                          ? Colors.white
+                          : const Color(0xFF1E293B),
+                      size: 19,
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(
+                        option.title,
+                        style: TextStyle(
+                          fontWeight: FontWeight.w700,
+                          fontSize: 14,
+                          color: isSelected ? const Color(0xFF1E3A8A) : const Color(0xFF0F172A),
+                        ),
+                      ),
+                      Text(
+                        option.subtitle,
+                        style: TextStyle(
+                          fontSize: 11,
+                          color: isSelected ? const Color(0xFF3B82F6) : const Color(0xFF64748B),
+                          fontWeight: isSelected ? FontWeight.w600 : FontWeight.w400,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                // Concentric 3D Radio Dial
+                Container(
+                  width: 22,
+                  height: 22,
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    border: Border.all(
+                      color: isSelected ? const Color(0xFF2563EB) : const Color(0xFFCBD5E1),
+                      width: isSelected ? 2.0 : 1.5,
+                    ),
+                    color: Colors.white,
+                    boxShadow: isSelected
+                        ? [
+                            BoxShadow(
+                              color: const Color(0xFF2563EB).withValues(alpha: 0.25),
+                              blurRadius: 4,
+                              offset: const Offset(0, 1),
+                            ),
+                          ]
+                        : null,
+                  ),
+                  child: Center(
+                    child: isSelected
+                        ? Container(
+                            width: 10,
+                            height: 10,
+                            decoration: BoxDecoration(
+                              shape: BoxShape.circle,
+                              gradient: const LinearGradient(
+                                colors: [
+                                  Color(0xFF3B82F6),
+                                  Color(0xFF1D4ED8),
+                                ],
+                                begin: Alignment.topCenter,
+                                end: Alignment.bottomCenter,
+                              ),
+                              boxShadow: [
+                                BoxShadow(
+                                  color: Colors.black.withValues(alpha: 0.2),
+                                  blurRadius: 2,
+                                  offset: const Offset(0, 1),
+                                ),
+                              ],
+                            ),
+                          )
+                        : null,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _EmbossedOverlayTile extends StatelessWidget {
+  final MapOverlayOption overlay;
+  final bool isActive;
+  final ValueChanged<bool> onChanged;
+
+  const _EmbossedOverlayTile({
+    super.key,
+    required this.overlay,
+    required this.isActive,
+    required this.onChanged,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 8.0),
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 180),
+        curve: Curves.easeOutCubic,
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(16),
+          gradient: isActive
+              ? LinearGradient(
+                  colors: [
+                    Colors.white,
+                    overlay.activeColor.withValues(alpha: 0.08),
+                  ],
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
+                )
+              : const LinearGradient(
+                  colors: [
+                    Color(0xFFFFFFFF),
+                    Color(0xFFF8FAFC),
+                  ],
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
+                ),
+          border: Border.all(
+            color: isActive
+                ? overlay.activeColor.withValues(alpha: 0.45)
+                : const Color(0xFFE2E8F0),
+            width: isActive ? 1.6 : 1.0,
+          ),
+          boxShadow: isActive
+              ? [
+                  BoxShadow(
+                    color: overlay.activeColor.withValues(alpha: 0.12),
+                    blurRadius: 8,
+                    offset: const Offset(0, 3),
+                  ),
+                  BoxShadow(
+                    color: Colors.white.withValues(alpha: 0.8),
+                    offset: const Offset(0, -1),
+                    blurRadius: 1.5,
+                  ),
+                ]
+              : [
+                  BoxShadow(
+                    color: Colors.black.withValues(alpha: 0.03),
+                    blurRadius: 4,
+                    offset: const Offset(0, 1.5),
+                  ),
+                ],
+        ),
+        child: Row(
+          children: [
+            // 3D Beveled Icon Box
+            Container(
+              width: 36,
+              height: 36,
+              decoration: BoxDecoration(
+                color: isActive ? overlay.activeColor : const Color(0xFFF1F5F9),
+                borderRadius: BorderRadius.circular(10),
+                border: Border.all(
+                  color: Colors.white,
+                  width: 1.2,
+                ),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withValues(alpha: 0.10),
+                    offset: const Offset(0, 2),
+                    blurRadius: 4,
+                  ),
+                  BoxShadow(
+                    color: Colors.white.withValues(alpha: 0.8),
+                    offset: const Offset(0, -0.6),
+                    blurRadius: 1,
+                  ),
+                ],
+              ),
+              child: Center(
+                child: Icon(
+                  overlay.icon,
+                  color: isActive ? Colors.white : const Color(0xFF64748B),
+                  size: 19,
+                ),
+              ),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(
+                    overlay.title,
+                    style: TextStyle(
+                      fontWeight: FontWeight.w700,
+                      fontSize: 13.5,
+                      color: isActive ? const Color(0xFF0F172A) : const Color(0xFF334155),
+                    ),
+                  ),
+                  Text(
+                    overlay.subtitle,
+                    style: TextStyle(
+                      fontSize: 10.5,
+                      color: Colors.grey.shade500,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(width: 8),
+            _EmbossedToggleSwitch(
+              value: isActive,
+              activeColor: overlay.activeColor,
+              onChanged: onChanged,
+            ),
+          ],
+        ),
+      ),
     );
   }
 }
@@ -2913,11 +3562,13 @@ class EmbossedCategoryIcon extends StatelessWidget {
 class EmbossedCategoryButton extends StatefulWidget {
   final IssueCategory category;
   final VoidCallback onTap;
+  final VoidCallback? onDragStarted;
 
   const EmbossedCategoryButton({
     super.key,
     required this.category,
     required this.onTap,
+    this.onDragStarted,
   });
 
   @override
@@ -2973,6 +3624,7 @@ class _EmbossedCategoryButtonState extends State<EmbossedCategoryButton>
 
     return Draggable<IssueCategory>(
       data: widget.category,
+      onDragStarted: widget.onDragStarted,
       feedback: Material(
         color: Colors.transparent,
         child: EmbossedCategoryIcon(
@@ -3622,3 +4274,425 @@ class _ReportFormWidgetState extends State<ReportFormWidget> {
     );
   }
 }
+
+/// Fluid search bar header that organically merges the circular back button with the search pill
+/// when focused, and splits them apart with fluid spring physics when search is exited.
+class FluidMergeSearchBar extends StatefulWidget {
+  final FocusNode focusNode;
+  final TextEditingController controller;
+  final bool isSearching;
+  final ValueChanged<String> onSearchChanged;
+  final ValueChanged<String> onSearchSubmitted;
+  final VoidCallback onBack;
+  final VoidCallback onCancelSearch;
+  final VoidCallback onClearText;
+
+  const FluidMergeSearchBar({
+    super.key,
+    required this.focusNode,
+    required this.controller,
+    required this.isSearching,
+    required this.onSearchChanged,
+    required this.onSearchSubmitted,
+    required this.onBack,
+    required this.onCancelSearch,
+    required this.onClearText,
+  });
+
+  @override
+  State<FluidMergeSearchBar> createState() => _FluidMergeSearchBarState();
+}
+
+class _FluidMergeSearchBarState extends State<FluidMergeSearchBar>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _animController;
+  late final Animation<double> _animation;
+
+  @override
+  void initState() {
+    super.initState();
+    _animController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 360),
+      reverseDuration: const Duration(milliseconds: 400),
+    );
+
+    _animation = CurvedAnimation(
+      parent: _animController,
+      curve: Curves.easeOutCubic,
+      reverseCurve: Curves.easeOutBack,
+    );
+
+    if (widget.focusNode.hasFocus) {
+      _animController.value = 1.0;
+    }
+
+    widget.focusNode.addListener(_onFocusChange);
+    widget.controller.addListener(_onTextChange);
+  }
+
+  void _onFocusChange() {
+    if (widget.focusNode.hasFocus) {
+      _animController.forward();
+    } else {
+      _animController.reverse();
+    }
+  }
+
+  void _onTextChange() {
+    if (mounted) setState(() {});
+  }
+
+  @override
+  void dispose() {
+    widget.focusNode.removeListener(_onFocusChange);
+    widget.controller.removeListener(_onTextChange);
+    _animController.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final totalWidth = constraints.maxWidth;
+        const totalHeight = 50.0;
+
+        return AnimatedBuilder(
+          animation: _animation,
+          builder: (context, _) {
+            final t = _animation.value;
+            final isMerged = t > 0.5;
+
+            // Geometry transitions:
+            // When t = 0 (Split): text area begins at x=108 with ample breathing room from search icon
+            // When t = 1 (Merged): text area begins at x=58 with ample breathing room from back button
+            final textLeft = 58.0 + 50.0 * (1.0 - t).clamp(0.0, 1.0);
+            const textRight = 48.0;
+
+            // Search icon fades out and slides right as back button becomes leading
+            final searchIconOpacity = (1.0 - t * 2.8).clamp(0.0, 1.0);
+            final searchIconSlide = 14.0 * t.clamp(0.0, 1.0);
+
+            return SizedBox(
+              width: totalWidth,
+              height: totalHeight,
+              child: Stack(
+                clipBehavior: Clip.none,
+                children: [
+                  // 1. Soft blurred drop shadow beneath the glass silhouette
+                  Positioned.fill(
+                    child: CustomPaint(
+                      painter: _FluidShadowPainter(progress: t),
+                    ),
+                  ),
+
+                  // 2. Hardware Acrylic Backdrop Blur & Frosted Glaze
+                  Positioned.fill(
+                    child: ClipPath(
+                      clipper: _FluidHeaderClipper(progress: t),
+                      child: BackdropFilter(
+                        filter: ImageFilter.blur(sigmaX: 18, sigmaY: 18),
+                        child: Container(
+                          color: Colors.white.withValues(alpha: 0.80),
+                        ),
+                      ),
+                    ),
+                  ),
+
+                  // 3. Crisp Frosted Border Specular Highlight
+                  Positioned.fill(
+                    child: CustomPaint(
+                      painter: _FluidBorderPainter(progress: t),
+                    ),
+                  ),
+
+                  // 4. Back Arrow Button
+                  Positioned(
+                    left: 0,
+                    top: 0,
+                    width: 50,
+                    height: totalHeight,
+                    child: Material(
+                      color: Colors.transparent,
+                      shape: const CircleBorder(),
+                      clipBehavior: Clip.antiAlias,
+                      child: IconButton(
+                        padding: EdgeInsets.zero,
+                        constraints: const BoxConstraints(minWidth: 50, minHeight: 50),
+                        icon: Icon(
+                          LucideIcons.arrowLeft,
+                          color: Colors.grey.shade800,
+                          size: 22,
+                        ),
+                        tooltip: isMerged ? 'Close search' : 'Back',
+                        onPressed: () {
+                          if (widget.focusNode.hasFocus) {
+                            widget.onCancelSearch();
+                          } else {
+                            widget.onBack();
+                          }
+                        },
+                      ),
+                    ),
+                  ),
+
+                  // 5. Search Magnifying Glass Icon (smoothly fades & slides)
+                  if (searchIconOpacity > 0.01)
+                    Positioned(
+                      left: 58.0 + 12.0 + searchIconSlide,
+                      top: 0,
+                      width: 26,
+                      height: totalHeight,
+                      child: GestureDetector(
+                        behavior: HitTestBehavior.opaque,
+                        onTap: () => widget.focusNode.requestFocus(),
+                        child: Opacity(
+                          opacity: searchIconOpacity,
+                          child: Transform.scale(
+                            scale: (1.0 - t * 0.35).clamp(0.0, 1.0),
+                            child: const Center(
+                              child: Icon(
+                                LucideIcons.search,
+                                color: Color(0xFF64748B),
+                                size: 21,
+                              ),
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+
+                  // 6. Interactive Search Input Field (Centered & Larger)
+                  Positioned(
+                    left: textLeft,
+                    right: textRight,
+                    top: 0,
+                    height: totalHeight,
+                    child: Center(
+                      child: TextField(
+                        focusNode: widget.focusNode,
+                        controller: widget.controller,
+                        onChanged: widget.onSearchChanged,
+                        onSubmitted: widget.onSearchSubmitted,
+                        textAlign: TextAlign.center,
+                        textAlignVertical: const TextAlignVertical(y: -0.2),
+                        style: const TextStyle(
+                          fontSize: 15.0,
+                          fontWeight: FontWeight.w600,
+                          color: Color(0xFF1A202C),
+                          letterSpacing: 0.6,
+                          height: 1.0,
+                          leadingDistribution: TextLeadingDistribution.even,
+                        ),
+                        decoration: const InputDecoration(
+                          isDense: true,
+                          hintText: 'SEARCH',
+                          hintStyle: TextStyle(
+                            color: Color(0xFF94A3B8),
+                            fontSize: 15.0,
+                            fontWeight: FontWeight.w600,
+                            letterSpacing: 1.2,
+                            height: 1.0,
+                            leadingDistribution: TextLeadingDistribution.even,
+                          ),
+                          border: InputBorder.none,
+                          contentPadding: EdgeInsets.only(bottom: 3.5, left: 6.0, right: 6.0),
+                        ),
+                      ),
+                    ),
+                  ),
+
+                  // 7. Trailing Suffix (Progress Spinner or Clear Button)
+                  Positioned(
+                    right: 4,
+                    top: 0,
+                    width: 42,
+                    height: totalHeight,
+                    child: Center(
+                      child: widget.isSearching
+                          ? const SizedBox(
+                              width: 18,
+                              height: 18,
+                              child: CircularProgressIndicator(strokeWidth: 2.0),
+                            )
+                          : (widget.controller.text.isNotEmpty
+                              ? IconButton(
+                                  padding: EdgeInsets.zero,
+                                  constraints: const BoxConstraints(minWidth: 36, minHeight: 50),
+                                  icon: Icon(LucideIcons.x, size: 19, color: Colors.grey.shade600),
+                                  onPressed: widget.onClearText,
+                                )
+                              : const SizedBox.shrink()),
+                    ),
+                  ),
+                ],
+              ),
+            );
+          },
+        );
+      },
+    );
+  }
+}
+
+/// Builds the morphing geometric path between the circular button and search pill.
+Path buildFluidHeaderPath(double width, double height, double v) {
+  final path = Path();
+  final clampedV = v.clamp(0.0, 1.0);
+  final r = height / 2; // 25.0
+
+  if (clampedV <= 0.08) {
+    // Split State: Independent circle droplet and search capsule
+    final bounceOffset = 6.0 * (v < 0.0 ? v : 0.0);
+    final circleCenterX = r + bounceOffset;
+
+    // Circle (50x50)
+    path.addOval(Rect.fromCircle(
+      center: Offset(circleCenterX, r),
+      radius: r,
+    ));
+
+    // Search bar capsule retracting to x=58
+    final pillLeft = 58.0 - 8.0 * (clampedV / 0.08);
+    path.addRRect(RRect.fromRectAndRadius(
+      Rect.fromLTWH(pillLeft, 0, width - pillLeft, height),
+      Radius.circular(r),
+    ));
+    return path;
+  }
+
+  // Merging State: Liquid neck bridges the two shapes
+  final u = ((clampedV - 0.08) / 0.92).clamp(0.0, 1.0);
+
+  if (u >= 0.999) {
+    // 100% Fully Merged Continuous Capsule
+    path.addRRect(RRect.fromRectAndRadius(
+      Rect.fromLTWH(0, 0, width, height),
+      Radius.circular(r),
+    ));
+    return path;
+  }
+
+  final leftCapCenter = r;
+  final rightCapCenter = width - r;
+
+  // Fluid neck waist physics
+  final waistX = 54.0 - 4.0 * u;
+  final halfNeckWidth = 14.0 * (1.0 - u);
+  final dipDepth = r * (1.0 - u);
+  final yTopWaist = dipDepth;
+  final yBottomWaist = height - dipDepth;
+
+  final waistLeft = (waistX - halfNeckWidth).clamp(leftCapCenter, rightCapCenter);
+  final waistRight = (waistX + halfNeckWidth).clamp(leftCapCenter, rightCapCenter);
+
+  // 1. Move to bottom-left where left semicircle starts
+  path.moveTo(leftCapCenter, height);
+
+  // 2. Left semicircle cap: clockwise from (r, height) around (r, r) to (r, 0)
+  path.arcTo(
+    Rect.fromCircle(center: Offset(leftCapCenter, r), radius: r),
+    math.pi / 2,
+    math.pi,
+    false,
+  );
+
+  // 3. Top edge to the neck waist
+  path.lineTo(waistLeft, 0);
+
+  // 4. Top waist liquid dip (smooth cubic bezier)
+  path.cubicTo(
+    waistLeft + halfNeckWidth * 0.45, yTopWaist,
+    waistRight - halfNeckWidth * 0.45, yTopWaist,
+    waistRight, 0,
+  );
+
+  // 5. Top edge to right cap
+  path.lineTo(rightCapCenter, 0);
+
+  // 6. Right semicircle cap: clockwise from (width - r, 0) around (width - r, r) to (width - r, height)
+  path.arcTo(
+    Rect.fromCircle(center: Offset(rightCapCenter, r), radius: r),
+    -math.pi / 2,
+    math.pi,
+    false,
+  );
+
+  // 7. Bottom edge to neck waist
+  path.lineTo(waistRight, height);
+
+  // 8. Bottom waist liquid dip (smooth cubic bezier)
+  path.cubicTo(
+    waistRight - halfNeckWidth * 0.45, yBottomWaist,
+    waistLeft + halfNeckWidth * 0.45, yBottomWaist,
+    waistLeft, height,
+  );
+
+  // 9. Close back to left cap
+  path.lineTo(leftCapCenter, height);
+  path.close();
+
+  return path;
+}
+
+class _FluidHeaderClipper extends CustomClipper<Path> {
+  final double progress;
+
+  _FluidHeaderClipper({required this.progress});
+
+  @override
+  Path getClip(Size size) {
+    return buildFluidHeaderPath(size.width, size.height, progress);
+  }
+
+  @override
+  bool shouldReclip(covariant _FluidHeaderClipper oldClipper) {
+    return oldClipper.progress != progress;
+  }
+}
+
+class _FluidShadowPainter extends CustomPainter {
+  final double progress;
+
+  _FluidShadowPainter({required this.progress});
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final path = buildFluidHeaderPath(size.width, size.height, progress);
+    final shadowPaint = Paint()
+      ..color = Colors.black.withValues(alpha: 0.08)
+      ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 10);
+    canvas.save();
+    canvas.translate(0, 3);
+    canvas.drawPath(path, shadowPaint);
+    canvas.restore();
+  }
+
+  @override
+  bool shouldRepaint(covariant _FluidShadowPainter oldDelegate) {
+    return oldDelegate.progress != progress;
+  }
+}
+
+class _FluidBorderPainter extends CustomPainter {
+  final double progress;
+
+  _FluidBorderPainter({required this.progress});
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final path = buildFluidHeaderPath(size.width, size.height, progress);
+    final borderPaint = Paint()
+      ..color = Colors.white.withValues(alpha: 0.85)
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 1.2;
+    canvas.drawPath(path, borderPaint);
+  }
+
+  @override
+  bool shouldRepaint(covariant _FluidBorderPainter oldDelegate) {
+    return oldDelegate.progress != progress;
+  }
+}
+
