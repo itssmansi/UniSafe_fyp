@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'heatmap_ui/map_screen.dart';
 import 'interactive_map/map_screen.dart';
 import 'kanban_board_ui/kanban_board_screen.dart';
-import 'SignupLogin_ui/splash_screen.dart';
+import 'SignupLogin_ui/welcome_screen.dart';
 
 class HomePage extends StatelessWidget {
   const HomePage({super.key});
@@ -65,11 +65,11 @@ class HomePage extends StatelessWidget {
               ElevatedButton.icon(
                 onPressed: () {
                   Navigator.of(context).push(
-                    MaterialPageRoute(builder: (context) => const CitizenSplashScreen()),
+                    MaterialPageRoute(builder: (context) => const WelcomeSelectionScreen()),
                   );
                 },
                 icon: const Icon(Icons.security_rounded),
-                label: const Text('Citizen Auth (Login / Splash)'),
+                label: const Text('Citizen Auth (Login / Signup)'),
                 style: ElevatedButton.styleFrom(
                   backgroundColor: const Color(0xFF0E7490),
                   foregroundColor: Colors.white,

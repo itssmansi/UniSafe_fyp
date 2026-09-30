@@ -57,10 +57,10 @@ class _CustomTextFieldState extends State<CustomTextField> {
           ],
           AnimatedContainer(
             duration: const Duration(milliseconds: 200),
-            height: 52,
+            height: 54,
             decoration: BoxDecoration(
               color: const Color(0xFFF8FAFC),
-              borderRadius: BorderRadius.circular(14),
+              borderRadius: BorderRadius.circular(27),
               border: Border.all(
                 color: _isFocused
                     ? const Color(0xFF0F766E) // Deep elegant teal
@@ -116,7 +116,7 @@ class _CustomTextFieldState extends State<CustomTextField> {
                         fontWeight: FontWeight.w400,
                       ),
                       border: InputBorder.none,
-                      contentPadding: const EdgeInsets.symmetric(vertical: 14),
+                      contentPadding: const EdgeInsets.symmetric(vertical: 16),
                     ),
                   ),
                 ),

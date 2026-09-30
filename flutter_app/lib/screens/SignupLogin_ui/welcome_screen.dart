@@ -1,68 +1,111 @@
 import 'package:flutter/material.dart';
+import 'widgets/auth_header.dart';
+import 'widgets/auth_background.dart';
+import 'widgets/auth_slide_route.dart';
 import 'login_screen.dart';
 import 'signup_screen.dart';
-import 'widgets/custom_form_button.dart';
 
-class WelcomeSelectionScreen extends StatelessWidget {
+class WelcomeSelectionScreen extends StatefulWidget {
   const WelcomeSelectionScreen({super.key});
 
   @override
+  State<WelcomeSelectionScreen> createState() => _WelcomeSelectionScreenState();
+}
+
+class _WelcomeSelectionScreenState extends State<WelcomeSelectionScreen>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _entranceController;
+  late final Animation<double> _entranceAnimation;
+
+  @override
+  void initState() {
+    super.initState();
+    _entranceController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 550),
+    );
+    _entranceAnimation = CurvedAnimation(
+      parent: _entranceController,
+      curve: Curves.easeOutCubic,
+    );
+    _entranceController.forward();
+  }
+
+  @override
+  void dispose() {
+    _entranceController.dispose();
+    super.dispose();
+  }
+
+  void _onLoginPressed() {
+    Navigator.push(
+      context,
+      createAuthSlideRoute(const CitizenLoginScreen()),
+    );
+  }
+
+  void _onSignupPressed() {
+    Navigator.push(
+      context,
+      createAuthSlideRoute(const CitizenSignupScreen()),
+    );
+  }
+
+  @override
   Widget build(BuildContext context) {
-    return SafeArea(
-      child: Scaffold(
-        backgroundColor: const Color(0xFF133838), // Dark Forest Teal
-        body: Column(
-          children: [
-            // Top Dark Header Area (No cartoon image)
-            Container(
-              width: double.infinity,
-              padding: const EdgeInsets.fromLTRB(24, 28, 24, 32),
-              color: const Color(0xFF133838),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Container(
-                    width: 48,
-                    height: 48,
-                    decoration: BoxDecoration(
-                      color: Colors.white.withValues(alpha: 0.12),
-                      borderRadius: BorderRadius.circular(14),
-                    ),
-                    child: const Center(
-                      child: Icon(
-                        Icons.shield_outlined,
-                        color: Colors.white,
-                        size: 26,
-                      ),
-                    ),
-                  ),
-                  const SizedBox(height: 24),
-                  const Text(
-                    'UniSafe Safety Network\nYour Campus & Community',
-                    style: TextStyle(
-                      fontSize: 26,
-                      fontWeight: FontWeight.w700,
-                      color: Colors.white,
-                      height: 1.25,
-                      letterSpacing: -0.3,
-                    ),
-                  ),
-                  const SizedBox(height: 10),
-                  const Text(
-                    'Instant emergency alerts, verified citizen responder network, and safe campus transit.',
-                    style: TextStyle(
-                      fontSize: 13.5,
-                      fontWeight: FontWeight.w400,
-                      color: Color(0xFFA0B6B3),
-                      height: 1.4,
-                    ),
-                  ),
-                ],
+    return Scaffold(
+      backgroundColor: const Color(0xFF133838), // Dark Forest Teal
+      body: Stack(
+        children: [
+          // Full-screen continuous green doodle background
+          const AuthBackground(),
+
+          SafeArea(
+            child: Column(
+              children: [
+                // Teal Top Area with centered UNISAFE
+            Expanded(
+              child: AuthHeader(
+                title: 'UNISAFE',
+                isCentered: true,
+                onBack: () {
+                  if (Navigator.of(context).canPop()) {
+                    Navigator.of(context).pop();
+                  } else {
+                    Navigator.of(context).pushReplacementNamed('/home');
+                  }
+                },
               ),
             ),
 
-            // White Card Content Area
-            Expanded(
+            // White Card Content Area:
+            // Animates up into view upon arrival, and moves up when Login/Signup is clicked!
+            AnimatedBuilder(
+              animation: Listenable.merge([
+                _entranceAnimation,
+                ModalRoute.of(context)?.secondaryAnimation ?? const AlwaysStoppedAnimation(0.0),
+              ]),
+              builder: (context, child) {
+                // Entrance progress: 0 -> 1
+                final double entranceVal = _entranceAnimation.value;
+                final double entranceDy = (1.0 - entranceVal) * 160.0;
+
+                // Secondary animation (when Login/Signup route is pushed on top): 0 -> 1
+                final secAnim = ModalRoute.of(context)?.secondaryAnimation;
+                final double secVal = secAnim != null
+                    ? Curves.easeOutCubic.transform(secAnim.value)
+                    : 0.0;
+                final double secDy = -secVal * 50.0; // Moves upward gently as route opens
+                final double secOpacity = (1.0 - secVal * 1.5).clamp(0.0, 1.0);
+
+                return Transform.translate(
+                  offset: Offset(0, entranceDy + secDy),
+                  child: Opacity(
+                    opacity: (entranceVal * secOpacity).clamp(0.0, 1.0),
+                    child: child,
+                  ),
+                );
+              },
               child: Container(
                 width: double.infinity,
                 decoration: const BoxDecoration(
@@ -72,87 +115,115 @@ class WelcomeSelectionScreen extends StatelessWidget {
                     topRight: Radius.circular(32),
                   ),
                 ),
-                child: SingleChildScrollView(
-                  padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 32),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.center,
-                    children: [
-                      const SizedBox(height: 10),
-
-                      // Log-in Button
-                      CustomFormButton(
-                        innerText: 'Log In',
-                        onPressed: () {
-                          Navigator.push(
-                            context,
-                            MaterialPageRoute(
-                              builder: (context) => const CitizenLoginScreen(),
-                            ),
-                          );
-                        },
-                      ),
-                      const SizedBox(height: 14),
-
-                      // Sign Up Outlined Button
-                      Container(
-                        width: double.infinity,
-                        height: 52,
-                        decoration: BoxDecoration(
-                          color: const Color(0xFFF1F5F7),
-                          borderRadius: BorderRadius.circular(14),
-                        ),
-                        child: Material(
-                          color: Colors.transparent,
-                          child: InkWell(
-                            borderRadius: BorderRadius.circular(14),
-                            onTap: () {
-                              Navigator.push(
-                                context,
-                                MaterialPageRoute(
-                                  builder: (context) => const CitizenSignupScreen(),
+                child: SafeArea(
+                  top: false,
+                  child: Center(
+                    child: ConstrainedBox(
+                      constraints: const BoxConstraints(maxWidth: 420),
+                      child: Padding(
+                        padding: const EdgeInsets.fromLTRB(20, 20, 20, 20),
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            // Log In Button
+                            Container(
+                              width: double.infinity,
+                              height: 54,
+                              decoration: BoxDecoration(
+                                gradient: const LinearGradient(
+                                  colors: [Color(0xFF133838), Color(0xFF1C4D4D)],
+                                  begin: Alignment.topLeft,
+                                  end: Alignment.bottomRight,
                                 ),
-                              );
-                            },
-                            child: const Center(
-                              child: Text(
-                                'Sign Up',
-                                style: TextStyle(
-                                  fontSize: 16,
-                                  fontWeight: FontWeight.w700,
-                                  color: Color(0xFF133838),
+                                borderRadius: BorderRadius.circular(27),
+                                boxShadow: [
+                                  BoxShadow(
+                                    color: const Color(0xFF133838).withValues(alpha: 0.28),
+                                    blurRadius: 12,
+                                    offset: const Offset(0, 5),
+                                  ),
+                                ],
+                              ),
+                              child: Material(
+                                color: Colors.transparent,
+                                child: InkWell(
+                                  borderRadius: BorderRadius.circular(27),
+                                  onTap: _onLoginPressed,
+                                  child: const Padding(
+                                    padding: EdgeInsets.symmetric(horizontal: 20),
+                                    child: Row(
+                                      mainAxisAlignment: MainAxisAlignment.center,
+                                      children: [
+                                        Icon(Icons.login_rounded, color: Colors.white, size: 21),
+                                        SizedBox(width: 10),
+                                        Text(
+                                          'Log In',
+                                          style: TextStyle(
+                                            fontSize: 17.5,
+                                            fontWeight: FontWeight.w700,
+                                            color: Colors.white,
+                                            letterSpacing: 0.3,
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
                                 ),
                               ),
                             ),
-                          ),
-                        ),
-                      ),
-                      const SizedBox(height: 36),
+                            const SizedBox(height: 12),
 
-                      // Back to Dashboard
-                      GestureDetector(
-                        onTap: () {
-                          if (Navigator.of(context).canPop()) {
-                            Navigator.of(context).pop();
-                          } else {
-                            Navigator.of(context).pushReplacementNamed('/home');
-                          }
-                        },
-                        child: const Text(
-                          'Back to Dashboard',
-                          style: TextStyle(
-                            fontSize: 13.5,
-                            color: Color(0xFF64748B),
-                            fontWeight: FontWeight.w600,
-                          ),
+                            // Create Account Button
+                            Container(
+                              width: double.infinity,
+                              height: 54,
+                              decoration: BoxDecoration(
+                                color: const Color(0xFFF8FAFC),
+                                borderRadius: BorderRadius.circular(27),
+                                border: Border.all(
+                                  color: const Color(0xFF133838),
+                                  width: 1.6,
+                                ),
+                              ),
+                              child: Material(
+                                color: Colors.transparent,
+                                child: InkWell(
+                                  borderRadius: BorderRadius.circular(27),
+                                  onTap: _onSignupPressed,
+                                  child: const Padding(
+                                    padding: EdgeInsets.symmetric(horizontal: 20),
+                                    child: Row(
+                                      mainAxisAlignment: MainAxisAlignment.center,
+                                      children: [
+                                        Icon(Icons.person_add_outlined, color: Color(0xFF133838), size: 21),
+                                        SizedBox(width: 10),
+                                        Text(
+                                          'Create Account',
+                                          style: TextStyle(
+                                            fontSize: 17.5,
+                                            fontWeight: FontWeight.w700,
+                                            color: Color(0xFF133838),
+                                            letterSpacing: 0.3,
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ],
                         ),
                       ),
-                    ],
+                    ),
                   ),
                 ),
               ),
             ),
-          ],
-        ),
+              ],
+            ),
+          ),
+        ],
       ),
     );
   }

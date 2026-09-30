@@ -120,7 +120,7 @@ class _CustomInputFieldState extends State<CustomInputField> {
               focusedErrorBorder: const UnderlineInputBorder(
                 borderSide: BorderSide(color: Color(0xFFEF4444), width: 1.8),
               ),
-              contentPadding: const EdgeInsets.symmetric(vertical: 8),
+              contentPadding: const EdgeInsets.symmetric(vertical: 14),
             ),
           ),
         ],

@@ -16,11 +16,11 @@ class CustomFormButton extends StatelessWidget {
   Widget build(BuildContext context) {
     return Container(
       width: double.infinity,
-      height: 52,
+      height: 54,
       margin: const EdgeInsets.symmetric(horizontal: 24),
       decoration: BoxDecoration(
         color: const Color(0xFF133838),
-        borderRadius: BorderRadius.circular(14),
+        borderRadius: BorderRadius.circular(27),
         boxShadow: [
           BoxShadow(
             color: const Color(0xFF133838).withValues(alpha: 0.25),
@@ -32,7 +32,7 @@ class CustomFormButton extends StatelessWidget {
       child: Material(
         color: Colors.transparent,
         child: InkWell(
-          borderRadius: BorderRadius.circular(14),
+          borderRadius: BorderRadius.circular(27),
           onTap: isLoading ? null : onPressed,
           child: Center(
             child: isLoading
@@ -48,7 +48,7 @@ class CustomFormButton extends StatelessWidget {
                     innerText,
                     style: const TextStyle(
                       color: Colors.white,
-                      fontSize: 17,
+                      fontSize: 17.5,
                       fontWeight: FontWeight.w700,
                       letterSpacing: 0.3,
                     ),

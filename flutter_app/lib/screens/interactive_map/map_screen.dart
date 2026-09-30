@@ -1005,105 +1005,48 @@ class _InteractiveMapScreenState extends ConsumerState<InteractiveMapScreen> {
                             child: Column(
                               mainAxisSize: MainAxisSize.min,
                               children: [
-                                GestureDetector(
+                                _MapActionButton(
+                                  icon: LucideIcons.layers,
+                                  tooltip: 'Map Style',
                                   onTap: _showMapStyleDialog,
-                                  child: Container(
-                                    width: 46,
-                                    height: 46,
-                                    margin: const EdgeInsets.only(bottom: 10),
-                                    decoration: BoxDecoration(
-                                      color: Colors.white,
-                                      shape: BoxShape.circle,
-                                      border: Border.all(
-                                        color: const Color(0xFFE2E8F0),
-                                        width: 1.5,
-                                      ),
-                                      boxShadow: [
-                                        BoxShadow(
-                                          color: Colors.black.withValues(alpha: 0.15),
-                                          blurRadius: 10,
-                                          offset: const Offset(0, 4),
-                                        ),
-                                      ],
-                                    ),
-                                    child: Center(
-                                      child: Icon(LucideIcons.layers, color: Colors.indigo.shade600, size: 21),
-                                    ),
-                                  ),
+                                  size: 54,
                                 ),
-                                GestureDetector(
+                                const SizedBox(height: 12),
+                                _MapActionButton(
+                                  icon: LucideIcons.filter,
+                                  tooltip: 'Filter Issues',
                                   onTap: _showFilterDialog,
-                                  child: Container(
-                                    width: 46,
-                                    height: 46,
-                                    margin: const EdgeInsets.only(bottom: 10),
-                                    decoration: BoxDecoration(
-                                      color: Colors.white,
-                                      shape: BoxShape.circle,
-                                      border: Border.all(
-                                        color: const Color(0xFFE2E8F0),
-                                        width: 1.5,
-                                      ),
-                                      boxShadow: [
-                                        BoxShadow(
-                                          color: Colors.black.withValues(alpha: 0.15),
-                                          blurRadius: 10,
-                                          offset: const Offset(0, 4),
-                                        ),
-                                      ],
-                                    ),
-                                    child: Center(
-                                      child: Icon(LucideIcons.filter, color: _hiddenCategories.isNotEmpty ? Colors.blue.shade600 : Colors.grey.shade700, size: 21),
-                                    ),
-                                  ),
+                                  hasBadge: _hiddenCategories.isNotEmpty,
+                                  size: 54,
                                 ),
+                                const SizedBox(height: 12),
                               ],
                             ),
                           ),
                           SizedBox(
-                            height: 48,
+                            height: 54,
                             child: Row(
                               crossAxisAlignment: CrossAxisAlignment.center,
                               children: [
                                 Expanded(
                                   child: SizedBox(
-                                    height: 48,
+                                    height: 54,
                                     child: EmbossedTakePictureButton(
-                                      height: 48,
+                                      height: 54,
                                       onTap: _takeInstantPictureAndReport,
                                     ),
                                   ),
                                 ),
                                 const SizedBox(width: 12),
-                                GestureDetector(
-                                  onTap: _isFetchingLocation ? null : _goToMyLocation,
-                                  child: Container(
-                                    width: 48,
-                                    height: 48,
-                                    decoration: BoxDecoration(
-                                      color: Colors.white,
-                                      shape: BoxShape.circle,
-                                      border: Border.all(
-                                        color: const Color(0xFFE2E8F0),
-                                        width: 1.5,
-                                      ),
-                                      boxShadow: [
-                                        BoxShadow(
-                                          color: Colors.black.withValues(alpha: 0.15),
-                                          blurRadius: 10,
-                                          offset: const Offset(0, 4),
-                                        ),
-                                      ],
-                                    ),
-                                    child: Center(
-                                      child: _isFetchingLocation
-                                          ? const SizedBox(
-                                              width: 20,
-                                              height: 20,
-                                              child: CircularProgressIndicator(strokeWidth: 2.5, color: Color(0xFF2563EB)),
-                                            )
-                                          : const Icon(LucideIcons.locate, color: Color(0xFF2563EB), size: 22),
-                                    ),
+                                SizedBox(
+                                  width: 54,
+                                  height: 54,
+                                  child: _MapActionButton(
+                                    icon: LucideIcons.locate,
+                                    tooltip: 'My Location',
+                                    onTap: _isFetchingLocation ? null : _goToMyLocation,
+                                    isLoading: _isFetchingLocation,
+                                    size: 54,
                                   ),
                                 ),
                               ],
@@ -1388,131 +1331,242 @@ class _InteractiveMapScreenState extends ConsumerState<InteractiveMapScreen> {
       },
     );
   }
+  void _openFullScreenImage({Uint8List? imageBytes, String? imagePath, String? title}) {
+    showDialog(
+      context: context,
+      barrierColor: Colors.black.withOpacity(0.92),
+      builder: (ctx) {
+        return Scaffold(
+          backgroundColor: Colors.transparent,
+          body: Stack(
+            children: [
+              Positioned.fill(
+                child: GestureDetector(
+                  onTap: () => Navigator.of(ctx).pop(),
+                  child: Container(color: Colors.transparent),
+                ),
+              ),
+              Center(
+                child: InteractiveViewer(
+                  panEnabled: true,
+                  minScale: 0.5,
+                  maxScale: 4.0,
+                  child: imageBytes != null
+                      ? Image.memory(imageBytes, fit: BoxFit.contain)
+                      : (imagePath != null && (imagePath.startsWith('http') || imagePath.startsWith('blob:'))
+                          ? Image.network(imagePath, fit: BoxFit.contain)
+                          : const Icon(LucideIcons.image, size: 80, color: Colors.white54)),
+                ),
+              ),
+              SafeArea(
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                  child: Row(
+                    children: [
+                      if (title != null && title.isNotEmpty)
+                        Expanded(
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                            decoration: BoxDecoration(
+                              color: Colors.black54,
+                              borderRadius: BorderRadius.circular(20),
+                            ),
+                            child: Text(
+                              title,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: const TextStyle(
+                                color: Colors.white,
+                                fontSize: 15,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                          ),
+                        )
+                      else
+                        const Spacer(),
+                      const SizedBox(width: 12),
+                      Material(
+                        color: Colors.black54,
+                        shape: const CircleBorder(),
+                        child: IconButton(
+                          icon: const Icon(Icons.close_rounded, color: Colors.white, size: 24),
+                          onPressed: () => Navigator.of(ctx).pop(),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
   void _showReportOptions(ReportModel report) {
     final style = kCategoryStyles[report.category]!;
     showModalBottomSheet(
       context: context,
+      isScrollControlled: true,
       backgroundColor: Colors.transparent,
       builder: (context) {
-        return Container(
-          decoration: const BoxDecoration(
-            color: Colors.white,
-            borderRadius: BorderRadius.vertical(top: Radius.circular(30)),
-          ),
-          padding: const EdgeInsets.all(24),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              Center(
-                child: Container(
-                  width: 48,
-                  height: 5,
-                  margin: const EdgeInsets.only(bottom: 24),
-                  decoration: BoxDecoration(
-                    color: Colors.grey.shade300,
-                    borderRadius: BorderRadius.circular(10),
-                  ),
-                ),
-              ),
-              Row(
+        return SafeArea(
+          child: Container(
+            decoration: const BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.vertical(top: Radius.circular(30)),
+            ),
+            padding: const EdgeInsets.fromLTRB(24, 20, 24, 20),
+            child: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  Container(
-                    width: 48,
-                    height: 48,
-                    decoration: BoxDecoration(color: style.color.withOpacity(0.15), shape: BoxShape.circle),
-                    child: Icon(style.icon, color: style.color, size: 24),
+                  Center(
+                    child: Container(
+                      width: 48,
+                      height: 5,
+                      margin: const EdgeInsets.only(bottom: 20),
+                      decoration: BoxDecoration(
+                        color: Colors.grey.shade300,
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                    ),
                   ),
-                  const SizedBox(width: 16),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          report.title,
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w800),
+                  Row(
+                    children: [
+                      Container(
+                        width: 48,
+                        height: 48,
+                        decoration: BoxDecoration(color: style.color.withOpacity(0.15), shape: BoxShape.circle),
+                        child: Icon(style.icon, color: style.color, size: 24),
+                      ),
+                      const SizedBox(width: 16),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              report.title,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w800),
+                            ),
+                            Text(style.label, style: TextStyle(fontSize: 14, color: Colors.grey.shade500, fontWeight: FontWeight.w600)),
+                          ],
                         ),
-                        Text(style.label, style: TextStyle(fontSize: 14, color: Colors.grey.shade500, fontWeight: FontWeight.w600)),
-                      ],
+                      ),
+                    ],
+                  ),
+                  if (report.description.isNotEmpty) ...[
+                    const SizedBox(height: 14),
+                    Container(
+                      padding: const EdgeInsets.all(14),
+                      decoration: BoxDecoration(
+                        color: Colors.grey.shade50,
+                        borderRadius: BorderRadius.circular(16),
+                      ),
+                      child: Text(
+                        report.description,
+                        style: TextStyle(fontSize: 15, color: Colors.grey.shade800, height: 1.4),
+                      ),
                     ),
+                  ],
+                  if (report.imageBytes != null || (report.imagePath != null && report.imagePath!.isNotEmpty)) ...[
+                    const SizedBox(height: 14),
+                    GestureDetector(
+                      onTap: () => _openFullScreenImage(
+                        imageBytes: report.imageBytes,
+                        imagePath: report.imagePath,
+                        title: report.title,
+                      ),
+                      child: Stack(
+                        children: [
+                          ClipRRect(
+                            borderRadius: BorderRadius.circular(16),
+                            child: Container(
+                              height: 180,
+                              width: double.infinity,
+                              color: Colors.grey.shade100,
+                              child: report.imageBytes != null
+                                  ? Image.memory(report.imageBytes!, fit: BoxFit.cover)
+                                  : (report.imagePath!.startsWith('http') || report.imagePath!.startsWith('blob:')
+                                      ? Image.network(report.imagePath!, fit: BoxFit.cover)
+                                      : const Center(child: Icon(LucideIcons.image, size: 40, color: Colors.grey))),
+                            ),
+                          ),
+                          Positioned(
+                            top: 10,
+                            right: 10,
+                            child: Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                              decoration: BoxDecoration(
+                                color: Colors.black.withOpacity(0.65),
+                                borderRadius: BorderRadius.circular(20),
+                              ),
+                              child: const Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Icon(LucideIcons.maximize2, color: Colors.white, size: 13),
+                                  SizedBox(width: 4),
+                                  Text(
+                                    'Full Screen',
+                                    style: TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.w700),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                  
+                  const SizedBox(height: 20),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: OutlinedButton.icon(
+                          onPressed: () {
+                            Navigator.pop(context);
+                            _mapController.move(report.location, _mapController.camera.zoom);
+                            setState(() => _editingReportId = report.id);
+                          },
+                          icon: const Icon(LucideIcons.move, size: 20),
+                          label: const Text('Reposition', style: TextStyle(fontSize: 15)),
+                          style: OutlinedButton.styleFrom(
+                            padding: const EdgeInsets.symmetric(vertical: 14),
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                            side: BorderSide(color: Colors.grey.shade300, width: 1.5),
+                            foregroundColor: Colors.grey.shade800,
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: ElevatedButton.icon(
+                          onPressed: () {
+                            Navigator.pop(context);
+                            _confirmDelete(report);
+                          },
+                          icon: const Icon(LucideIcons.trash2, size: 20),
+                          label: const Text('Delete', style: TextStyle(fontSize: 15)),
+                          style: ElevatedButton.styleFrom(
+                            padding: const EdgeInsets.symmetric(vertical: 14),
+                            backgroundColor: Colors.red.shade50,
+                            foregroundColor: Colors.red.shade700,
+                            elevation: 0,
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                          ),
+                        ),
+                      ),
+                    ],
                   ),
                 ],
               ),
-              if (report.description.isNotEmpty) ...[
-                const SizedBox(height: 16),
-                Container(
-                  padding: const EdgeInsets.all(16),
-                  decoration: BoxDecoration(
-                    color: Colors.grey.shade50,
-                    borderRadius: BorderRadius.circular(16),
-                  ),
-                  child: Text(
-                    report.description,
-                    style: TextStyle(fontSize: 15, color: Colors.grey.shade800, height: 1.4),
-                  ),
-                ),
-              ],
-              if (report.imageBytes != null || (report.imagePath != null && report.imagePath!.isNotEmpty)) ...[
-                const SizedBox(height: 16),
-                ClipRRect(
-                  borderRadius: BorderRadius.circular(16),
-                  child: Container(
-                    height: 180,
-                    width: double.infinity,
-                    color: Colors.grey.shade100,
-                    child: report.imageBytes != null
-                        ? Image.memory(report.imageBytes!, fit: BoxFit.cover)
-                        : (report.imagePath!.startsWith('http') || report.imagePath!.startsWith('blob:')
-                            ? Image.network(report.imagePath!, fit: BoxFit.cover)
-                            : const Center(child: Icon(LucideIcons.image, size: 40, color: Colors.grey))),
-                  ),
-                ),
-              ],
-              
-              const SizedBox(height: 24),
-              Row(
-                children: [
-                  Expanded(
-                    child: OutlinedButton.icon(
-                      onPressed: () {
-                        Navigator.pop(context);
-                        _mapController.move(report.location, _mapController.camera.zoom);
-                        setState(() => _editingReportId = report.id);
-                      },
-                      icon: const Icon(LucideIcons.move, size: 20),
-                      label: const Text('Reposition', style: TextStyle(fontSize: 15)),
-                      style: OutlinedButton.styleFrom(
-                        padding: const EdgeInsets.symmetric(vertical: 16),
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-                        side: BorderSide(color: Colors.grey.shade300, width: 1.5),
-                        foregroundColor: Colors.grey.shade800,
-                      ),
-                    ),
-                  ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: ElevatedButton.icon(
-                      onPressed: () {
-                        Navigator.pop(context);
-                        _confirmDelete(report);
-                      },
-                      icon: const Icon(LucideIcons.trash2, size: 20),
-                      label: const Text('Delete', style: TextStyle(fontSize: 15)),
-                      style: ElevatedButton.styleFrom(
-                        padding: const EdgeInsets.symmetric(vertical: 16),
-                        backgroundColor: Colors.red.shade50,
-                        foregroundColor: Colors.red.shade700,
-                        elevation: 0,
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 10),
-            ],
+            ),
           ),
         );
       },
@@ -1996,109 +2050,160 @@ class EmbossedTakePictureButton extends StatefulWidget {
   State<EmbossedTakePictureButton> createState() => _EmbossedTakePictureButtonState();
 }
 
-class _EmbossedTakePictureButtonState extends State<EmbossedTakePictureButton> {
-  bool _isPressed = false;
+class _EmbossedTakePictureButtonState extends State<EmbossedTakePictureButton> with SingleTickerProviderStateMixin {
+  late final AnimationController _controller;
+  late final Animation<double> _scaleAnimation;
+  late final Animation<double> _depthAnimation;
+  late final Animation<double> _shadowBlurAnimation;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 90),
+      reverseDuration: const Duration(milliseconds: 220),
+    );
+    _scaleAnimation = Tween<double>(begin: 1.0, end: 0.95).animate(
+      CurvedAnimation(
+        parent: _controller,
+        curve: Curves.easeOutQuad,
+        reverseCurve: Curves.easeOutBack,
+      ),
+    );
+    _depthAnimation = Tween<double>(begin: 0.0, end: 2.2).animate(
+      CurvedAnimation(
+        parent: _controller,
+        curve: Curves.easeOutQuad,
+        reverseCurve: Curves.easeOutBack,
+      ),
+    );
+    _shadowBlurAnimation = Tween<double>(begin: 10.0, end: 3.5).animate(
+      CurvedAnimation(
+        parent: _controller,
+        curve: Curves.easeOutQuad,
+        reverseCurve: Curves.easeOutBack,
+      ),
+    );
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  void _onTapDown(TapDownDetails _) {
+    _controller.forward();
+  }
+
+  void _onTapUp(TapUpDetails _) {
+    Future.delayed(const Duration(milliseconds: 70), () {
+      if (mounted) _controller.reverse();
+    });
+    widget.onTap();
+  }
+
+  void _onTapCancel() {
+    _controller.reverse();
+  }
 
   @override
   Widget build(BuildContext context) {
     return GestureDetector(
-      onTapDown: (_) => setState(() => _isPressed = true),
-      onTapUp: (_) {
-        setState(() => _isPressed = false);
-        widget.onTap();
-      },
-      onTapCancel: () => setState(() => _isPressed = false),
-      child: AnimatedContainer(
-        duration: const Duration(milliseconds: 100),
-        height: widget.height,
-        transform: Matrix4.translationValues(0, _isPressed ? 2.0 : 0.0, 0),
-        decoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(widget.height / 2),
-          gradient: const LinearGradient(
-            colors: [
-              Color(0xFF3B82F6), // Top highlight blue
-              Color(0xFF2563EB), // Rich blue
-              Color(0xFF1D4ED8), // Deep blue
-            ],
-            begin: Alignment.topCenter,
-            end: Alignment.bottomCenter,
-          ),
-          border: Border.all(
-            color: _isPressed
-                ? Colors.white.withValues(alpha: 0.2)
-                : Colors.white.withValues(alpha: 0.45),
-            width: 1.5,
-          ),
-          boxShadow: _isPressed
-              ? [
-                  BoxShadow(
-                    color: Colors.black.withValues(alpha: 0.15),
-                    offset: const Offset(0, 2),
-                    blurRadius: 4,
+      onTapDown: _onTapDown,
+      onTapUp: _onTapUp,
+      onTapCancel: _onTapCancel,
+      behavior: HitTestBehavior.opaque,
+      child: AnimatedBuilder(
+        animation: _controller,
+        builder: (context, _) {
+          final double scale = _scaleAnimation.value;
+          final double depth = _depthAnimation.value;
+          final double shadowBlur = _shadowBlurAnimation.value;
+          final double pressFraction = _controller.value;
+
+          return Transform.scale(
+            scale: scale,
+            child: Transform.translate(
+              offset: Offset(0, depth),
+              child: Container(
+                height: widget.height,
+                decoration: BoxDecoration(
+                  borderRadius: BorderRadius.circular(widget.height / 2),
+                  gradient: LinearGradient(
+                    colors: [
+                      Color.lerp(const Color(0xFF3B82F6), const Color(0xFF2563EB), pressFraction)!,
+                      const Color(0xFF2563EB),
+                      Color.lerp(const Color(0xFF1D4ED8), const Color(0xFF1E40AF), pressFraction)!,
+                    ],
+                    begin: Alignment.topCenter,
+                    end: Alignment.bottomCenter,
                   ),
-                ]
-              : [
-                  // Clean drop shadow matching locate button exactly
-                  BoxShadow(
-                    color: Colors.black.withValues(alpha: 0.15),
-                    offset: const Offset(0, 4),
-                    blurRadius: 10,
-                    spreadRadius: 0,
+                  border: Border.all(
+                    color: Colors.white.withValues(alpha: 0.45 - (pressFraction * 0.2)),
+                    width: 1.5,
                   ),
-                  // Top specular rim highlight for 3D bevel depth
-                  BoxShadow(
-                    color: Colors.white.withValues(alpha: 0.35),
-                    offset: const Offset(0, -1),
-                    blurRadius: 1.5,
-                    spreadRadius: 0,
-                  ),
-                ],
-        ),
-        child: ClipRRect(
-          borderRadius: BorderRadius.circular(widget.height / 2),
-          child: Stack(
-            children: [
-              // Top glass bevel shine
-              Positioned(
-                top: 0,
-                left: 0,
-                right: 0,
-                height: widget.height * 0.4,
-                child: Container(
-                  decoration: BoxDecoration(
-                    gradient: LinearGradient(
-                      colors: [
-                        Colors.white.withValues(alpha: _isPressed ? 0.08 : 0.2),
-                        Colors.white.withValues(alpha: 0.0),
-                      ],
-                      begin: Alignment.topCenter,
-                      end: Alignment.bottomCenter,
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.black.withValues(alpha: 0.15 - (pressFraction * 0.05)),
+                      offset: Offset(0, 4.0 - (pressFraction * 2.0)),
+                      blurRadius: shadowBlur,
                     ),
-                  ),
+                    BoxShadow(
+                      color: Colors.white.withValues(alpha: 0.35 - (pressFraction * 0.2)),
+                      offset: const Offset(0, -1),
+                      blurRadius: 1.5,
+                    ),
+                  ],
                 ),
-              ),
-              // Only "Take Picture" inside the button
-              const Center(
-                child: Text(
-                  'Take Picture',
-                  style: TextStyle(
-                    color: Colors.white,
-                    fontSize: 16,
-                    fontWeight: FontWeight.w700,
-                    letterSpacing: 0.3,
-                    shadows: [
-                      Shadow(
-                        color: Color(0x44000000),
-                        offset: Offset(0, 1),
-                        blurRadius: 2,
+                child: ClipRRect(
+                  borderRadius: BorderRadius.circular(widget.height / 2),
+                  child: Stack(
+                    children: [
+                      Positioned(
+                        top: 0,
+                        left: 0,
+                        right: 0,
+                        height: widget.height * 0.4,
+                        child: Container(
+                          decoration: BoxDecoration(
+                            gradient: LinearGradient(
+                              colors: [
+                                Colors.white.withValues(alpha: 0.20 - (pressFraction * 0.12)),
+                                Colors.white.withValues(alpha: 0.0),
+                              ],
+                              begin: Alignment.topCenter,
+                              end: Alignment.bottomCenter,
+                            ),
+                          ),
+                        ),
+                      ),
+                      const Center(
+                        child: Text(
+                          'Take Picture',
+                          style: TextStyle(
+                            color: Colors.white,
+                            fontSize: 16,
+                            fontWeight: FontWeight.w700,
+                            letterSpacing: 0.3,
+                            shadows: [
+                              Shadow(
+                                color: Color(0x44000000),
+                                offset: Offset(0, 1),
+                                blurRadius: 2,
+                              ),
+                            ],
+                          ),
+                        ),
                       ),
                     ],
                   ),
                 ),
               ),
-            ],
-          ),
-        ),
+            ),
+          );
+        },
       ),
     );
   }
@@ -2118,52 +2223,381 @@ class CircularCancelButton extends StatefulWidget {
   State<CircularCancelButton> createState() => _CircularCancelButtonState();
 }
 
-class _CircularCancelButtonState extends State<CircularCancelButton> {
-  bool _isPressed = false;
+class _CircularCancelButtonState extends State<CircularCancelButton>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _controller;
+  late final Animation<double> _scaleAnimation;
+  late final Animation<double> _depthAnimation;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 90),
+      reverseDuration: const Duration(milliseconds: 220),
+    );
+    _scaleAnimation = Tween<double>(begin: 1.0, end: 0.92).animate(
+      CurvedAnimation(
+        parent: _controller,
+        curve: Curves.easeOutQuad,
+        reverseCurve: Curves.easeOutBack,
+      ),
+    );
+    _depthAnimation = Tween<double>(begin: 0.0, end: 1.8).animate(
+      CurvedAnimation(
+        parent: _controller,
+        curve: Curves.easeOutQuad,
+        reverseCurve: Curves.easeOutBack,
+      ),
+    );
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  void _onTapDown(TapDownDetails _) {
+    _controller.forward();
+  }
+
+  void _onTapUp(TapUpDetails _) {
+    Future.delayed(const Duration(milliseconds: 70), () {
+      if (mounted) _controller.reverse();
+    });
+    widget.onTap();
+  }
+
+  void _onTapCancel() {
+    _controller.reverse();
+  }
 
   @override
   Widget build(BuildContext context) {
     return GestureDetector(
-      onTapDown: (_) => setState(() => _isPressed = true),
-      onTapUp: (_) {
-        setState(() => _isPressed = false);
-        widget.onTap();
-      },
-      onTapCancel: () => setState(() => _isPressed = false),
-      child: AnimatedContainer(
-        duration: const Duration(milliseconds: 100),
-        width: widget.size,
-        height: widget.size,
-        transform: Matrix4.translationValues(0, _isPressed ? 1.5 : 0.0, 0),
-        decoration: BoxDecoration(
-          color: Colors.white,
-          shape: BoxShape.circle,
-          border: Border.all(
-            color: const Color(0xFFE2E8F0),
-            width: 1.5,
-          ),
-          boxShadow: _isPressed
-              ? [
-                  BoxShadow(
-                    color: Colors.black.withValues(alpha: 0.08),
-                    offset: const Offset(0, 1),
-                    blurRadius: 3,
+      onTapDown: _onTapDown,
+      onTapUp: _onTapUp,
+      onTapCancel: _onTapCancel,
+      behavior: HitTestBehavior.opaque,
+      child: AnimatedBuilder(
+        animation: _controller,
+        builder: (context, _) {
+          final double scale = _scaleAnimation.value;
+          final double depth = _depthAnimation.value;
+          final double p = _controller.value;
+
+          return Transform.scale(
+            scale: scale,
+            child: Transform.translate(
+              offset: Offset(0, depth),
+              child: Container(
+                width: widget.size,
+                height: widget.size,
+                decoration: BoxDecoration(
+                  color: Color.lerp(Colors.white, const Color(0xFFF1F5F9), p),
+                  shape: BoxShape.circle,
+                  border: Border.all(
+                    color: const Color(0xFFE2E8F0),
+                    width: 1.5,
                   ),
-                ]
-              : [
-                  BoxShadow(
-                    color: Colors.black.withValues(alpha: 0.12),
-                    offset: const Offset(0, 4),
-                    blurRadius: 10,
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.black.withValues(alpha: 0.12 - (p * 0.04)),
+                      offset: Offset(0, 4.0 - (p * 2.5)),
+                      blurRadius: 10.0 - (p * 6.0),
+                    ),
+                  ],
+                ),
+                child: Center(
+                  child: Icon(
+                    LucideIcons.x,
+                    color: Colors.red.shade600,
+                    size: 22,
                   ),
-                ],
-        ),
-        child: Center(
-          child: Icon(
-            LucideIcons.x,
-            color: Colors.red.shade600,
-            size: 22,
-          ),
+                ),
+              ),
+            ),
+          );
+        },
+      ),
+    );
+  }
+}
+
+class _MapActionButton extends StatefulWidget {
+  final IconData icon;
+  final VoidCallback? onTap;
+  final String tooltip;
+  final bool hasBadge;
+  final bool isLoading;
+  final double size;
+
+  const _MapActionButton({
+    required this.icon,
+    required this.onTap,
+    required this.tooltip,
+    this.hasBadge = false,
+    this.isLoading = false,
+    this.size = 54.0,
+  });
+
+  @override
+  State<_MapActionButton> createState() => _MapActionButtonState();
+}
+
+class _MapActionButtonState extends State<_MapActionButton>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _controller;
+  late final Animation<double> _scaleAnimation;
+  late final Animation<double> _depthAnimation;
+  late final Animation<double> _discDepthAnimation;
+  late final Animation<double> _shadowBlurAnimation;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 90),
+      reverseDuration: const Duration(milliseconds: 240),
+    );
+    _scaleAnimation = Tween<double>(begin: 1.0, end: 0.92).animate(
+      CurvedAnimation(
+        parent: _controller,
+        curve: Curves.easeOutQuad,
+        reverseCurve: Curves.easeOutBack,
+      ),
+    );
+    _depthAnimation = Tween<double>(begin: 0.0, end: 1.4).animate(
+      CurvedAnimation(
+        parent: _controller,
+        curve: Curves.easeOutQuad,
+        reverseCurve: Curves.easeOutBack,
+      ),
+    );
+    _discDepthAnimation = Tween<double>(begin: 0.0, end: 2.0).animate(
+      CurvedAnimation(
+        parent: _controller,
+        curve: Curves.easeOutQuad,
+        reverseCurve: Curves.easeOutBack,
+      ),
+    );
+    _shadowBlurAnimation = Tween<double>(begin: 10.0, end: 3.5).animate(
+      CurvedAnimation(
+        parent: _controller,
+        curve: Curves.easeOutQuad,
+        reverseCurve: Curves.easeOutBack,
+      ),
+    );
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  void _onTapDown(TapDownDetails _) {
+    _controller.forward();
+  }
+
+  void _onTapUp(TapUpDetails _) {
+    Future.delayed(const Duration(milliseconds: 70), () {
+      if (mounted) _controller.reverse();
+    });
+    if (!widget.isLoading) {
+      widget.onTap?.call();
+    }
+  }
+
+  void _onTapCancel() {
+    _controller.reverse();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final double size = widget.size;
+    final double trenchSize = size * 0.83;
+    final double discSize = size * 0.70;
+    final double iconSize = size * 0.40;
+
+    return Tooltip(
+      message: widget.tooltip,
+      child: GestureDetector(
+        onTapDown: _onTapDown,
+        onTapUp: _onTapUp,
+        onTapCancel: _onTapCancel,
+        behavior: HitTestBehavior.opaque,
+        child: AnimatedBuilder(
+          animation: _controller,
+          builder: (context, _) {
+            final double scale = _scaleAnimation.value;
+            final double depth = _depthAnimation.value;
+            final double discDepth = _discDepthAnimation.value;
+            final double shadowBlur = _shadowBlurAnimation.value;
+            final double pressFraction = _controller.value;
+
+            return Transform.scale(
+              scale: scale,
+              child: Transform.translate(
+                offset: Offset(0, depth),
+                child: Container(
+                  width: size,
+                  height: size,
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.black.withValues(alpha: 0.14 - (pressFraction * 0.04)),
+                        offset: Offset(0, 4.0 - (pressFraction * 2.2)),
+                        blurRadius: shadowBlur,
+                      ),
+                      BoxShadow(
+                        color: Colors.black.withValues(alpha: 0.05),
+                        offset: Offset(0, 1.0 - (pressFraction * 0.5)),
+                        blurRadius: 3.0 - (pressFraction * 1.5),
+                      ),
+                    ],
+                  ),
+                  child: Stack(
+                    alignment: Alignment.center,
+                    children: [
+                      // 1. Outer Bezel Collar (Raised chamfered rim)
+                      Container(
+                        width: size,
+                        height: size,
+                        decoration: BoxDecoration(
+                          shape: BoxShape.circle,
+                          gradient: LinearGradient(
+                            colors: [
+                              Color.lerp(const Color(0xFFFFFFFF), const Color(0xFFF1F5F9), pressFraction)!,
+                              const Color(0xFFF8FAFC),
+                              Color.lerp(const Color(0xFFE2E8F0), const Color(0xFFCBD5E1), pressFraction)!,
+                            ],
+                            begin: Alignment.topLeft,
+                            end: Alignment.bottomRight,
+                          ),
+                          border: Border.all(
+                            color: Colors.white.withValues(alpha: 1.0 - (pressFraction * 0.2)),
+                            width: 1.2,
+                          ),
+                        ),
+                      ),
+
+                      // 2. Recessed Sunken Trench / Channel
+                      Container(
+                        width: trenchSize,
+                        height: trenchSize,
+                        decoration: BoxDecoration(
+                          shape: BoxShape.circle,
+                          gradient: const LinearGradient(
+                            colors: [
+                              Color(0xFFCBD5E1), // Slate 300 deep inner shadow at top
+                              Color(0xFFE2E8F0), // Slate 200
+                              Color(0xFFF1F5F9), // Slate 100 bottom light
+                            ],
+                            begin: Alignment.topCenter,
+                            end: Alignment.bottomCenter,
+                          ),
+                          border: Border.all(
+                            color: const Color(0xFFCBD5E1).withValues(alpha: 0.7),
+                            width: 0.8,
+                          ),
+                          boxShadow: [
+                            BoxShadow(
+                              color: Colors.black.withValues(alpha: 0.16 + (pressFraction * 0.08)),
+                              blurRadius: 3.0 + (pressFraction * 1.5),
+                              offset: const Offset(0, 1.5),
+                            ),
+                          ],
+                        ),
+                      ),
+
+                      // 3. Inner Raised Disc (Interactive center button)
+                      Transform.translate(
+                        offset: Offset(0, discDepth),
+                        child: Container(
+                          width: discSize,
+                          height: discSize,
+                          decoration: BoxDecoration(
+                            shape: BoxShape.circle,
+                            gradient: LinearGradient(
+                              colors: [
+                                Color.lerp(const Color(0xFFFFFFFF), const Color(0xFFE2E8F0), pressFraction)!,
+                                Color.lerp(const Color(0xFFF8FAFC), const Color(0xFFF1F5F9), pressFraction)!,
+                                Color.lerp(const Color(0xFFE8ECEF), const Color(0xFFFFFFFF), pressFraction)!,
+                              ],
+                              begin: Alignment.topCenter,
+                              end: Alignment.bottomCenter,
+                            ),
+                            border: Border.all(
+                              color: Colors.white,
+                              width: 1.0,
+                            ),
+                            boxShadow: [
+                              BoxShadow(
+                                color: Colors.black.withValues(alpha: 0.18 - (pressFraction * 0.08)),
+                                offset: Offset(0, 2.0 - (pressFraction * 1.0)),
+                                blurRadius: 3.5 - (pressFraction * 1.5),
+                                spreadRadius: 0,
+                              ),
+                              BoxShadow(
+                                color: Colors.white.withValues(alpha: 0.9 - (pressFraction * 0.6)),
+                                offset: const Offset(0, -0.8),
+                                blurRadius: 1,
+                                spreadRadius: 0,
+                              ),
+                            ],
+                          ),
+                          child: Center(
+                            child: widget.isLoading
+                                ? SizedBox(
+                                    width: iconSize * 0.85,
+                                    height: iconSize * 0.85,
+                                    child: const CircularProgressIndicator(
+                                      strokeWidth: 2.2,
+                                      valueColor: AlwaysStoppedAnimation<Color>(Color(0xFF1E293B)),
+                                    ),
+                                  )
+                                : Icon(
+                                    widget.icon,
+                                    color: const Color(0xFF1E293B),
+                                    size: iconSize,
+                                  ),
+                          ),
+                        ),
+                      ),
+
+                      // 4. Active Notification Badge (for Filter button)
+                      if (widget.hasBadge)
+                        Positioned(
+                          top: 3,
+                          right: 3,
+                          child: Container(
+                            width: 9,
+                            height: 9,
+                            decoration: BoxDecoration(
+                              color: const Color(0xFFEF4444),
+                              shape: BoxShape.circle,
+                              border: Border.all(color: Colors.white, width: 1.5),
+                              boxShadow: [
+                                BoxShadow(
+                                  color: Colors.black.withValues(alpha: 0.15),
+                                  blurRadius: 2,
+                                  offset: const Offset(0, 1),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                    ],
+                  ),
+                ),
+              ),
+            );
+          },
         ),
       ),
     );
@@ -2190,122 +2624,180 @@ class EmbossedActionButton extends StatefulWidget {
   State<EmbossedActionButton> createState() => _EmbossedActionButtonState();
 }
 
-class _EmbossedActionButtonState extends State<EmbossedActionButton> {
-  bool _isPressed = false;
+class _EmbossedActionButtonState extends State<EmbossedActionButton>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _controller;
+  late final Animation<double> _scaleAnimation;
+  late final Animation<double> _depthAnimation;
+  late final Animation<double> _shadowBlurAnimation;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 90),
+      reverseDuration: const Duration(milliseconds: 220),
+    );
+    _scaleAnimation = Tween<double>(begin: 1.0, end: 0.95).animate(
+      CurvedAnimation(
+        parent: _controller,
+        curve: Curves.easeOutQuad,
+        reverseCurve: Curves.easeOutBack,
+      ),
+    );
+    _depthAnimation = Tween<double>(begin: 0.0, end: 2.0).animate(
+      CurvedAnimation(
+        parent: _controller,
+        curve: Curves.easeOutQuad,
+        reverseCurve: Curves.easeOutBack,
+      ),
+    );
+    _shadowBlurAnimation = Tween<double>(begin: 10.0, end: 3.5).animate(
+      CurvedAnimation(
+        parent: _controller,
+        curve: Curves.easeOutQuad,
+        reverseCurve: Curves.easeOutBack,
+      ),
+    );
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  void _onTapDown(TapDownDetails _) {
+    _controller.forward();
+  }
+
+  void _onTapUp(TapUpDetails _) {
+    Future.delayed(const Duration(milliseconds: 70), () {
+      if (mounted) _controller.reverse();
+    });
+    widget.onTap();
+  }
+
+  void _onTapCancel() {
+    _controller.reverse();
+  }
 
   @override
   Widget build(BuildContext context) {
     return GestureDetector(
-      onTapDown: (_) => setState(() => _isPressed = true),
-      onTapUp: (_) {
-        setState(() => _isPressed = false);
-        widget.onTap();
-      },
-      onTapCancel: () => setState(() => _isPressed = false),
-      child: AnimatedContainer(
-        duration: const Duration(milliseconds: 100),
-        height: widget.height,
-        transform: Matrix4.translationValues(0, _isPressed ? 2.0 : 0.0, 0),
-        decoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(widget.height / 2),
-          gradient: LinearGradient(
-            colors: widget.gradientColors,
-            begin: Alignment.topCenter,
-            end: Alignment.bottomCenter,
-          ),
-          border: Border.all(
-            color: _isPressed
-                ? Colors.white.withValues(alpha: 0.25)
-                : Colors.white.withValues(alpha: 0.5),
-            width: 1.5,
-          ),
-          boxShadow: _isPressed
-              ? [
-                  BoxShadow(
-                    color: Colors.black.withValues(alpha: 0.15),
-                    offset: const Offset(0, 2),
-                    blurRadius: 4,
+      onTapDown: _onTapDown,
+      onTapUp: _onTapUp,
+      onTapCancel: _onTapCancel,
+      behavior: HitTestBehavior.opaque,
+      child: AnimatedBuilder(
+        animation: _controller,
+        builder: (context, _) {
+          final double scale = _scaleAnimation.value;
+          final double depth = _depthAnimation.value;
+          final double shadowBlur = _shadowBlurAnimation.value;
+          final double pressFraction = _controller.value;
+
+          return Transform.scale(
+            scale: scale,
+            child: Transform.translate(
+              offset: Offset(0, depth),
+              child: Container(
+                height: widget.height,
+                decoration: BoxDecoration(
+                  borderRadius: BorderRadius.circular(widget.height / 2),
+                  gradient: LinearGradient(
+                    colors: widget.gradientColors,
+                    begin: Alignment.topCenter,
+                    end: Alignment.bottomCenter,
                   ),
-                ]
-              : [
-                  BoxShadow(
-                    color: Colors.black.withValues(alpha: 0.15),
-                    offset: const Offset(0, 4),
-                    blurRadius: 10,
-                    spreadRadius: 0,
+                  border: Border.all(
+                    color: Colors.white.withValues(alpha: 0.5 - (pressFraction * 0.25)),
+                    width: 1.5,
                   ),
-                  BoxShadow(
-                    color: Colors.white.withValues(alpha: 0.35),
-                    offset: const Offset(0, -1),
-                    blurRadius: 1.5,
-                    spreadRadius: 0,
-                  ),
-                ],
-        ),
-        child: ClipRRect(
-          borderRadius: BorderRadius.circular(widget.height / 2),
-          child: Stack(
-            children: [
-              Positioned(
-                top: 0,
-                left: 0,
-                right: 0,
-                height: widget.height * 0.4,
-                child: Container(
-                  decoration: BoxDecoration(
-                    gradient: LinearGradient(
-                      colors: [
-                        Colors.white.withValues(alpha: _isPressed ? 0.08 : 0.22),
-                        Colors.white.withValues(alpha: 0.0),
-                      ],
-                      begin: Alignment.topCenter,
-                      end: Alignment.bottomCenter,
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.black.withValues(alpha: 0.15 - (pressFraction * 0.05)),
+                      offset: Offset(0, 4.0 - (pressFraction * 2.0)),
+                      blurRadius: shadowBlur,
+                      spreadRadius: 0,
                     ),
-                  ),
-                ),
-              ),
-              Center(
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    Icon(
-                      widget.icon,
-                      color: Colors.white,
-                      size: 20,
-                      shadows: const [
-                        Shadow(
-                          color: Color(0x55000000),
-                          offset: Offset(0, 1),
-                          blurRadius: 2,
-                        ),
-                      ],
-                    ),
-                    const SizedBox(width: 8),
-                    Text(
-                      widget.label,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(
-                        color: Colors.white,
-                        fontSize: 15,
-                        fontWeight: FontWeight.w700,
-                        letterSpacing: 0.3,
-                        shadows: [
-                          Shadow(
-                            color: Color(0x55000000),
-                            offset: Offset(0, 1),
-                            blurRadius: 2,
-                          ),
-                        ],
-                      ),
+                    BoxShadow(
+                      color: Colors.white.withValues(alpha: 0.35 - (pressFraction * 0.2)),
+                      offset: const Offset(0, -1),
+                      blurRadius: 1.5,
+                      spreadRadius: 0,
                     ),
                   ],
                 ),
+                child: ClipRRect(
+                  borderRadius: BorderRadius.circular(widget.height / 2),
+                  child: Stack(
+                    children: [
+                      Positioned(
+                        top: 0,
+                        left: 0,
+                        right: 0,
+                        height: widget.height * 0.4,
+                        child: Container(
+                          decoration: BoxDecoration(
+                            gradient: LinearGradient(
+                              colors: [
+                                Colors.white.withValues(alpha: 0.22 - (pressFraction * 0.14)),
+                                Colors.white.withValues(alpha: 0.0),
+                              ],
+                              begin: Alignment.topCenter,
+                              end: Alignment.bottomCenter,
+                            ),
+                          ),
+                        ),
+                      ),
+                      Center(
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            Icon(
+                              widget.icon,
+                              color: Colors.white,
+                              size: 20,
+                              shadows: const [
+                                Shadow(
+                                  color: Color(0x55000000),
+                                  offset: Offset(0, 1),
+                                  blurRadius: 2,
+                                ),
+                              ],
+                            ),
+                            const SizedBox(width: 8),
+                            Text(
+                              widget.label,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: const TextStyle(
+                                color: Colors.white,
+                                fontSize: 15,
+                                fontWeight: FontWeight.w700,
+                                letterSpacing: 0.3,
+                                shadows: [
+                                  Shadow(
+                                    color: Color(0x55000000),
+                                    offset: Offset(0, 1),
+                                    blurRadius: 2,
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
               ),
-            ],
-          ),
-        ),
+            ),
+          );
+        },
       ),
     );
   }
@@ -2432,36 +2924,52 @@ class EmbossedCategoryButton extends StatefulWidget {
   State<EmbossedCategoryButton> createState() => _EmbossedCategoryButtonState();
 }
 
-class _EmbossedCategoryButtonState extends State<EmbossedCategoryButton> {
-  bool _isPressed = false;
+class _EmbossedCategoryButtonState extends State<EmbossedCategoryButton>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _controller;
+  late final Animation<double> _scaleAnimation;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 90),
+      reverseDuration: const Duration(milliseconds: 240),
+    );
+    _scaleAnimation = Tween<double>(begin: 1.0, end: 0.88).animate(
+      CurvedAnimation(
+        parent: _controller,
+        curve: Curves.easeOutQuad,
+        reverseCurve: Curves.easeOutBack,
+      ),
+    );
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  void _onTapDown(TapDownDetails _) {
+    _controller.forward();
+  }
+
+  void _onTapUp(TapUpDetails _) {
+    Future.delayed(const Duration(milliseconds: 70), () {
+      if (mounted) _controller.reverse();
+    });
+    widget.onTap();
+  }
+
+  void _onTapCancel() {
+    _controller.reverse();
+  }
 
   @override
   Widget build(BuildContext context) {
     final style = kCategoryStyles[widget.category]!;
-    Widget buttonContent = Column(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        EmbossedCategoryIcon(
-          category: widget.category,
-          size: 46,
-          iconSize: 22,
-          isPressed: _isPressed,
-        ),
-        const SizedBox(height: 5),
-        Text(
-          style.label,
-          maxLines: 1,
-          overflow: TextOverflow.ellipsis,
-          textAlign: TextAlign.center,
-          style: TextStyle(
-            fontSize: 9.5,
-            fontWeight: FontWeight.w600,
-            color: Colors.grey.shade700,
-            letterSpacing: 0.1,
-          ),
-        ),
-      ],
-    );
 
     return Draggable<IssueCategory>(
       data: widget.category,
@@ -2475,17 +2983,72 @@ class _EmbossedCategoryButtonState extends State<EmbossedCategoryButton> {
       ),
       childWhenDragging: Opacity(
         opacity: 0.3,
-        child: Center(child: buttonContent),
+        child: Center(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              EmbossedCategoryIcon(
+                category: widget.category,
+                size: 46,
+                iconSize: 22,
+                isPressed: false,
+              ),
+              const SizedBox(height: 5),
+              Text(
+                style.label,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  fontSize: 9.5,
+                  fontWeight: FontWeight.w600,
+                  color: Colors.grey.shade700,
+                  letterSpacing: 0.1,
+                ),
+              ),
+            ],
+          ),
+        ),
       ),
       child: GestureDetector(
-        onTapDown: (_) => setState(() => _isPressed = true),
-        onTapUp: (_) {
-          setState(() => _isPressed = false);
-          widget.onTap();
-        },
-        onTapCancel: () => setState(() => _isPressed = false),
+        onTapDown: _onTapDown,
+        onTapUp: _onTapUp,
+        onTapCancel: _onTapCancel,
         behavior: HitTestBehavior.opaque,
-        child: Center(child: buttonContent),
+        child: Center(
+          child: AnimatedBuilder(
+            animation: _controller,
+            builder: (context, _) {
+              return Transform.scale(
+                scale: _scaleAnimation.value,
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    EmbossedCategoryIcon(
+                      category: widget.category,
+                      size: 46,
+                      iconSize: 22,
+                      isPressed: _controller.value > 0.4,
+                    ),
+                    const SizedBox(height: 5),
+                    Text(
+                      style.label,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      textAlign: TextAlign.center,
+                      style: TextStyle(
+                        fontSize: 9.5,
+                        fontWeight: FontWeight.w600,
+                        color: Colors.grey.shade700,
+                        letterSpacing: 0.1,
+                      ),
+                    ),
+                  ],
+                ),
+              );
+            },
+          ),
+        ),
       ),
     );
   }

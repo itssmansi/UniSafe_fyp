@@ -9,6 +9,7 @@ import 'screens/SignupLogin_ui/splash_screen.dart';
 import 'screens/SignupLogin_ui/welcome_screen.dart';
 import 'screens/SignupLogin_ui/login_screen.dart';
 import 'screens/SignupLogin_ui/signup_screen.dart';
+import 'screens/SignupLogin_ui/forget_password_screen.dart';
 
 export 'screens/home_page.dart';
 
@@ -47,16 +48,17 @@ class UniSafeApp extends StatelessWidget {
         useMaterial3: true,
         textTheme: GoogleFonts.interTextTheme(),
       ),
-      home: const InteractiveMapScreen(),
+      home: const WelcomeSelectionScreen(),
       routes: {
         '/home': (context) => const HomePage(),
         '/interactive-map': (context) => const InteractiveMapScreen(),
         '/heatmap': (context) => const MapScreen(),
         '/kanban': (context) => const KanbanBoardScreen(),
-        '/citizen-auth-splash': (context) => const CitizenSplashScreen(),
+        '/citizen-auth-splash': (context) => const WelcomeSelectionScreen(),
         '/citizen-auth-welcome': (context) => const WelcomeSelectionScreen(),
         '/citizen-auth-login': (context) => const CitizenLoginScreen(),
         '/citizen-auth-signup': (context) => const CitizenSignupScreen(),
+        '/citizen-auth-forget-password': (context) => const ForgetPasswordScreen(),
       },
     );
   }

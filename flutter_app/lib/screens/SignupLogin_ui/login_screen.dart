@@ -1,8 +1,10 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'widgets/auth_header.dart';
+import 'widgets/auth_background.dart';
 import 'widgets/rounded_input_field.dart';
 import 'widgets/custom_form_button.dart';
+import 'widgets/auth_slide_route.dart';
 import 'forget_password_screen.dart';
 import 'signup_screen.dart';
 
@@ -111,44 +113,94 @@ class _CitizenLoginScreenState extends State<CitizenLoginScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return SafeArea(
-      child: Scaffold(
-        backgroundColor: const Color(0xFF133838), // Deep Forest Teal Header Canvas
-        body: Column(
-          children: [
-            // Slim Dark Header matching sketch
-            AuthHeader(
-              title: 'LOGIN',
-              onBack: () {
-                if (Navigator.of(context).canPop()) {
-                  Navigator.of(context).pop();
-                } else {
-                  Navigator.of(context).pushReplacementNamed('/home');
-                }
-              },
-            ),
-            const SizedBox(height: 45),
+    return Scaffold(
+      backgroundColor: const Color(0xFF133838), // Deep Forest Teal Header Canvas
+      body: Stack(
+        children: [
+          // Full-screen continuous green doodle background
+          const AuthBackground(),
 
-            // White Card Form Area with rounded top corners
+          SafeArea(
+            child: Column(
+              children: [
+                // Teal Top Area (~48% of screen height) with centered LOGIN
             Expanded(
-              child: Container(
-                width: double.infinity,
-                decoration: const BoxDecoration(
-                  color: Colors.white,
-                  borderRadius: BorderRadius.only(
-                    topLeft: Radius.circular(32),
-                    topRight: Radius.circular(32),
-                  ),
+              child: AnimatedBuilder(
+                animation: ModalRoute.of(context)?.animation ?? const AlwaysStoppedAnimation(1.0),
+                builder: (context, child) {
+                  final anim = ModalRoute.of(context)?.animation;
+                  final double opacity = anim != null
+                      ? Curves.easeOutCubic.transform(anim.value)
+                      : 1.0;
+                  return Opacity(
+                    opacity: opacity.clamp(0.0, 1.0),
+                    child: child,
+                  );
+                },
+                child: AuthHeader(
+                  title: 'LOGIN',
+                  isCentered: true,
+                  onBack: () {
+                    if (Navigator.of(context).canPop()) {
+                      Navigator.of(context).pop();
+                    } else {
+                      Navigator.of(context).pushReplacementNamed('/home');
+                    }
+                  },
                 ),
-                child: Align(
+              ),
+            ),
+
+            // White Card Form Area: wraps exact content needed
+            AnimatedBuilder(
+                animation: Listenable.merge([
+                  ModalRoute.of(context)?.animation ?? const AlwaysStoppedAnimation(1.0),
+                  ModalRoute.of(context)?.secondaryAnimation ?? const AlwaysStoppedAnimation(0.0),
+                ]),
+                builder: (context, child) {
+                  final anim = ModalRoute.of(context)?.animation;
+                  final double t = anim != null
+                      ? Curves.easeOutCubic.transform(anim.value)
+                      : 1.0;
+                  final double enterDy = (1.0 - t) * 160.0;
+                  final double enterOpacity = anim != null
+                      ? Curves.easeOut.transform(anim.value)
+                      : 1.0;
+
+                  final secAnim = ModalRoute.of(context)?.secondaryAnimation;
+                  final double secT = secAnim != null
+                      ? Curves.easeOutCubic.transform(secAnim.value)
+                      : 0.0;
+                  final double secDy = -secT * 50.0;
+                  final double secOpacity = (1.0 - secT * 1.5).clamp(0.0, 1.0);
+
+                  return Transform.translate(
+                    offset: Offset(0, enterDy + secDy),
+                    child: Opacity(
+                      opacity: (enterOpacity * secOpacity).clamp(0.0, 1.0),
+                      child: child,
+                    ),
+                  );
+                },
+                child: Container(
+                  width: double.infinity,
+                  decoration: const BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.only(
+                      topLeft: Radius.circular(32),
+                      topRight: Radius.circular(32),
+                    ),
+                  ),
+                  child: Align(
                   alignment: Alignment.topCenter,
                   child: ConstrainedBox(
                     constraints: const BoxConstraints(maxWidth: 420),
-                    child: SingleChildScrollView(
-                      padding: const EdgeInsets.fromLTRB(0, 14, 0, 24),
+                    child: Padding(
+                      padding: const EdgeInsets.fromLTRB(0, 20, 0, 24),
                       child: Form(
                         key: _loginFormKey,
                         child: Column(
+                          mainAxisSize: MainAxisSize.min,
                           crossAxisAlignment: CrossAxisAlignment.center,
                           children: [
                             // Error message if any
@@ -276,8 +328,8 @@ class _CitizenLoginScreenState extends State<CitizenLoginScreen> {
                                     onTap: () {
                                       Navigator.push(
                                         context,
-                                        MaterialPageRoute(
-                                          builder: (context) => const ForgetPasswordScreen(),
+                                        createAuthSlideRoute(
+                                          const ForgetPasswordScreen(),
                                         ),
                                       );
                                     },
@@ -319,8 +371,8 @@ class _CitizenLoginScreenState extends State<CitizenLoginScreen> {
                                   onTap: () {
                                     Navigator.pushReplacement(
                                       context,
-                                      MaterialPageRoute(
-                                        builder: (context) => const CitizenSignupScreen(),
+                                      createAuthSlideRoute(
+                                        const CitizenSignupScreen(),
                                       ),
                                     );
                                   },
@@ -372,8 +424,10 @@ class _CitizenLoginScreenState extends State<CitizenLoginScreen> {
                 ),
               ),
             ),
-          ],
-        ),
+              ],
+            ),
+          ),
+        ],
       ),
     );
   }

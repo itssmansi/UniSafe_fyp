@@ -2,10 +2,12 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'widgets/auth_header.dart';
+import 'widgets/auth_background.dart';
 import 'widgets/rounded_input_field.dart';
 import 'widgets/custom_form_button.dart';
 import 'widgets/step_progress_bar.dart';
 import 'widgets/otp_box_input.dart';
+import 'widgets/auth_slide_route.dart';
 import 'login_screen.dart';
 
 class CitizenSignupScreen extends StatefulWidget {
@@ -350,9 +352,7 @@ class _CitizenSignupScreenState extends State<CitizenSignupScreen> {
                     Navigator.of(context).pop();
                     Navigator.pushReplacement(
                       context,
-                      MaterialPageRoute(
-                        builder: (context) => const CitizenLoginScreen(),
-                      ),
+                      createAuthSlideRoute(const CitizenLoginScreen()),
                     );
                   },
                   style: ElevatedButton.styleFrom(
@@ -392,7 +392,7 @@ class _CitizenSignupScreenState extends State<CitizenSignupScreen> {
       } else {
         Navigator.pushReplacement(
           context,
-          MaterialPageRoute(builder: (context) => const CitizenLoginScreen()),
+          createAuthSlideRoute(const CitizenLoginScreen()),
         );
       }
     }
@@ -400,86 +400,136 @@ class _CitizenSignupScreenState extends State<CitizenSignupScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return SafeArea(
-      child: Scaffold(
-        backgroundColor: const Color(0xFF133838), // Dark Forest Teal canvas
-        body: Column(
-          children: [
-            // Slim Dark Header matching sketch
-            AuthHeader(
-              title: _currentStep == 0 ? 'SIGN UP' : 'VERIFICATION',
-              onBack: _handleBackStep,
-            ),
-            const SizedBox(height: 45),
+    return Scaffold(
+      backgroundColor: const Color(0xFF133838), // Dark Forest Teal canvas
+      body: Stack(
+        children: [
+          // Full-screen continuous green doodle background
+          const AuthBackground(),
 
-            // White Card Content Area
-            Expanded(
-              child: Container(
-                width: double.infinity,
-                decoration: const BoxDecoration(
-                  color: Colors.white,
-                  borderRadius: BorderRadius.only(
-                    topLeft: Radius.circular(32),
-                    topRight: Radius.circular(32),
-                  ),
-                ),
-                child: Center(
-                  child: ConstrainedBox(
-                    constraints: const BoxConstraints(maxWidth: 440),
-                    child: Column(
-                      children: [
-                        const SizedBox(height: 8),
-
-                        // Step progress tracker
-                        StepProgressBar(currentStep: _currentStep),
-                        const Divider(height: 1, color: Color(0xFFF1F5F9)),
-
-                        // Error Message Banner (if any)
-                        if (_errorMessage != null)
-                          Padding(
-                            padding: const EdgeInsets.fromLTRB(24, 12, 24, 0),
-                            child: Container(
-                              width: double.infinity,
-                              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-                              decoration: BoxDecoration(
-                                color: const Color(0xFFFEF2F2),
-                                borderRadius: BorderRadius.circular(12),
-                                border: Border.all(color: const Color(0xFFFECACA)),
-                              ),
-                              child: Row(
-                                children: [
-                                  const Icon(Icons.error_outline, color: Color(0xFFDC2626), size: 18),
-                                  const SizedBox(width: 8),
-                                  Expanded(
-                                    child: Text(
-                                      _errorMessage!,
-                                      style: const TextStyle(
-                                        color: Color(0xFFDC2626),
-                                        fontSize: 13,
-                                        fontWeight: FontWeight.w600,
-                                      ),
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ),
-                          ),
-
-                        // Current Step Form Content
-                        Expanded(
-                          child: SingleChildScrollView(
-                            padding: const EdgeInsets.only(bottom: 28),
-                            child: _buildCurrentStepContent(),
-                          ),
-                        ),
-                      ],
+          SafeArea(
+            child: Column(
+              children: [
+                // Header with centered title
+                Expanded(
+                  child: AnimatedBuilder(
+                    animation: ModalRoute.of(context)?.animation ?? const AlwaysStoppedAnimation(1.0),
+                    builder: (context, child) {
+                      final anim = ModalRoute.of(context)?.animation;
+                      final double opacity = anim != null
+                          ? Curves.easeOutCubic.transform(anim.value)
+                          : 1.0;
+                      return Opacity(
+                        opacity: opacity.clamp(0.0, 1.0),
+                        child: child,
+                      );
+                    },
+                    child: AuthHeader(
+                      title: _currentStep == 0 ? 'SIGN UP' : 'VERIFICATION',
+                      onBack: _handleBackStep,
+                      isCentered: true,
                     ),
                   ),
                 ),
-              ),
+
+                // White Card Content Area - takes ONLY exact space needed!
+                AnimatedBuilder(
+                  animation: Listenable.merge([
+                    ModalRoute.of(context)?.animation ?? const AlwaysStoppedAnimation(1.0),
+                    ModalRoute.of(context)?.secondaryAnimation ?? const AlwaysStoppedAnimation(0.0),
+                  ]),
+                  builder: (context, child) {
+                    final anim = ModalRoute.of(context)?.animation;
+                    final double t = anim != null
+                        ? Curves.easeOutCubic.transform(anim.value)
+                        : 1.0;
+                    final double enterDy = (1.0 - t) * 160.0;
+                    final double enterOpacity = anim != null
+                        ? Curves.easeOut.transform(anim.value)
+                        : 1.0;
+
+                    final secAnim = ModalRoute.of(context)?.secondaryAnimation;
+                    final double secT = secAnim != null
+                        ? Curves.easeOutCubic.transform(secAnim.value)
+                        : 0.0;
+                    final double secDy = -secT * 50.0;
+                    final double secOpacity = (1.0 - secT * 1.5).clamp(0.0, 1.0);
+
+                    return Transform.translate(
+                      offset: Offset(0, enterDy + secDy),
+                      child: Opacity(
+                        opacity: (enterOpacity * secOpacity).clamp(0.0, 1.0),
+                        child: child,
+                      ),
+                    );
+                  },
+                  child: Container(
+                    width: double.infinity,
+                    decoration: const BoxDecoration(
+                      color: Colors.white,
+                      borderRadius: BorderRadius.only(
+                        topLeft: Radius.circular(32),
+                        topRight: Radius.circular(32),
+                      ),
+                    ),
+                    child: Center(
+                      child: ConstrainedBox(
+                        constraints: const BoxConstraints(maxWidth: 440),
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            const SizedBox(height: 8),
+
+                            // Step progress tracker
+                            StepProgressBar(currentStep: _currentStep),
+                            const Divider(height: 1, color: Color(0xFFF1F5F9)),
+
+                            // Error Message Banner (if any)
+                            if (_errorMessage != null)
+                              Padding(
+                                padding: const EdgeInsets.fromLTRB(24, 12, 24, 0),
+                                child: Container(
+                                  width: double.infinity,
+                                  padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                                  decoration: BoxDecoration(
+                                    color: const Color(0xFFFEF2F2),
+                                    borderRadius: BorderRadius.circular(12),
+                                    border: Border.all(color: const Color(0xFFFECACA)),
+                                  ),
+                                  child: Row(
+                                    children: [
+                                      const Icon(Icons.error_outline, color: Color(0xFFDC2626), size: 18),
+                                      const SizedBox(width: 8),
+                                      Expanded(
+                                        child: Text(
+                                          _errorMessage!,
+                                          style: const TextStyle(
+                                            color: Color(0xFFDC2626),
+                                            fontSize: 13,
+                                            fontWeight: FontWeight.w600,
+                                          ),
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ),
+
+                            // Current Step Form Content (shrink-wraps to exact height)
+                            Padding(
+                              padding: const EdgeInsets.only(bottom: 24),
+                              child: _buildCurrentStepContent(),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+              ],
             ),
-          ],
-        ),
+          ),
+        ],
       ),
     );
   }
@@ -499,11 +549,11 @@ class _CitizenSignupScreenState extends State<CitizenSignupScreen> {
     }
   }
 
-  // ================= STEP 1: BASIC INFORMATION =================
   Widget _buildStep1Details() {
     return Form(
       key: _step1FormKey,
       child: Column(
+        mainAxisSize: MainAxisSize.min,
         children: [
           const SizedBox(height: 8),
 
@@ -630,9 +680,7 @@ class _CitizenSignupScreenState extends State<CitizenSignupScreen> {
                 onTap: () {
                   Navigator.pushReplacement(
                     context,
-                    MaterialPageRoute(
-                      builder: (context) => const CitizenLoginScreen(),
-                    ),
+                    createAuthSlideRoute(const CitizenLoginScreen()),
                   );
                 },
                 child: const Text(
@@ -683,6 +731,7 @@ class _CitizenSignupScreenState extends State<CitizenSignupScreen> {
   // ================= STEP 2: EMAIL OTP =================
   Widget _buildStep2EmailOtp() {
     return Column(
+      mainAxisSize: MainAxisSize.min,
       children: [
         const SizedBox(height: 12),
         // Subtitle Card with recipient info
@@ -843,6 +892,7 @@ class _CitizenSignupScreenState extends State<CitizenSignupScreen> {
   // ================= STEP 3: PHONE OTP =================
   Widget _buildStep3PhoneOtp() {
     return Column(
+      mainAxisSize: MainAxisSize.min,
       children: [
         const SizedBox(height: 12),
         // Subtitle Card with recipient info
@@ -1003,6 +1053,7 @@ class _CitizenSignupScreenState extends State<CitizenSignupScreen> {
   // ================= STEP 4: AADHAAR VERIFICATION =================
   Widget _buildStep4AadhaarKyc() {
     return Column(
+      mainAxisSize: MainAxisSize.min,
       children: [
         const SizedBox(height: 12),
         // Official Security Badge

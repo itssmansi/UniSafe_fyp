@@ -55,13 +55,13 @@ class _RoundedInputFieldState extends State<RoundedInputField> {
           Text(
             widget.labelText,
             style: const TextStyle(
-              fontSize: 13.5,
+              fontSize: 14,
               fontWeight: FontWeight.w600,
               color: Color(0xFF334155),
               letterSpacing: 0.1,
             ),
           ),
-          const SizedBox(height: 7),
+          const SizedBox(height: 8),
           TextFormField(
             controller: widget.controller,
             obscureText: (widget.obscureText && _obscureText),
@@ -76,22 +76,23 @@ class _RoundedInputFieldState extends State<RoundedInputField> {
                 ? (_, {required currentLength, required isFocused, maxLength}) => null
                 : null,
             style: const TextStyle(
-              fontSize: 14.5,
+              fontSize: 15,
               fontWeight: FontWeight.w500,
               color: Color(0xFF1E293B),
             ),
             decoration: InputDecoration(
+              isDense: false,
               filled: true,
               fillColor: Colors.white,
               hintText: widget.hintText,
               hintStyle: const TextStyle(
-                fontSize: 14,
+                fontSize: 14.5,
                 color: Color(0xFF94A3B8),
                 fontWeight: FontWeight.w400,
               ),
               prefixText: widget.prefixText,
               prefixStyle: const TextStyle(
-                fontSize: 14.5,
+                fontSize: 15,
                 fontWeight: FontWeight.w700,
                 color: Color(0xFF133838),
               ),
@@ -102,8 +103,10 @@ class _RoundedInputFieldState extends State<RoundedInputField> {
                             ? Icons.visibility_outlined
                             : Icons.visibility_off_outlined,
                         color: const Color(0xFF94A3B8),
-                        size: 20,
+                        size: 22,
                       ),
+                      padding: const EdgeInsets.only(right: 12),
+                      constraints: const BoxConstraints(minWidth: 48, minHeight: 48),
                       onPressed: () {
                         setState(() {
                           _obscureText = !_obscureText;
@@ -111,21 +114,21 @@ class _RoundedInputFieldState extends State<RoundedInputField> {
                       },
                     )
                   : null,
-              contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+              contentPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
               enabledBorder: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(12),
+                borderRadius: BorderRadius.circular(26),
                 borderSide: const BorderSide(color: Color(0xFFE2E8F0), width: 1.2),
               ),
               focusedBorder: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(12),
+                borderRadius: BorderRadius.circular(26),
                 borderSide: const BorderSide(color: Color(0xFF133838), width: 1.8),
               ),
               errorBorder: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(12),
+                borderRadius: BorderRadius.circular(26),
                 borderSide: const BorderSide(color: Color(0xFFEF4444), width: 1.2),
               ),
               focusedErrorBorder: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(12),
+                borderRadius: BorderRadius.circular(26),
                 borderSide: const BorderSide(color: Color(0xFFEF4444), width: 1.8),
               ),
             ),
