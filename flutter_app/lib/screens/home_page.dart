@@ -1283,7 +1283,7 @@ class _LinearDraggableDockState extends State<_LinearDraggableDock>
                     child: Stack(
                       clipBehavior: Clip.none,
                       children: [
-                        // Magnifying Pill Selector: Gaussian blur only on edges (decreasing inward), thin delicate border
+                        // Liquid Glass Magnifying Pill: specular gradient rim, edge refraction & convex sheen
                         Positioned(
                           left: visualLeft,
                           top: visualTop,
@@ -1291,7 +1291,23 @@ class _LinearDraggableDockState extends State<_LinearDraggableDock>
                           height: currentHeight,
                           child: Stack(
                             children: [
-                              // Edge-blurred lens: blur strength fades out towards the center
+                              // 1. Ambient Elevation Shadow
+                              Positioned.fill(
+                                child: DecoratedBox(
+                                  decoration: BoxDecoration(
+                                    borderRadius: BorderRadius.circular(currentHeight / 2.0),
+                                    boxShadow: [
+                                      BoxShadow(
+                                        color: Colors.black.withValues(alpha: 0.02 + 0.04 * _expandAnimation.value),
+                                        blurRadius: 3.0 + 4.0 * _expandAnimation.value,
+                                        offset: Offset(0, 1.0 + 1.5 * _expandAnimation.value),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ),
+
+                              // 2. Edge-blurred Meniscus Lens + 3D Convex Liquid Sheen
                               Positioned.fill(
                                 child: ClipRRect(
                                   borderRadius: BorderRadius.circular(currentHeight / 2.0),
@@ -1301,10 +1317,10 @@ class _LinearDraggableDockState extends State<_LinearDraggableDock>
                                       return RadialGradient(
                                         center: Alignment.center,
                                         radius: 0.95,
-                                        colors: [
+                                        colors: const [
                                           Colors.transparent,
                                           Colors.transparent,
-                                          Colors.white.withValues(alpha: 0.35),
+                                          Color(0x59FFFFFF),
                                           Colors.white,
                                         ],
                                         stops: const [0.0, 0.40, 0.75, 1.0],
@@ -1313,29 +1329,32 @@ class _LinearDraggableDockState extends State<_LinearDraggableDock>
                                     child: BackdropFilter(
                                       filter: ImageFilter.blur(sigmaX: 5.0, sigmaY: 5.0),
                                       child: Container(
-                                        color: Colors.white.withValues(alpha: 0.03),
+                                        decoration: BoxDecoration(
+                                          gradient: LinearGradient(
+                                            begin: Alignment.topCenter,
+                                            end: Alignment.bottomCenter,
+                                            colors: [
+                                              Colors.white.withValues(alpha: 0.08),
+                                              Colors.white.withValues(alpha: 0.03),
+                                              Colors.white.withValues(alpha: 0.01),
+                                            ],
+                                            stops: const [0.0, 0.45, 1.0],
+                                          ),
+                                        ),
                                       ),
                                     ),
                                   ),
                                 ),
                               ),
 
-                              // Thin, delicate outline and subtle soft shadow (matches Apple refined aesthetic)
+                              // 3. Liquid Specular Gradient Rim (1.0px hairline with top light glint)
                               Positioned.fill(
-                                child: Container(
-                                  decoration: BoxDecoration(
-                                    borderRadius: BorderRadius.circular(currentHeight / 2.0),
-                                    border: Border.all(
-                                      color: const Color(0xFF94A3B8).withValues(alpha: 0.50),
-                                      width: 1.0,
+                                child: IgnorePointer(
+                                  child: CustomPaint(
+                                    painter: _SpecularGlassBorderPainter(
+                                      radius: currentHeight / 2.0,
+                                      strokeWidth: 1.0,
                                     ),
-                                    boxShadow: [
-                                      BoxShadow(
-                                        color: Colors.black.withValues(alpha: 0.03 * _expandAnimation.value),
-                                        blurRadius: 4.0 * _expandAnimation.value,
-                                        offset: Offset(0, 1.0 * _expandAnimation.value),
-                                      ),
-                                    ],
                                   ),
                                 ),
                               ),
@@ -1397,5 +1416,49 @@ class _LinearDraggableDockState extends State<_LinearDraggableDock>
         ),
       ),
     );
+  }
+}
+
+/// Liquid Glass Specular Gradient Border Painter
+/// Renders a delicate 1.0px hairline stroke with a brilliant specular glint on top
+/// and subtle ambient shadow falloff at the bottom (Apple Liquid Glass).
+class _SpecularGlassBorderPainter extends CustomPainter {
+  final double radius;
+  final double strokeWidth;
+
+  const _SpecularGlassBorderPainter({
+    required this.radius,
+    this.strokeWidth = 1.0,
+  });
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final rect = Offset.zero & size;
+    final rrect = RRect.fromRectAndRadius(
+      rect.deflate(strokeWidth / 2.0),
+      Radius.circular(radius),
+    );
+
+    final paint = Paint()
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = strokeWidth
+      ..shader = const LinearGradient(
+        begin: Alignment.topCenter,
+        end: Alignment.bottomCenter,
+        colors: [
+          Color(0xD9FFFFFF), // 85% specular white glint at top curve
+          Color(0x40CBD5E1), // Delicate slate highlight transition
+          Color(0x2094A3B8), // Hairline definition on sides
+          Color(0x3564748B), // Subtle bottom rim shadow
+        ],
+        stops: [0.0, 0.30, 0.70, 1.0],
+      ).createShader(rect);
+
+    canvas.drawRRect(rrect, paint);
+  }
+
+  @override
+  bool shouldRepaint(covariant _SpecularGlassBorderPainter oldDelegate) {
+    return oldDelegate.radius != radius || oldDelegate.strokeWidth != strokeWidth;
   }
 }
