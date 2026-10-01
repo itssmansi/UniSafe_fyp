@@ -1,3 +1,4 @@
+import 'dart:math' as math;
 import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -120,317 +121,834 @@ class _HomePageState extends ConsumerState<HomePage> {
   }
 
   // ==========================================
-  // TAB 0: HOME PAGE (Linear Style White Mode)
+  // TAB 0: HOME PAGE (Apple HIG Light Mode Dashboard)
   // ==========================================
   Widget _buildHomeTab() {
     return Scaffold(
-      backgroundColor: Colors.white,
-      appBar: AppBar(
-        backgroundColor: Colors.white,
-        elevation: 0,
-        scrolledUnderElevation: 0,
-        automaticallyImplyLeading: false,
-        titleSpacing: 20,
-        title: Row(
-          children: [
-            // Linear Workspace Selector
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-              decoration: BoxDecoration(
-                color: const Color(0xFFF4F4F5),
-                borderRadius: BorderRadius.circular(10),
-                border: Border.all(color: const Color(0xFFE4E4E7), width: 1),
-              ),
-              child: const Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Icon(LucideIcons.shield, color: Color(0xFF18181B), size: 16),
-                  SizedBox(width: 8),
-                  Text(
-                    'UniSafe',
-                    style: TextStyle(
-                      color: Color(0xFF18181B),
-                      fontSize: 14.5,
-                      fontWeight: FontWeight.w700,
-                      letterSpacing: -0.2,
-                    ),
-                  ),
-                  SizedBox(width: 6),
-                  Icon(LucideIcons.chevronDown, color: Color(0xFF71717A), size: 14),
-                ],
-              ),
-            ),
-          ],
-        ),
-        actions: [
-          IconButton(
-            onPressed: () {
-              Navigator.of(context).push(
-                MaterialPageRoute(builder: (context) => const InteractiveMapScreen()),
-              );
-            },
-            icon: Container(
-              padding: const EdgeInsets.all(7),
-              decoration: BoxDecoration(
-                color: const Color(0xFFF4F4F5),
-                borderRadius: BorderRadius.circular(10),
-                border: Border.all(color: const Color(0xFFE4E4E7), width: 1),
-              ),
-              child: const Icon(LucideIcons.penSquare, color: Color(0xFF18181B), size: 17),
-            ),
-          ),
-          const SizedBox(width: 14),
-        ],
-        bottom: PreferredSize(
-          preferredSize: const Size.fromHeight(1),
-          child: Container(color: const Color(0xFFF4F4F5), height: 1),
-        ),
-      ),
+      backgroundColor: const Color(0xFFF2F2F7), // Apple iOS Grouped System Background
       body: SafeArea(
         bottom: false,
         child: ListView(
-          padding: const EdgeInsets.fromLTRB(20, 20, 20, 110),
+          padding: const EdgeInsets.fromLTRB(20, 16, 20, 120),
           children: [
-            // Linear Section Header: FAVORITES
-            const Text(
-              'FAVORITES',
-              style: TextStyle(
-                color: Color(0xFF71717A),
-                fontSize: 11.5,
-                fontWeight: FontWeight.w700,
-                letterSpacing: 0.8,
-              ),
-            ),
-            const SizedBox(height: 10),
+            // 1. iOS Top Navigation Header
+            _buildAppleHeader(),
+            const SizedBox(height: 16),
 
-            // 4 Original Buttons in Clean Linear Rows
-            _buildLinearRowItem(
-              icon: LucideIcons.layers,
-              iconColor: const Color(0xFFF97316),
-              title: 'Open Heatmap',
-              badgeText: 'HEATMAP',
-              badgeColor: const Color(0xFFFFF7ED),
-              badgeTextColor: const Color(0xFFEA580C),
-              onTap: () {
-                Navigator.of(context).push(
-                  MaterialPageRoute(builder: (context) => const MapScreen()),
-                );
-              },
-            ),
-            const SizedBox(height: 8),
+            // 2. Hero Card: Campus Safety Index (Apple Activity Gauge)
+            _buildCampusSafetyHeroCard(),
+            const SizedBox(height: 20),
 
-            _buildLinearRowItem(
-              icon: LucideIcons.compass,
-              iconColor: const Color(0xFF3B82F6),
-              title: 'Open Interactive Map',
-              badgeText: 'LIVE MAP',
-              badgeColor: const Color(0xFFEFF6FF),
-              badgeTextColor: const Color(0xFF2563EB),
-              onTap: () {
-                Navigator.of(context).push(
-                  MaterialPageRoute(builder: (context) => const InteractiveMapScreen()),
-                );
-              },
-            ),
-            const SizedBox(height: 8),
+            // 3. Quick Action Carousel
+            _buildQuickActionsRow(),
+            const SizedBox(height: 20),
 
-            _buildLinearRowItem(
-              icon: LucideIcons.layoutGrid,
-              iconColor: const Color(0xFF8B5CF6),
-              title: 'Open Kanban Board',
-              badgeText: 'TASKS',
-              badgeColor: const Color(0xFFF5F3FF),
-              badgeTextColor: const Color(0xFF7C3AED),
-              onTap: () {
-                Navigator.of(context).push(
-                  MaterialPageRoute(builder: (context) => const KanbanBoardScreen()),
-                );
-              },
-            ),
-            const SizedBox(height: 8),
+            // 4. 2x2 Bento Grid (Apple HIG Card Architecture)
+            _buildBentoGrid(),
+            const SizedBox(height: 20),
 
-            _buildLinearRowItem(
-              icon: LucideIcons.shieldCheck,
-              iconColor: const Color(0xFF0D9488),
-              title: 'Citizen Auth (Login / Signup)',
-              badgeText: 'AUTH',
-              badgeColor: const Color(0xFFF0FDFA),
-              badgeTextColor: const Color(0xFF0D9488),
-              onTap: () {
-                Navigator.of(context).push(
-                  MaterialPageRoute(builder: (context) => const WelcomeSelectionScreen()),
-                );
-              },
-            ),
-            const SizedBox(height: 28),
-
-            // Linear Section Header: TEAMS & SERVICES
-            const Text(
-              'CAMPUS TEAMS',
-              style: TextStyle(
-                color: Color(0xFF71717A),
-                fontSize: 11.5,
-                fontWeight: FontWeight.w700,
-                letterSpacing: 0.8,
-              ),
-            ),
-            const SizedBox(height: 10),
-
-            _buildLinearTeamGroup(
-              title: 'Infrastructure Maintenance',
-              icon: LucideIcons.building,
-              items: ['Roads & Walkways', 'Streetlights', 'Civil Repairs'],
-            ),
-            const SizedBox(height: 12),
-            _buildLinearTeamGroup(
-              title: 'Health & Sanitation',
-              icon: LucideIcons.trash2,
-              items: ['Waste Management', 'Water Supply', 'Hygiene Clean'],
-            ),
-            const SizedBox(height: 12),
-            _buildLinearTeamGroup(
-              title: 'Safety & Emergency Escorts',
-              icon: LucideIcons.shieldAlert,
-              items: ['Night Patrol', 'Campus Guard Post', 'Emergency Medic'],
-            ),
+            // 5. Recent Campus Dispatch Feed
+            _buildDispatchFeedCard(),
           ],
         ),
       ),
     );
   }
 
-  Widget _buildLinearRowItem({
-    required IconData icon,
-    required Color iconColor,
-    required String title,
-    required String badgeText,
-    required Color badgeColor,
-    required Color badgeTextColor,
-    required VoidCallback onTap,
-  }) {
-    return Container(
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: const Color(0xFFE4E4E7), width: 1),
-        boxShadow: const [
-          BoxShadow(
-            color: Color(0x06000000),
-            blurRadius: 6,
-            offset: Offset(0, 2),
-          ),
-        ],
-      ),
-      child: Material(
-        color: Colors.transparent,
-        child: InkWell(
-          borderRadius: BorderRadius.circular(12),
-          onTap: onTap,
-          child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 13),
-            child: Row(
-              children: [
-                Icon(icon, color: iconColor, size: 20),
-                const SizedBox(width: 14),
-                Expanded(
-                  child: Text(
-                    title,
-                    style: const TextStyle(
-                      color: Color(0xFF18181B),
-                      fontSize: 15,
-                      fontWeight: FontWeight.w600,
-                      letterSpacing: -0.2,
-                    ),
-                  ),
-                ),
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
-                  decoration: BoxDecoration(
-                    color: badgeColor,
-                    borderRadius: BorderRadius.circular(6),
-                  ),
-                  child: Text(
-                    badgeText,
-                    style: TextStyle(
-                      color: badgeTextColor,
-                      fontSize: 10.5,
-                      fontWeight: FontWeight.w700,
-                      letterSpacing: 0.3,
-                    ),
-                  ),
-                ),
-                const SizedBox(width: 8),
-                const Icon(LucideIcons.chevronRight, color: Color(0xFFA1A1AA), size: 16),
-              ],
-            ),
+  Widget _buildAppleHeader() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: const [
+        Text(
+          'THURSDAY, OCT 1',
+          style: TextStyle(
+            color: Color(0xFF8E8E93),
+            fontSize: 11.5,
+            fontWeight: FontWeight.w700,
+            letterSpacing: 0.8,
           ),
         ),
-      ),
+        SizedBox(height: 2),
+        Text(
+          'Welcome, Annette',
+          style: TextStyle(
+            color: Color(0xFF1C1C1E),
+            fontSize: 26,
+            fontWeight: FontWeight.w800,
+            letterSpacing: -0.5,
+          ),
+        ),
+      ],
     );
   }
 
-  Widget _buildLinearTeamGroup({
-    required String title,
-    required IconData icon,
-    required List<String> items,
-  }) {
+  Widget _buildCampusSafetyHeroCard() {
     return Container(
-      padding: const EdgeInsets.all(14),
+      padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
-        color: const Color(0xFFFAFAFA),
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: const Color(0xFFE4E4E7), width: 1),
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(24),
+        border: Border.all(color: const Color(0xFFE5E5EA), width: 1.0),
+        boxShadow: const [
+          BoxShadow(
+            color: Color(0x06000000),
+            blurRadius: 18,
+            offset: Offset(0, 6),
+          ),
+          BoxShadow(
+            color: Color(0x02000000),
+            blurRadius: 4,
+            offset: Offset(0, 1),
+          ),
+        ],
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Row(
             children: [
-              Icon(icon, color: const Color(0xFF71717A), size: 16),
-              const SizedBox(width: 8),
-              Text(
-                title,
-                style: const TextStyle(
-                  color: Color(0xFF18181B),
-                  fontSize: 13.5,
-                  fontWeight: FontWeight.w700,
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFFE8F5E9),
+                        borderRadius: BorderRadius.circular(20),
+                        border: Border.all(color: const Color(0xFF34C759).withValues(alpha: 0.25)),
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Container(
+                            width: 6,
+                            height: 6,
+                            decoration: const BoxDecoration(
+                              color: Color(0xFF34C759),
+                              shape: BoxShape.circle,
+                            ),
+                          ),
+                          const SizedBox(width: 6),
+                          const Text(
+                            'CIVIC INTELLIGENCE',
+                            style: TextStyle(
+                              color: Color(0xFF2E7D32),
+                              fontSize: 10.5,
+                              fontWeight: FontWeight.w800,
+                              letterSpacing: 0.5,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(height: 10),
+                    const Text(
+                      'Public Safety Index',
+                      style: TextStyle(
+                        color: Color(0xFF1C1C1E),
+                        fontSize: 20,
+                        fontWeight: FontWeight.w800,
+                        letterSpacing: -0.3,
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    const Text(
+                      '12 Wards Monitored • All Clear',
+                      style: TextStyle(
+                        color: Color(0xFF8E8E93),
+                        fontSize: 12.5,
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(width: 12),
+              // Apple Activity Circular Arc Gauge
+              SizedBox(
+                width: 76,
+                height: 76,
+                child: CustomPaint(
+                  painter: const _SafetyScoreGaugePainter(progress: 0.94),
+                  child: const Center(
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Text(
+                          '94%',
+                          style: TextStyle(
+                            color: Color(0xFF1C1C1E),
+                            fontSize: 18,
+                            fontWeight: FontWeight.w900,
+                            letterSpacing: -0.5,
+                          ),
+                        ),
+                        Text(
+                          'SAFE',
+                          style: TextStyle(
+                            color: Color(0xFF34C759),
+                            fontSize: 8.5,
+                            fontWeight: FontWeight.w800,
+                            letterSpacing: 0.5,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
                 ),
               ),
             ],
           ),
-          const SizedBox(height: 8),
-          Padding(
-            padding: const EdgeInsets.only(left: 24),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: items.map((sub) {
-                return Padding(
-                  padding: const EdgeInsets.symmetric(vertical: 3),
-                  child: Row(
-                    children: [
-                      Container(
-                        width: 4,
-                        height: 4,
-                        decoration: const BoxDecoration(
-                          color: Color(0xFFA1A1AA),
-                          shape: BoxShape.circle,
-                        ),
-                      ),
-                      const SizedBox(width: 8),
-                      Text(
-                        sub,
-                        style: const TextStyle(color: Color(0xFF71717A), fontSize: 13),
-                      ),
-                    ],
+          const SizedBox(height: 14),
+          Container(height: 1, color: const Color(0xFFF2F2F7)),
+          const SizedBox(height: 12),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Row(
+                children: [
+                  Container(
+                    width: 7,
+                    height: 7,
+                    decoration: const BoxDecoration(
+                      color: Color(0xFF34C759),
+                      shape: BoxShape.circle,
+                    ),
                   ),
-                );
-              }).toList(),
-            ),
+                  const SizedBox(width: 8),
+                  const Text(
+                    'Live City Shield Active • 0 High Risk Alerts',
+                    style: TextStyle(
+                      color: Color(0xFF3A3A3C),
+                      fontSize: 12.5,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ],
+              ),
+              GestureDetector(
+                onTap: () {
+                  Navigator.of(context).push(
+                    MaterialPageRoute(builder: (context) => const MapScreen()),
+                  );
+                },
+                child: const Text(
+                  'Details ›',
+                  style: TextStyle(
+                    color: Color(0xFF007AFF),
+                    fontSize: 12.5,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+              ),
+            ],
           ),
         ],
       ),
     );
   }
+
+  Widget _buildQuickActionsRow() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const Text(
+          'QUICK ACTIONS',
+          style: TextStyle(
+            color: Color(0xFF8E8E93),
+            fontSize: 11.5,
+            fontWeight: FontWeight.w700,
+            letterSpacing: 0.8,
+          ),
+        ),
+        const SizedBox(height: 10),
+        SingleChildScrollView(
+          scrollDirection: Axis.horizontal,
+          physics: const BouncingScrollPhysics(),
+          child: Row(
+            children: [
+              _buildActionPill(
+                icon: LucideIcons.alertTriangle,
+                label: 'Report Issue',
+                isActive: true,
+                onTap: () {
+                  Navigator.of(context).push(
+                    MaterialPageRoute(builder: (context) => const InteractiveMapScreen()),
+                  );
+                },
+              ),
+              const SizedBox(width: 8),
+              _buildActionPill(
+                icon: LucideIcons.users,
+                label: 'Missing Person',
+                isActive: false,
+                iconColor: const Color(0xFF007AFF),
+                iconBg: const Color(0xFFEFF6FF),
+                onTap: () {
+                  Navigator.of(context).push(
+                    MaterialPageRoute(builder: (context) => const WelcomeSelectionScreen()),
+                  );
+                },
+              ),
+              const SizedBox(width: 8),
+              _buildActionPill(
+                icon: LucideIcons.shield,
+                label: 'Women Safety',
+                isActive: false,
+                iconColor: const Color(0xFFFF9500),
+                iconBg: const Color(0xFFFFF7ED),
+                onTap: () {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(
+                      content: Text('Women Safety Guardian: Inactivity session ready.'),
+                      duration: Duration(seconds: 2),
+                      behavior: SnackBarBehavior.floating,
+                    ),
+                  );
+                },
+              ),
+              const SizedBox(width: 8),
+              _buildActionPill(
+                icon: LucideIcons.flame,
+                label: 'Risk Heatmaps',
+                isActive: false,
+                iconColor: const Color(0xFF0D9488),
+                iconBg: const Color(0xFFF0FDFA),
+                onTap: () {
+                  Navigator.of(context).push(
+                    MaterialPageRoute(builder: (context) => const MapScreen()),
+                  );
+                },
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildActionPill({
+    required IconData icon,
+    required String label,
+    required bool isActive,
+    Color? iconColor,
+    Color? iconBg,
+    required VoidCallback onTap,
+  }) {
+    if (isActive) {
+      return Material(
+        color: Colors.transparent,
+        child: InkWell(
+          borderRadius: BorderRadius.circular(24),
+          onTap: onTap,
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 9),
+            decoration: BoxDecoration(
+              color: const Color(0xFFE8F5E9),
+              borderRadius: BorderRadius.circular(24),
+              border: Border.all(color: const Color(0xFF34C759).withValues(alpha: 0.3)),
+              boxShadow: const [
+                BoxShadow(color: Color(0x06000000), blurRadius: 4, offset: Offset(0, 1)),
+              ],
+            ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Container(
+                  width: 20,
+                  height: 20,
+                  decoration: const BoxDecoration(
+                    color: Color(0xFF34C759),
+                    shape: BoxShape.circle,
+                  ),
+                  child: const Icon(LucideIcons.check, size: 12, color: Colors.white),
+                ),
+                const SizedBox(width: 8),
+                Text(
+                  label,
+                  style: const TextStyle(
+                    color: Color(0xFF2E7D32),
+                    fontSize: 13,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      );
+    }
+
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        borderRadius: BorderRadius.circular(24),
+        onTap: onTap,
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 9),
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(24),
+            border: Border.all(color: const Color(0xFFE5E5EA), width: 1.0),
+            boxShadow: const [
+              BoxShadow(color: Color(0x04000000), blurRadius: 4, offset: Offset(0, 1)),
+            ],
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(
+                width: 22,
+                height: 22,
+                decoration: BoxDecoration(
+                  color: iconBg ?? const Color(0xFFF2F2F7),
+                  shape: BoxShape.circle,
+                ),
+                child: Icon(icon, size: 12, color: iconColor ?? const Color(0xFF1C1C1E)),
+              ),
+              const SizedBox(width: 8),
+              Text(
+                label,
+                style: const TextStyle(
+                  color: Color(0xFF1C1C1E),
+                  fontSize: 13,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildBentoGrid() {
+    return GridView.count(
+      crossAxisCount: 2,
+      crossAxisSpacing: 14,
+      mainAxisSpacing: 14,
+      shrinkWrap: true,
+      physics: const NeverScrollableScrollPhysics(),
+      childAspectRatio: 1.0,
+      children: [
+        // Tile 1: Live Civic Map
+        _buildBentoCard(
+          eyebrow: 'CIVIC MAP',
+          title: 'Live Incidents',
+          subtitle: 'Active geo-tagged reports',
+          icon: LucideIcons.compass,
+          iconColor: const Color(0xFF007AFF),
+          iconBg: const Color(0xFFEFF6FF),
+          actionLabel: 'Open Map ›',
+          actionColor: const Color(0xFF007AFF),
+          onTap: () {
+            Navigator.of(context).push(
+              MaterialPageRoute(builder: (context) => const InteractiveMapScreen()),
+            );
+          },
+          content: Row(
+            crossAxisAlignment: CrossAxisAlignment.end,
+            children: [
+              _buildMiniBar(height: 8, color: const Color(0xFFE5E5EA)),
+              const SizedBox(width: 3),
+              _buildMiniBar(height: 14, color: const Color(0xFFE5E5EA)),
+              const SizedBox(width: 3),
+              _buildMiniBar(height: 20, color: const Color(0xFF007AFF)),
+              const SizedBox(width: 3),
+              _buildMiniBar(height: 22, color: const Color(0xFF007AFF)),
+              const SizedBox(width: 3),
+              _buildMiniBar(height: 11, color: const Color(0xFFE5E5EA)),
+            ],
+          ),
+        ),
+
+        // Tile 2: Emergency Risk Heatmaps
+        _buildBentoCard(
+          eyebrow: 'HEATMAPS',
+          title: 'Risk Zones',
+          subtitle: 'Accident • Flood • Crime',
+          icon: LucideIcons.flame,
+          iconColor: const Color(0xFFFF9500),
+          iconBg: const Color(0xFFFFF7ED),
+          actionLabel: 'View Zones ›',
+          actionColor: const Color(0xFFFF9500),
+          onTap: () {
+            Navigator.of(context).push(
+              MaterialPageRoute(builder: (context) => const MapScreen()),
+            );
+          },
+          content: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
+            decoration: BoxDecoration(
+              color: const Color(0xFFE8F5E9),
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: const Color(0xFF34C759).withValues(alpha: 0.25)),
+            ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Container(
+                  width: 6,
+                  height: 6,
+                  decoration: const BoxDecoration(
+                    color: Color(0xFF34C759),
+                    shape: BoxShape.circle,
+                  ),
+                ),
+                const SizedBox(width: 5),
+                const Text(
+                  'Low Risk (0.02)',
+                  style: TextStyle(
+                    color: Color(0xFF2E7D32),
+                    fontSize: 10.5,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+
+        // Tile 3: Municipal Kanban Triage
+        _buildBentoCard(
+          eyebrow: 'KANBAN',
+          title: 'Triage Board',
+          subtitle: '4 In Progress • 2 Done',
+          icon: LucideIcons.layoutGrid,
+          iconColor: const Color(0xFFAF52DE),
+          iconBg: const Color(0xFFF5F3FF),
+          actionLabel: 'Open Board ›',
+          actionColor: const Color(0xFFAF52DE),
+          onTap: () {
+            Navigator.of(context).push(
+              MaterialPageRoute(builder: (context) => const KanbanBoardScreen()),
+            );
+          },
+          content: ClipRRect(
+            borderRadius: BorderRadius.circular(3),
+            child: Row(
+              children: [
+                Expanded(
+                  flex: 65,
+                  child: Container(height: 5, color: const Color(0xFFAF52DE)),
+                ),
+                Expanded(
+                  flex: 35,
+                  child: Container(height: 5, color: const Color(0xFF34C759)),
+                ),
+              ],
+            ),
+          ),
+        ),
+
+        // Tile 4: Missing Persons & AI Face Match
+        _buildBentoCard(
+          eyebrow: 'AI MATCH',
+          title: 'Missing Persons',
+          subtitle: 'Face Match Active',
+          icon: LucideIcons.users,
+          iconColor: const Color(0xFF34C759),
+          iconBg: const Color(0xFFE8F5E9),
+          actionLabel: 'View Cases ›',
+          actionColor: const Color(0xFF34C759),
+          onTap: () {
+            Navigator.of(context).push(
+              MaterialPageRoute(builder: (context) => const WelcomeSelectionScreen()),
+            );
+          },
+          content: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
+            decoration: BoxDecoration(
+              color: const Color(0xFFEFF6FF),
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: const Color(0xFF007AFF).withValues(alpha: 0.25)),
+            ),
+            child: const Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(LucideIcons.badgeCheck, size: 12, color: Color(0xFF007AFF)),
+                SizedBox(width: 4),
+                Text(
+                  '1 Match Verified',
+                  style: TextStyle(
+                    color: Color(0xFF007AFF),
+                    fontSize: 10.5,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildMiniBar({required double height, required Color color}) {
+    return Container(
+      width: 6,
+      height: height,
+      decoration: BoxDecoration(
+        color: color,
+        borderRadius: BorderRadius.circular(3),
+      ),
+    );
+  }
+
+  Widget _buildBentoCard({
+    required String eyebrow,
+    required String title,
+    required String subtitle,
+    required IconData icon,
+    required Color iconColor,
+    required Color iconBg,
+    required String actionLabel,
+    required Color actionColor,
+    required VoidCallback onTap,
+    required Widget content,
+  }) {
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        borderRadius: BorderRadius.circular(22),
+        onTap: onTap,
+        child: Container(
+          padding: const EdgeInsets.all(14),
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(22),
+            border: Border.all(color: const Color(0xFFE5E5EA), width: 1.0),
+            boxShadow: const [
+              BoxShadow(
+                color: Color(0x04000000),
+                blurRadius: 10,
+                offset: Offset(0, 3),
+              ),
+            ],
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Container(
+                    width: 28,
+                    height: 28,
+                    decoration: BoxDecoration(
+                      color: iconBg,
+                      shape: BoxShape.circle,
+                    ),
+                    child: Icon(icon, size: 14, color: iconColor),
+                  ),
+                  Text(
+                    eyebrow,
+                    style: const TextStyle(
+                      color: Color(0xFF8E8E93),
+                      fontSize: 9.5,
+                      fontWeight: FontWeight.w700,
+                      letterSpacing: 0.6,
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 6),
+              Text(
+                title,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: const TextStyle(
+                  color: Color(0xFF1C1C1E),
+                  fontSize: 15,
+                  fontWeight: FontWeight.w800,
+                  letterSpacing: -0.2,
+                ),
+              ),
+              const SizedBox(height: 2),
+              Text(
+                subtitle,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: const TextStyle(
+                  color: Color(0xFF8E8E93),
+                  fontSize: 10.5,
+                  fontWeight: FontWeight.w500,
+                ),
+              ),
+              const SizedBox(height: 6),
+              SizedBox(
+                height: 24,
+                child: Align(
+                  alignment: Alignment.centerLeft,
+                  child: content,
+                ),
+              ),
+              const Spacer(),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Text(
+                    actionLabel,
+                    style: TextStyle(
+                      color: actionColor,
+                      fontSize: 11.5,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildDispatchFeedCard() {
+    return Container(
+      padding: const EdgeInsets.all(18),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(22),
+        border: Border.all(color: const Color(0xFFE5E5EA), width: 1.0),
+        boxShadow: const [
+          BoxShadow(
+            color: Color(0x04000000),
+            blurRadius: 12,
+            offset: Offset(0, 4),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              const Text(
+                'MUNICIPAL & CIVIC FEED',
+                style: TextStyle(
+                  color: Color(0xFF8E8E93),
+                  fontSize: 11,
+                  fontWeight: FontWeight.w700,
+                  letterSpacing: 0.6,
+                ),
+              ),
+              Row(
+                children: [
+                  Container(
+                    width: 6,
+                    height: 6,
+                    decoration: const BoxDecoration(
+                      color: Color(0xFF34C759),
+                      shape: BoxShape.circle,
+                    ),
+                  ),
+                  const SizedBox(width: 6),
+                  const Text(
+                    'Live',
+                    style: TextStyle(
+                      color: Color(0xFF34C759),
+                      fontSize: 12,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
+          const SizedBox(height: 14),
+          _buildFeedItem(
+            color: const Color(0xFF007AFF),
+            title: 'Water Main Rupture • North Ward',
+            time: '14m ago',
+            status: '12 community confirmations • In Progress by Water Works',
+          ),
+          Container(
+            height: 1,
+            color: const Color(0xFFF2F2F7),
+            margin: const EdgeInsets.symmetric(vertical: 10),
+          ),
+          _buildFeedItem(
+            color: const Color(0xFF34C759),
+            title: 'Sanitation: Waste Clearance Done',
+            time: '38m ago',
+            status: 'Resolved & verified by 9 citizen votes',
+          ),
+          Container(
+            height: 1,
+            color: const Color(0xFFF2F2F7),
+            margin: const EdgeInsets.symmetric(vertical: 10),
+          ),
+          _buildFeedItem(
+            color: const Color(0xFFAF52DE),
+            title: 'Missing Person Case #104 Verified',
+            time: '1h ago',
+            status: 'Admin-confirmed AI candidate match',
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildFeedItem({
+    required Color color,
+    required String title,
+    required String time,
+    required String status,
+  }) {
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Container(
+          margin: const EdgeInsets.only(top: 4),
+          width: 8,
+          height: 8,
+          decoration: BoxDecoration(color: color, shape: BoxShape.circle),
+        ),
+        const SizedBox(width: 10),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Text(
+                    title,
+                    style: const TextStyle(
+                      color: Color(0xFF1C1C1E),
+                      fontSize: 13.5,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                  Text(
+                    time,
+                    style: const TextStyle(
+                      color: Color(0xFF8E8E93),
+                      fontSize: 11,
+                      fontWeight: FontWeight.w500,
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 2),
+              Text(
+                status,
+                style: const TextStyle(
+                  color: Color(0xFF8E8E93),
+                  fontSize: 12,
+                  fontWeight: FontWeight.w500,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+
 
   // ==========================================
   // TAB 1: INBOX / YOUR REPORTS (Linear Style)
@@ -1462,3 +1980,54 @@ class _SpecularGlassBorderPainter extends CustomPainter {
     return oldDelegate.radius != radius || oldDelegate.strokeWidth != strokeWidth;
   }
 }
+
+/// Apple Activity Style Circular Gauge Painter for Safety Score
+class _SafetyScoreGaugePainter extends CustomPainter {
+  final double progress; // e.g. 0.94
+
+  const _SafetyScoreGaugePainter({required this.progress});
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final center = Offset(size.width / 2, size.height / 2);
+    final radius = (size.width - 8) / 2;
+
+    // Background track
+    final trackPaint = Paint()
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 7.0
+      ..strokeCap = StrokeCap.round
+      ..color = const Color(0xFFF2F2F7);
+
+    canvas.drawCircle(center, radius, trackPaint);
+
+    // Progress arc with emerald gradient
+    final sweepAngle = 2 * math.pi * progress;
+    final progressPaint = Paint()
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 7.0
+      ..strokeCap = StrokeCap.round
+      ..shader = const SweepGradient(
+        startAngle: 0.0,
+        endAngle: 2 * math.pi,
+        colors: [
+          Color(0xFF34C759), // Apple System Emerald
+          Color(0xFF30B0C7), // Apple System Teal
+        ],
+      ).createShader(Rect.fromCircle(center: center, radius: radius));
+
+    canvas.drawArc(
+      Rect.fromCircle(center: center, radius: radius),
+      -math.pi / 2,
+      sweepAngle,
+      false,
+      progressPaint,
+    );
+  }
+
+  @override
+  bool shouldRepaint(covariant _SafetyScoreGaugePainter oldDelegate) {
+    return oldDelegate.progress != progress;
+  }
+}
+

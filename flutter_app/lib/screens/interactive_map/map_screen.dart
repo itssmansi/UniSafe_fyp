@@ -786,28 +786,17 @@ class _InteractiveMapScreenState extends ConsumerState<InteractiveMapScreen> {
                             mainAxisSize: MainAxisSize.min,
                             children: [
                               const SizedBox(height: 10),
-                              ClipRRect(
-                                borderRadius: BorderRadius.circular(36),
-                                child: BackdropFilter(
-                                  filter: ImageFilter.blur(sigmaX: 16, sigmaY: 16),
-                                  child: Container(
-                                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 10),
-                                    decoration: BoxDecoration(
-                                      color: Colors.white.withValues(alpha: 0.88),
-                                      borderRadius: BorderRadius.circular(36),
-                                      border: Border.all(color: Colors.white.withValues(alpha: 0.6), width: 1.0),
-                                      boxShadow: [
-                                        BoxShadow(color: Colors.black.withValues(alpha: 0.08), blurRadius: 30, offset: const Offset(0, 10)),
-                                      ],
-                                    ),
-                                    child: Row(
-                                      children: [
-                                        for (var category in IssueCategory.values)
-                                          Expanded(
-                                            child: _buildCategoryButton(category),
-                                          ),
-                                      ],
-                                    ),
+                              _AppleLiquidGlassContainer(
+                                radius: 36,
+                                child: Padding(
+                                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 10),
+                                  child: Row(
+                                    children: [
+                                      for (var category in IssueCategory.values)
+                                        Expanded(
+                                          child: _buildCategoryButton(category),
+                                        ),
+                                    ],
                                   ),
                                 ),
                               ),
@@ -927,14 +916,14 @@ class _InteractiveMapScreenState extends ConsumerState<InteractiveMapScreen> {
                             child: Column(
                               mainAxisSize: MainAxisSize.min,
                               children: [
-                                _MapActionButton(
+                                _MapLiquidGlassActionButton(
                                   icon: LucideIcons.layers,
                                   tooltip: 'Map Style',
                                   onTap: _showMapStyleDialog,
                                   size: 54,
                                 ),
                                 const SizedBox(height: 12),
-                                _MapActionButton(
+                                _MapLiquidGlassActionButton(
                                   icon: LucideIcons.filter,
                                   tooltip: 'Filter Issues',
                                   onTap: _showFilterDialog,
@@ -2935,7 +2924,6 @@ class _CircularCancelButtonState extends State<CircularCancelButton>
         builder: (context, _) {
           final double scale = _scaleAnimation.value;
           final double depth = _depthAnimation.value;
-          final double p = _controller.value;
 
           return Transform.scale(
             scale: scale,
@@ -2945,7 +2933,7 @@ class _CircularCancelButtonState extends State<CircularCancelButton>
                 width: widget.size,
                 height: widget.size,
                 decoration: BoxDecoration(
-                  color: Color.lerp(Colors.white, const Color(0xFFF1F5F9), p),
+                  color: Color.lerp(Colors.white, const Color(0xFFF1F5F9), _controller.value),
                   shape: BoxShape.circle,
                   border: Border.all(
                     color: const Color(0xFFE2E8F0),
@@ -2953,9 +2941,9 @@ class _CircularCancelButtonState extends State<CircularCancelButton>
                   ),
                   boxShadow: [
                     BoxShadow(
-                      color: Colors.black.withValues(alpha: 0.12 - (p * 0.04)),
-                      offset: Offset(0, 4.0 - (p * 2.5)),
-                      blurRadius: 10.0 - (p * 6.0),
+                      color: Colors.black.withValues(alpha: 0.12 - (_controller.value * 0.04)),
+                      offset: Offset(0, 4.0 - (_controller.value * 2.5)),
+                      blurRadius: 10.0 - (_controller.value * 6.0),
                     ),
                   ],
                 ),
@@ -2979,7 +2967,6 @@ class _MapActionButton extends StatefulWidget {
   final IconData icon;
   final VoidCallback? onTap;
   final String tooltip;
-  final bool hasBadge;
   final bool isLoading;
   final double size;
 
@@ -2987,7 +2974,6 @@ class _MapActionButton extends StatefulWidget {
     required this.icon,
     required this.onTap,
     required this.tooltip,
-    this.hasBadge = false,
     this.isLoading = false,
     this.size = 54.0,
   });
@@ -3219,22 +3205,143 @@ class _MapActionButtonState extends State<_MapActionButton>
                         ),
                       ),
 
-                      // 4. Active Notification Badge (for Filter button)
+                    ],
+                  ),
+                ),
+              ),
+            );
+          },
+        ),
+      ),
+    );
+  }
+}
+
+class _MapLiquidGlassActionButton extends StatefulWidget {
+  final IconData icon;
+  final VoidCallback? onTap;
+  final String tooltip;
+  final bool hasBadge;
+  final double size;
+
+  const _MapLiquidGlassActionButton({
+    required this.icon,
+    required this.onTap,
+    required this.tooltip,
+    this.hasBadge = false,
+    this.size = 54.0,
+  });
+
+  @override
+  State<_MapLiquidGlassActionButton> createState() => _MapLiquidGlassActionButtonState();
+}
+
+class _MapLiquidGlassActionButtonState extends State<_MapLiquidGlassActionButton>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _controller;
+  late final Animation<double> _scaleAnimation;
+  late final Animation<double> _depthAnimation;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 90),
+      reverseDuration: const Duration(milliseconds: 240),
+    );
+    _scaleAnimation = Tween<double>(begin: 1.0, end: 0.92).animate(
+      CurvedAnimation(
+        parent: _controller,
+        curve: Curves.easeOutQuad,
+        reverseCurve: Curves.easeOutBack,
+      ),
+    );
+    _depthAnimation = Tween<double>(begin: 0.0, end: 1.4).animate(
+      CurvedAnimation(
+        parent: _controller,
+        curve: Curves.easeOutQuad,
+        reverseCurve: Curves.easeOutBack,
+      ),
+    );
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  void _onTapDown(TapDownDetails _) {
+    _controller.forward();
+  }
+
+  void _onTapUp(TapUpDetails _) {
+    Future.delayed(const Duration(milliseconds: 70), () {
+      if (mounted) _controller.reverse();
+    });
+    widget.onTap?.call();
+  }
+
+  void _onTapCancel() {
+    _controller.reverse();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final double size = widget.size;
+    final double iconSize = size * 0.42;
+
+    return Tooltip(
+      message: widget.tooltip,
+      child: GestureDetector(
+        onTapDown: _onTapDown,
+        onTapUp: _onTapUp,
+        onTapCancel: _onTapCancel,
+        behavior: HitTestBehavior.opaque,
+        child: AnimatedBuilder(
+          animation: _controller,
+          builder: (context, _) {
+            final double scale = _scaleAnimation.value;
+            final double depth = _depthAnimation.value;
+
+            return Transform.scale(
+              scale: scale,
+              child: Transform.translate(
+                offset: Offset(0, depth),
+                child: SizedBox(
+                  width: size,
+                  height: size,
+                  child: Stack(
+                    clipBehavior: Clip.none,
+                    children: [
+                      Positioned.fill(
+                        child: _AppleLiquidGlassContainer(
+                          radius: size / 2.0,
+                          child: Center(
+                            child: Icon(
+                              widget.icon,
+                              color: const Color(0xFF1E293B),
+                              size: iconSize,
+                            ),
+                          ),
+                        ),
+                      ),
                       if (widget.hasBadge)
                         Positioned(
-                          top: 3,
-                          right: 3,
+                          top: 2,
+                          right: 2,
                           child: Container(
-                            width: 9,
-                            height: 9,
+                            width: 10,
+                            height: 10,
                             decoration: BoxDecoration(
                               color: const Color(0xFFEF4444),
                               shape: BoxShape.circle,
                               border: Border.all(color: Colors.white, width: 1.5),
                               boxShadow: [
                                 BoxShadow(
-                                  color: Colors.black.withValues(alpha: 0.15),
-                                  blurRadius: 2,
+                                  color: Colors.black.withValues(alpha: 0.20),
+                                  blurRadius: 3,
                                   offset: const Offset(0, 1),
                                 ),
                               ],
@@ -4362,14 +4469,257 @@ class _FluidMergeSearchBarState extends State<FluidMergeSearchBar>
           animation: _animation,
           builder: (context, _) {
             final t = _animation.value;
+
+            // 1. SPLIT STATE (Idle, t == 0):
+            // Discrete Apple Liquid Glass containers with native BoxShadow and ClipRRect
+            // for authentic frosted translucency, blurred map background, and specular rims.
+            if (t <= 0.001) {
+              return SizedBox(
+                width: totalWidth,
+                height: totalHeight,
+                child: Stack(
+                  clipBehavior: Clip.none,
+                  children: [
+                    // Back Button (50x50 Liquid Glass Circle)
+                    Positioned(
+                      left: 0,
+                      top: 0,
+                      width: 50,
+                      height: totalHeight,
+                      child: _AppleLiquidGlassContainer(
+                        radius: 25.0,
+                        child: Center(
+                          child: IconButton(
+                            padding: EdgeInsets.zero,
+                            constraints: const BoxConstraints(minWidth: 50, minHeight: 50),
+                            icon: Icon(
+                              LucideIcons.arrowLeft,
+                              color: Colors.grey.shade800,
+                              size: 22,
+                            ),
+                            tooltip: 'Back',
+                            onPressed: widget.onBack,
+                          ),
+                        ),
+                      ),
+                    ),
+
+                    // Search Bar (Liquid Glass Capsule)
+                    Positioned(
+                      left: 58.0,
+                      right: 0,
+                      top: 0,
+                      height: totalHeight,
+                      child: _AppleLiquidGlassContainer(
+                        radius: 25.0,
+                        child: Stack(
+                          children: [
+                            // Touch catcher for instant 1-tap focus anywhere on the pill
+                            Positioned.fill(
+                              child: GestureDetector(
+                                behavior: HitTestBehavior.translucent,
+                                onTap: () {
+                                  widget.focusNode.requestFocus();
+                                  SystemChannels.textInput.invokeMethod('TextInput.show');
+                                  if (!_animController.isCompleted) {
+                                    _animController.forward();
+                                  }
+                                },
+                              ),
+                            ),
+
+                            // Search Magnifying Glass Icon
+                            const Positioned(
+                              left: 14.0,
+                              top: 0,
+                              width: 26,
+                              height: totalHeight,
+                              child: IgnorePointer(
+                                child: Center(
+                                  child: Icon(
+                                    LucideIcons.search,
+                                    color: Color(0xFF334155),
+                                    size: 21,
+                                  ),
+                                ),
+                              ),
+                            ),
+
+                            // Centered Search Input Field
+                            Positioned(
+                              left: 48.0,
+                              right: 48.0,
+                              top: 0,
+                              height: totalHeight,
+                              child: Center(
+                                child: TextField(
+                                  focusNode: widget.focusNode,
+                                  controller: widget.controller,
+                                  onTap: () {
+                                    SystemChannels.textInput.invokeMethod('TextInput.show');
+                                    if (!_animController.isCompleted) {
+                                      _animController.forward();
+                                    }
+                                  },
+                                  onChanged: widget.onSearchChanged,
+                                  onSubmitted: widget.onSearchSubmitted,
+                                  textAlign: TextAlign.center,
+                                  textAlignVertical: const TextAlignVertical(y: -0.2),
+                                  style: const TextStyle(
+                                    fontSize: 15.0,
+                                    fontWeight: FontWeight.w600,
+                                    color: Color(0xFF0F172A),
+                                    letterSpacing: 0.6,
+                                    height: 1.0,
+                                    leadingDistribution: TextLeadingDistribution.even,
+                                  ),
+                                  decoration: const InputDecoration(
+                                    isDense: true,
+                                    hintText: 'SEARCH',
+                                    hintStyle: TextStyle(
+                                      color: Color(0xFF475569),
+                                      fontSize: 15.0,
+                                      fontWeight: FontWeight.w700,
+                                      letterSpacing: 1.2,
+                                      height: 1.0,
+                                      leadingDistribution: TextLeadingDistribution.even,
+                                    ),
+                                    border: InputBorder.none,
+                                    contentPadding: EdgeInsets.only(bottom: 3.5, left: 6.0, right: 6.0),
+                                  ),
+                                ),
+                              ),
+                            ),
+
+                            // Trailing Suffix (Progress Spinner or Clear Button)
+                            Positioned(
+                              right: 4,
+                              top: 0,
+                              width: 42,
+                              height: totalHeight,
+                              child: Center(
+                                child: widget.isSearching
+                                    ? const SizedBox(
+                                        width: 18,
+                                        height: 18,
+                                        child: CircularProgressIndicator(strokeWidth: 2.0),
+                                      )
+                                    : (widget.controller.text.isNotEmpty
+                                        ? IconButton(
+                                            padding: EdgeInsets.zero,
+                                            constraints: const BoxConstraints(minWidth: 36, minHeight: 50),
+                                            icon: Icon(LucideIcons.x, size: 19, color: Colors.grey.shade600),
+                                            onPressed: widget.onClearText,
+                                          )
+                                        : const SizedBox.shrink()),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              );
+            }
+
+            // 2. FULLY MERGED STATE (Active Search, t == 1):
+            if (t >= 0.999) {
+              return SizedBox(
+                width: totalWidth,
+                height: totalHeight,
+                child: _AppleLiquidGlassContainer(
+                  radius: 25.0,
+                  child: Stack(
+                    children: [
+                      // Back / Cancel Button on left
+                      Positioned(
+                        left: 0,
+                        top: 0,
+                        width: 50,
+                        height: totalHeight,
+                        child: Center(
+                          child: IconButton(
+                            padding: EdgeInsets.zero,
+                            constraints: const BoxConstraints(minWidth: 50, minHeight: 50),
+                            icon: Icon(
+                              LucideIcons.arrowLeft,
+                              color: Colors.grey.shade800,
+                              size: 22,
+                            ),
+                            tooltip: 'Close search',
+                            onPressed: widget.onCancelSearch,
+                          ),
+                        ),
+                      ),
+
+                      // Full width Search Input Field
+                      Positioned(
+                        left: 50.0,
+                        right: 48.0,
+                        top: 0,
+                        height: totalHeight,
+                        child: Center(
+                          child: TextField(
+                            focusNode: widget.focusNode,
+                            controller: widget.controller,
+                            onChanged: widget.onSearchChanged,
+                            onSubmitted: widget.onSearchSubmitted,
+                            textAlign: TextAlign.left,
+                            style: const TextStyle(
+                              fontSize: 15.0,
+                              fontWeight: FontWeight.w600,
+                              color: Color(0xFF1A202C),
+                              letterSpacing: 0.6,
+                            ),
+                            decoration: const InputDecoration(
+                              isDense: true,
+                              hintText: 'Search anywhere...',
+                              hintStyle: TextStyle(
+                                color: Color(0xFF94A3B8),
+                                fontSize: 15.0,
+                                fontWeight: FontWeight.w500,
+                              ),
+                              border: InputBorder.none,
+                              contentPadding: EdgeInsets.symmetric(horizontal: 8.0, vertical: 14.0),
+                            ),
+                          ),
+                        ),
+                      ),
+
+                      // Trailing Suffix
+                      Positioned(
+                        right: 4,
+                        top: 0,
+                        width: 42,
+                        height: totalHeight,
+                        child: Center(
+                          child: widget.isSearching
+                              ? const SizedBox(
+                                  width: 18,
+                                  height: 18,
+                                  child: CircularProgressIndicator(strokeWidth: 2.0),
+                                )
+                              : (widget.controller.text.isNotEmpty
+                                  ? IconButton(
+                                      padding: EdgeInsets.zero,
+                                      constraints: const BoxConstraints(minWidth: 36, minHeight: 50),
+                                      icon: Icon(LucideIcons.x, size: 19, color: Colors.grey.shade600),
+                                      onPressed: widget.onClearText,
+                                    )
+                                  : const SizedBox.shrink()),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              );
+            }
+
+            // 3. MORPH TRANSITION STATE (0.001 < t < 0.999):
             final isMerged = t > 0.5;
-
-            // Search field geometry:
-            // When t = 0 (Split): covers entire search pill starting at x=58
-            // When t = 1 (Merged): covers entire merged pill starting right after back button at x=50
-            final fieldLeft = 58.0 - 8.0 * t.clamp(0.0, 1.0);
-
-            // Search icon fades out and slides right as back button becomes leading
+            final textLeft = 58.0 + 50.0 * (1.0 - t).clamp(0.0, 1.0);
+            const textRight = 48.0;
             final searchIconOpacity = (1.0 - t * 2.8).clamp(0.0, 1.0);
             final searchIconSlide = 14.0 * t.clamp(0.0, 1.0);
 
@@ -4379,34 +4729,83 @@ class _FluidMergeSearchBarState extends State<FluidMergeSearchBar>
               child: Stack(
                 clipBehavior: Clip.none,
                 children: [
-                  // 1. Soft blurred drop shadow beneath the glass silhouette
+                  // Soft blurred drop shadow beneath the morphing silhouette
                   Positioned.fill(
                     child: CustomPaint(
                       painter: _FluidShadowPainter(progress: t),
                     ),
                   ),
 
-                  // 2. Hardware Acrylic Backdrop Blur & Frosted Glaze
+                  // Hardware Acrylic Backdrop Blur & Translucent Glass Glaze
                   Positioned.fill(
                     child: ClipPath(
                       clipper: _FluidHeaderClipper(progress: t),
                       child: BackdropFilter(
-                        filter: ImageFilter.blur(sigmaX: 18, sigmaY: 18),
+                        filter: ImageFilter.blur(sigmaX: 25, sigmaY: 25),
                         child: Container(
-                          color: Colors.white.withValues(alpha: 0.94),
+                          decoration: BoxDecoration(
+                            gradient: LinearGradient(
+                              begin: Alignment.topCenter,
+                              end: Alignment.bottomCenter,
+                              colors: [
+                                Colors.white.withValues(alpha: 0.38),
+                                Colors.white.withValues(alpha: 0.18),
+                              ],
+                            ),
+                          ),
                         ),
                       ),
                     ),
                   ),
 
-                  // 3. Crisp Frosted Border Specular Highlight
+                  // 3D Convex Liquid Sheen
+                  Positioned.fill(
+                    child: ClipPath(
+                      clipper: _FluidHeaderClipper(progress: t),
+                      child: ShaderMask(
+                        blendMode: BlendMode.dstIn,
+                        shaderCallback: (Rect bounds) {
+                          return RadialGradient(
+                            center: Alignment.center,
+                            radius: 0.95,
+                            colors: const [
+                              Colors.transparent,
+                              Colors.transparent,
+                              Color(0x59FFFFFF),
+                              Colors.white,
+                            ],
+                            stops: const [0.0, 0.40, 0.75, 1.0],
+                          ).createShader(bounds);
+                        },
+                        child: BackdropFilter(
+                          filter: ImageFilter.blur(sigmaX: 5.0, sigmaY: 5.0),
+                          child: Container(
+                            decoration: BoxDecoration(
+                              gradient: LinearGradient(
+                                begin: Alignment.topCenter,
+                                end: Alignment.bottomCenter,
+                                colors: [
+                                  Colors.white.withValues(alpha: 0.14),
+                                  Colors.white.withValues(alpha: 0.04),
+                                  Colors.white.withValues(alpha: 0.01),
+                                ],
+                                stops: const [0.0, 0.45, 1.0],
+                              ),
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+
+                  // Specular Highlight Rim
                   Positioned.fill(
                     child: CustomPaint(
                       painter: _FluidBorderPainter(progress: t),
                     ),
                   ),
 
-                  // 4. Back Arrow Button
+                  // Back Arrow Button
                   Positioned(
                     left: 0,
                     top: 0,
@@ -4436,14 +4835,40 @@ class _FluidMergeSearchBarState extends State<FluidMergeSearchBar>
                     ),
                   ),
 
-                  // 5. Search Magnifying Glass Icon (smoothly fades & slides, non-blocking)
+                  // Touch catcher
+                  Positioned(
+                    left: 50.0 + 8.0 * (1.0 - t).clamp(0.0, 1.0),
+                    right: 0,
+                    top: 0,
+                    bottom: 0,
+                    child: GestureDetector(
+                      behavior: HitTestBehavior.translucent,
+                      onTap: () {
+                        widget.focusNode.requestFocus();
+                        SystemChannels.textInput.invokeMethod('TextInput.show');
+                        if (!_animController.isCompleted) {
+                          _animController.forward();
+                        }
+                      },
+                    ),
+                  ),
+
+                  // Search Magnifying Glass Icon
                   if (searchIconOpacity > 0.01)
                     Positioned(
                       left: 58.0 + 12.0 + searchIconSlide,
                       top: 0,
                       width: 26,
                       height: totalHeight,
-                      child: IgnorePointer(
+                      child: GestureDetector(
+                        behavior: HitTestBehavior.opaque,
+                        onTap: () {
+                          widget.focusNode.requestFocus();
+                          SystemChannels.textInput.invokeMethod('TextInput.show');
+                          if (!_animController.isCompleted) {
+                            _animController.forward();
+                          }
+                        },
                         child: Opacity(
                           opacity: searchIconOpacity,
                           child: Transform.scale(
@@ -4460,50 +4885,53 @@ class _FluidMergeSearchBarState extends State<FluidMergeSearchBar>
                       ),
                     ),
 
-                  // 6. Interactive Search Input Field (Direct hit-target for instant 1-tap focus & keyboard)
+                  // Search Field
                   Positioned(
-                    left: fieldLeft,
-                    right: 0,
+                    left: textLeft,
+                    right: textRight,
                     top: 0,
-                    bottom: 0,
-                    child: TextField(
-                      focusNode: widget.focusNode,
-                      controller: widget.controller,
-                      onTap: () {
-                        if (!_animController.isCompleted) {
-                          _animController.forward();
-                        }
-                      },
-                      onChanged: widget.onSearchChanged,
-                      onSubmitted: widget.onSearchSubmitted,
-                      textAlign: TextAlign.center,
-                      textAlignVertical: TextAlignVertical.center,
-                      style: const TextStyle(
-                        fontSize: 15.0,
-                        fontWeight: FontWeight.w600,
-                        color: Color(0xFF1A202C),
-                        letterSpacing: 0.6,
-                        height: 1.0,
-                        leadingDistribution: TextLeadingDistribution.even,
-                      ),
-                      decoration: const InputDecoration(
-                        isDense: true,
-                        hintText: 'SEARCH',
-                        hintStyle: TextStyle(
-                          color: Color(0xFF94A3B8),
+                    height: totalHeight,
+                    child: Center(
+                      child: TextField(
+                        focusNode: widget.focusNode,
+                        controller: widget.controller,
+                        onTap: () {
+                          SystemChannels.textInput.invokeMethod('TextInput.show');
+                          if (!_animController.isCompleted) {
+                            _animController.forward();
+                          }
+                        },
+                        onChanged: widget.onSearchChanged,
+                        onSubmitted: widget.onSearchSubmitted,
+                        textAlign: TextAlign.center,
+                        textAlignVertical: const TextAlignVertical(y: -0.2),
+                        style: const TextStyle(
                           fontSize: 15.0,
                           fontWeight: FontWeight.w600,
-                          letterSpacing: 1.2,
+                          color: Color(0xFF1A202C),
+                          letterSpacing: 0.6,
                           height: 1.0,
                           leadingDistribution: TextLeadingDistribution.even,
                         ),
-                        border: InputBorder.none,
-                        contentPadding: EdgeInsets.only(top: 16.5, bottom: 18.5, left: 48.0, right: 48.0),
+                        decoration: const InputDecoration(
+                          isDense: true,
+                          hintText: 'SEARCH',
+                          hintStyle: TextStyle(
+                            color: Color(0xFF94A3B8),
+                            fontSize: 15.0,
+                            fontWeight: FontWeight.w600,
+                            letterSpacing: 1.2,
+                            height: 1.0,
+                            leadingDistribution: TextLeadingDistribution.even,
+                          ),
+                          border: InputBorder.none,
+                          contentPadding: EdgeInsets.only(bottom: 3.5, left: 6.0, right: 6.0),
+                        ),
                       ),
                     ),
                   ),
 
-                  // 7. Trailing Suffix (Progress Spinner or Clear Button)
+                  // Trailing Suffix
                   Positioned(
                     right: 4,
                     top: 0,
@@ -4660,12 +5088,22 @@ class _FluidShadowPainter extends CustomPainter {
   @override
   void paint(Canvas canvas, Size size) {
     final path = buildFluidHeaderPath(size.width, size.height, progress);
-    final shadowPaint = Paint()
+
+    // Apple Liquid Glass dual ambient elevation shadow
+    final shadow1 = Paint()
       ..color = Colors.black.withValues(alpha: 0.08)
-      ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 10);
+      ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 20);
     canvas.save();
-    canvas.translate(0, 3);
-    canvas.drawPath(path, shadowPaint);
+    canvas.translate(0, 6);
+    canvas.drawPath(path, shadow1);
+    canvas.restore();
+
+    final shadow2 = Paint()
+      ..color = Colors.black.withValues(alpha: 0.03)
+      ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 6);
+    canvas.save();
+    canvas.translate(0, 2);
+    canvas.drawPath(path, shadow2);
     canvas.restore();
   }
 
@@ -4683,16 +5121,188 @@ class _FluidBorderPainter extends CustomPainter {
   @override
   void paint(Canvas canvas, Size size) {
     final path = buildFluidHeaderPath(size.width, size.height, progress);
+    final rect = Offset.zero & size;
+
+    // Apple Liquid Glass 1.0px hairline specular gradient rim
     final borderPaint = Paint()
-      ..color = Colors.white.withValues(alpha: 0.95)
       ..style = PaintingStyle.stroke
-      ..strokeWidth = 1.2;
+      ..strokeWidth = 1.0
+      ..shader = const LinearGradient(
+        begin: Alignment.topCenter,
+        end: Alignment.bottomCenter,
+        colors: [
+          Color(0xD9FFFFFF), // 85% specular white glint at top curve
+          Color(0x40CBD5E1), // Delicate slate highlight transition
+          Color(0x2094A3B8), // Hairline definition on sides
+          Color(0x3564748B), // Subtle bottom rim shadow
+        ],
+        stops: [0.0, 0.30, 0.70, 1.0],
+      ).createShader(rect);
+
     canvas.drawPath(path, borderPaint);
   }
 
   @override
   bool shouldRepaint(covariant _FluidBorderPainter oldDelegate) {
     return oldDelegate.progress != progress;
+  }
+}
+
+/// Liquid Glass Specular Gradient Border Painter
+/// Renders a delicate 1.0px hairline stroke with a brilliant specular glint on top
+/// and subtle ambient shadow falloff at the bottom (Apple Liquid Glass).
+class _SpecularGlassBorderPainter extends CustomPainter {
+  final double radius;
+  final double strokeWidth;
+
+  const _SpecularGlassBorderPainter({
+    required this.radius,
+    this.strokeWidth = 1.0,
+  });
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final rect = Offset.zero & size;
+    final rrect = RRect.fromRectAndRadius(
+      rect.deflate(strokeWidth / 2.0),
+      Radius.circular(radius),
+    );
+
+    final paint = Paint()
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = strokeWidth
+      ..shader = const LinearGradient(
+        begin: Alignment.topCenter,
+        end: Alignment.bottomCenter,
+        colors: [
+          Color(0xD9FFFFFF), // 85% specular white glint at top curve
+          Color(0x40CBD5E1), // Delicate slate highlight transition
+          Color(0x2094A3B8), // Hairline definition on sides
+          Color(0x3564748B), // Subtle bottom rim shadow
+        ],
+        stops: [0.0, 0.30, 0.70, 1.0],
+      ).createShader(rect);
+
+    canvas.drawRRect(rrect, paint);
+  }
+
+  @override
+  bool shouldRepaint(covariant _SpecularGlassBorderPainter oldDelegate) {
+    return oldDelegate.radius != radius || oldDelegate.strokeWidth != strokeWidth;
+  }
+}
+
+/// Apple Liquid Glass Container
+/// Applies physical frosted glass optics: hardware acrylic backdrop blur (sigma 20),
+/// translucent gradient glaze (70% down to 50% opacity), 3D convex liquid meniscus sheen,
+/// hairline specular gradient rim, and dual ambient drop shadows.
+class _AppleLiquidGlassContainer extends StatelessWidget {
+  final double radius;
+  final Widget child;
+
+  const _AppleLiquidGlassContainer({
+    required this.radius,
+    required this.child,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(radius),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.10),
+            blurRadius: 18,
+            offset: const Offset(0, 5),
+            spreadRadius: 0,
+          ),
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.04),
+            blurRadius: 6,
+            offset: const Offset(0, 1.5),
+            spreadRadius: 0,
+          ),
+        ],
+      ),
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(radius),
+        child: Stack(
+          children: [
+            // 1. Hardware Acrylic Backdrop Blur & Translucent Glass Glaze
+            Positioned.fill(
+              child: BackdropFilter(
+                filter: ImageFilter.blur(sigmaX: 25, sigmaY: 25),
+                child: Container(
+                  decoration: BoxDecoration(
+                    gradient: LinearGradient(
+                      begin: Alignment.topCenter,
+                      end: Alignment.bottomCenter,
+                      colors: [
+                        Colors.white.withValues(alpha: 0.38),
+                        Colors.white.withValues(alpha: 0.18),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+            ),
+
+            // 2. 3D Convex Meniscus Lens Liquid Sheen (Apple Liquid Glass)
+            Positioned.fill(
+              child: ShaderMask(
+                blendMode: BlendMode.dstIn,
+                shaderCallback: (Rect bounds) {
+                  return RadialGradient(
+                    center: Alignment.center,
+                    radius: 0.95,
+                    colors: const [
+                      Colors.transparent,
+                      Colors.transparent,
+                      Color(0x59FFFFFF),
+                      Colors.white,
+                    ],
+                    stops: const [0.0, 0.40, 0.75, 1.0],
+                  ).createShader(bounds);
+                },
+                child: BackdropFilter(
+                  filter: ImageFilter.blur(sigmaX: 5.0, sigmaY: 5.0),
+                  child: Container(
+                    decoration: BoxDecoration(
+                      gradient: LinearGradient(
+                        begin: Alignment.topCenter,
+                        end: Alignment.bottomCenter,
+                        colors: [
+                          Colors.white.withValues(alpha: 0.14),
+                          Colors.white.withValues(alpha: 0.04),
+                          Colors.white.withValues(alpha: 0.01),
+                        ],
+                        stops: const [0.0, 0.45, 1.0],
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            ),
+
+            // 3. Liquid Specular Gradient Rim (1.0px hairline with top light glint)
+            Positioned.fill(
+              child: IgnorePointer(
+                child: CustomPaint(
+                  painter: _SpecularGlassBorderPainter(
+                    radius: radius,
+                    strokeWidth: 1.0,
+                  ),
+                ),
+              ),
+            ),
+
+            // 4. Content
+            child,
+          ],
+        ),
+      ),
+    );
   }
 }
 
