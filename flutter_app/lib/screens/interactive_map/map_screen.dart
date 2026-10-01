@@ -1,9 +1,9 @@
 import 'dart:async';
 import 'dart:convert';
-import 'dart:typed_data';
 import 'dart:ui';
 import 'dart:math' as math;
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:latlong2/latlong.dart' hide Path;
 import 'package:lucide_icons_flutter/lucide_icons.dart';
@@ -4364,11 +4364,10 @@ class _FluidMergeSearchBarState extends State<FluidMergeSearchBar>
             final t = _animation.value;
             final isMerged = t > 0.5;
 
-            // Geometry transitions:
-            // When t = 0 (Split): text area begins at x=108 with ample breathing room from search icon
-            // When t = 1 (Merged): text area begins at x=58 with ample breathing room from back button
-            final textLeft = 58.0 + 50.0 * (1.0 - t).clamp(0.0, 1.0);
-            const textRight = 48.0;
+            // Search field geometry:
+            // When t = 0 (Split): covers entire search pill starting at x=58
+            // When t = 1 (Merged): covers entire merged pill starting right after back button at x=50
+            final fieldLeft = 58.0 - 8.0 * t.clamp(0.0, 1.0);
 
             // Search icon fades out and slides right as back button becomes leading
             final searchIconOpacity = (1.0 - t * 2.8).clamp(0.0, 1.0);
@@ -4394,7 +4393,7 @@ class _FluidMergeSearchBarState extends State<FluidMergeSearchBar>
                       child: BackdropFilter(
                         filter: ImageFilter.blur(sigmaX: 18, sigmaY: 18),
                         child: Container(
-                          color: Colors.white.withValues(alpha: 0.80),
+                          color: Colors.white.withValues(alpha: 0.94),
                         ),
                       ),
                     ),
@@ -4437,16 +4436,14 @@ class _FluidMergeSearchBarState extends State<FluidMergeSearchBar>
                     ),
                   ),
 
-                  // 5. Search Magnifying Glass Icon (smoothly fades & slides)
+                  // 5. Search Magnifying Glass Icon (smoothly fades & slides, non-blocking)
                   if (searchIconOpacity > 0.01)
                     Positioned(
                       left: 58.0 + 12.0 + searchIconSlide,
                       top: 0,
                       width: 26,
                       height: totalHeight,
-                      child: GestureDetector(
-                        behavior: HitTestBehavior.opaque,
-                        onTap: () => widget.focusNode.requestFocus(),
+                      child: IgnorePointer(
                         child: Opacity(
                           opacity: searchIconOpacity,
                           child: Transform.scale(
@@ -4463,42 +4460,45 @@ class _FluidMergeSearchBarState extends State<FluidMergeSearchBar>
                       ),
                     ),
 
-                  // 6. Interactive Search Input Field (Centered & Larger)
+                  // 6. Interactive Search Input Field (Direct hit-target for instant 1-tap focus & keyboard)
                   Positioned(
-                    left: textLeft,
-                    right: textRight,
+                    left: fieldLeft,
+                    right: 0,
                     top: 0,
-                    height: totalHeight,
-                    child: Center(
-                      child: TextField(
-                        focusNode: widget.focusNode,
-                        controller: widget.controller,
-                        onChanged: widget.onSearchChanged,
-                        onSubmitted: widget.onSearchSubmitted,
-                        textAlign: TextAlign.center,
-                        textAlignVertical: const TextAlignVertical(y: -0.2),
-                        style: const TextStyle(
+                    bottom: 0,
+                    child: TextField(
+                      focusNode: widget.focusNode,
+                      controller: widget.controller,
+                      onTap: () {
+                        if (!_animController.isCompleted) {
+                          _animController.forward();
+                        }
+                      },
+                      onChanged: widget.onSearchChanged,
+                      onSubmitted: widget.onSearchSubmitted,
+                      textAlign: TextAlign.center,
+                      textAlignVertical: TextAlignVertical.center,
+                      style: const TextStyle(
+                        fontSize: 15.0,
+                        fontWeight: FontWeight.w600,
+                        color: Color(0xFF1A202C),
+                        letterSpacing: 0.6,
+                        height: 1.0,
+                        leadingDistribution: TextLeadingDistribution.even,
+                      ),
+                      decoration: const InputDecoration(
+                        isDense: true,
+                        hintText: 'SEARCH',
+                        hintStyle: TextStyle(
+                          color: Color(0xFF94A3B8),
                           fontSize: 15.0,
                           fontWeight: FontWeight.w600,
-                          color: Color(0xFF1A202C),
-                          letterSpacing: 0.6,
+                          letterSpacing: 1.2,
                           height: 1.0,
                           leadingDistribution: TextLeadingDistribution.even,
                         ),
-                        decoration: const InputDecoration(
-                          isDense: true,
-                          hintText: 'SEARCH',
-                          hintStyle: TextStyle(
-                            color: Color(0xFF94A3B8),
-                            fontSize: 15.0,
-                            fontWeight: FontWeight.w600,
-                            letterSpacing: 1.2,
-                            height: 1.0,
-                            leadingDistribution: TextLeadingDistribution.even,
-                          ),
-                          border: InputBorder.none,
-                          contentPadding: EdgeInsets.only(bottom: 3.5, left: 6.0, right: 6.0),
-                        ),
+                        border: InputBorder.none,
+                        contentPadding: EdgeInsets.only(top: 16.5, bottom: 18.5, left: 48.0, right: 48.0),
                       ),
                     ),
                   ),
@@ -4684,7 +4684,7 @@ class _FluidBorderPainter extends CustomPainter {
   void paint(Canvas canvas, Size size) {
     final path = buildFluidHeaderPath(size.width, size.height, progress);
     final borderPaint = Paint()
-      ..color = Colors.white.withValues(alpha: 0.85)
+      ..color = Colors.white.withValues(alpha: 0.95)
       ..style = PaintingStyle.stroke
       ..strokeWidth = 1.2;
     canvas.drawPath(path, borderPaint);
