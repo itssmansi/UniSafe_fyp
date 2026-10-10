@@ -13,7 +13,7 @@ import 'screens/SignupLogin_ui/forget_password_screen.dart';
 
 export 'screens/home_page.dart';
 
-void main() {
+void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   PaintingBinding.instance.imageCache.maximumSize = 3000;
   PaintingBinding.instance.imageCache.maximumSizeBytes = 300 * 1024 * 1024;

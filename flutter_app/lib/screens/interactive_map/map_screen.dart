@@ -1,7 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:ui';
-import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_map/flutter_map.dart';
@@ -15,6 +14,7 @@ import 'package:flutter_map_marker_cluster/flutter_map_marker_cluster.dart';
 import 'report_model.dart';
 import 'report_provider.dart';
 import '../home_page.dart';
+
 /// Centralized visual identity for each issue category.
 class CategoryStyle {
   final IconData icon;
@@ -786,18 +786,16 @@ class _InteractiveMapScreenState extends ConsumerState<InteractiveMapScreen> {
                             mainAxisSize: MainAxisSize.min,
                             children: [
                               const SizedBox(height: 10),
-                              _AppleLiquidGlassContainer(
-                                radius: 36,
-                                child: Padding(
-                                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 10),
-                                  child: Row(
-                                    children: [
-                                      for (var category in IssueCategory.values)
-                                        Expanded(
-                                          child: _buildCategoryButton(category),
-                                        ),
-                                    ],
-                                  ),
+                              LiquidGlassContainer(
+                                borderRadius: 36,
+                                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 10),
+                                child: Row(
+                                  children: [
+                                    for (var category in IssueCategory.values)
+                                      Expanded(
+                                        child: _buildCategoryButton(category),
+                                      ),
+                                  ],
                                 ),
                               ),
                               if (_showCategoryHint && _suggestions.isEmpty)
@@ -3217,6 +3215,230 @@ class _MapActionButtonState extends State<_MapActionButton>
   }
 }
 
+/// Colin McKee's Liquid Glass optical container with calibrated parameters:
+/// - Frost: 24.0 (hardware ImageFilter.blur)
+/// - Refraction: 0.28 & Curve: 0.25 (convex meniscus caustic sheen)
+/// - Edge: 0.03 (directional specular hairline rim glint, light angle -0.15, -0.15)
+/// - Elevation: Dual ambient floating drop shadows
+class LiquidGlassContainer extends StatelessWidget {
+  final Widget child;
+  final double? width;
+  final double? height;
+  final double borderRadius;
+  final bool isCircle;
+  final EdgeInsetsGeometry? padding;
+  final EdgeInsetsGeometry? margin;
+  final VoidCallback? onTap;
+  final double frostBlur;
+  final Color tintColor;
+  final List<BoxShadow>? shadows;
+
+  const LiquidGlassContainer({
+    super.key,
+    required this.child,
+    this.width,
+    this.height,
+    this.borderRadius = 25.0,
+    this.isCircle = false,
+    this.padding,
+    this.margin,
+    this.onTap,
+    this.frostBlur = 24.0,
+    this.tintColor = const Color(0x33FFFFFF),
+    this.shadows,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final effectiveBorderRadius = isCircle ? null : BorderRadius.circular(borderRadius);
+
+    final defaultShadows = shadows ?? [
+      BoxShadow(
+        color: Colors.black.withValues(alpha: 0.10),
+        blurRadius: 20,
+        offset: const Offset(0, 8),
+        spreadRadius: 0,
+      ),
+      BoxShadow(
+        color: Colors.black.withValues(alpha: 0.04),
+        blurRadius: 6,
+        offset: const Offset(0, 2),
+        spreadRadius: 0,
+      ),
+    ];
+
+    Widget content = child;
+    if (padding != null) {
+      content = Padding(padding: padding!, child: content);
+    }
+
+    final glassBody = Stack(
+      fit: StackFit.passthrough,
+      children: [
+        // 1. Frost Blur (Hardware BackdropFilter)
+        Positioned.fill(
+          child: BackdropFilter(
+            filter: ImageFilter.blur(sigmaX: frostBlur, sigmaY: frostBlur),
+            child: const SizedBox.expand(),
+          ),
+        ),
+
+        // 2. Translucent Glass Acrylic Tint
+        Positioned.fill(
+          child: Container(
+            decoration: BoxDecoration(
+              shape: isCircle ? BoxShape.circle : BoxShape.rectangle,
+              borderRadius: effectiveBorderRadius,
+              gradient: LinearGradient(
+                begin: Alignment.topCenter,
+                end: Alignment.bottomCenter,
+                colors: [
+                  Colors.white.withValues(alpha: 0.42),
+                  Colors.white.withValues(alpha: 0.22),
+                  Colors.white.withValues(alpha: 0.14),
+                ],
+                stops: const [0.0, 0.45, 1.0],
+              ),
+            ),
+          ),
+        ),
+
+        // 3. Convex Lens Refraction (0.28) & Curvature (0.25) Meniscus Caustic
+        // Radial gradient centered at top-left (-0.25, -0.25) creating lens gathering light
+        Positioned.fill(
+          child: Container(
+            decoration: BoxDecoration(
+              shape: isCircle ? BoxShape.circle : BoxShape.rectangle,
+              borderRadius: effectiveBorderRadius,
+              gradient: RadialGradient(
+                center: const Alignment(-0.25, -0.25),
+                radius: 0.95,
+                colors: [
+                  Colors.white.withValues(alpha: 0.30),
+                  Colors.white.withValues(alpha: 0.08),
+                  Colors.transparent,
+                ],
+                stops: const [0.0, 0.50, 1.0],
+              ),
+            ),
+          ),
+        ),
+
+        // 4. Directional Specular Edge Glint (Edge: 0.03, light angle -0.15, -0.15)
+        Positioned.fill(
+          child: IgnorePointer(
+            child: CustomPaint(
+              painter: _LiquidGlassBorderPainter(
+                borderRadius: borderRadius,
+                isCircle: isCircle,
+              ),
+            ),
+          ),
+        ),
+
+        // 5. Child content
+        content,
+      ],
+    );
+
+    Widget clipped = isCircle
+        ? ClipOval(child: glassBody)
+        : ClipRRect(
+            borderRadius: effectiveBorderRadius!,
+            child: glassBody,
+          );
+
+    Widget container = Container(
+      width: width,
+      height: height,
+      margin: margin,
+      decoration: BoxDecoration(
+        shape: isCircle ? BoxShape.circle : BoxShape.rectangle,
+        borderRadius: effectiveBorderRadius,
+        boxShadow: defaultShadows,
+      ),
+      child: clipped,
+    );
+
+    if (onTap != null) {
+      return GestureDetector(
+        onTap: onTap,
+        behavior: HitTestBehavior.opaque,
+        child: container,
+      );
+    }
+
+    return container;
+  }
+}
+
+class _LiquidGlassBorderPainter extends CustomPainter {
+  final double borderRadius;
+  final bool isCircle;
+
+  const _LiquidGlassBorderPainter({
+    required this.borderRadius,
+    required this.isCircle,
+  });
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final rect = Offset.zero & size;
+    final rrect = isCircle
+        ? null
+        : RRect.fromRectAndRadius(rect, Radius.circular(borderRadius));
+
+    // Outer Specular Hairline Rim (1.2px)
+    // Aligned to light coming from top-left (-0.15, -0.15)
+    final outerPaint = Paint()
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 1.2
+      ..shader = const LinearGradient(
+        begin: Alignment(-0.6, -0.6),
+        end: Alignment(0.6, 0.6),
+        colors: [
+          Color(0xF5FFFFFF), // Crisp pure white specular glint on top-left
+          Color(0x75FFFFFF), // Transition highlight
+          Color(0x25FFFFFF), // Subtle hairline on sides
+          Color(0x60FFFFFF), // Bottom-right ambient rim catch
+        ],
+        stops: [0.0, 0.35, 0.70, 1.0],
+      ).createShader(rect);
+
+    if (isCircle) {
+      canvas.drawOval(rect.deflate(0.6), outerPaint);
+    } else {
+      canvas.drawRRect(rrect!.deflate(0.6), outerPaint);
+    }
+
+    // Inner Caustic Meniscus Inset Stroke (0.8px, inset by 1.4px)
+    final innerPaint = Paint()
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 0.8
+      ..shader = const LinearGradient(
+        begin: Alignment.topLeft,
+        end: Alignment.bottomRight,
+        colors: [
+          Color(0x45FFFFFF),
+          Color(0x12FFFFFF),
+          Colors.transparent,
+        ],
+        stops: [0.0, 0.40, 1.0],
+      ).createShader(rect);
+
+    if (isCircle) {
+      canvas.drawOval(rect.deflate(1.4), innerPaint);
+    } else {
+      canvas.drawRRect(rrect!.deflate(1.4), innerPaint);
+    }
+  }
+
+  @override
+  bool shouldRepaint(covariant _LiquidGlassBorderPainter oldDelegate) {
+    return oldDelegate.borderRadius != borderRadius || oldDelegate.isCircle != isCircle;
+  }
+}
+
 class _MapLiquidGlassActionButton extends StatefulWidget {
   final IconData icon;
   final VoidCallback? onTap;
@@ -3236,124 +3458,65 @@ class _MapLiquidGlassActionButton extends StatefulWidget {
   State<_MapLiquidGlassActionButton> createState() => _MapLiquidGlassActionButtonState();
 }
 
-class _MapLiquidGlassActionButtonState extends State<_MapLiquidGlassActionButton>
-    with SingleTickerProviderStateMixin {
-  late final AnimationController _controller;
-  late final Animation<double> _scaleAnimation;
-  late final Animation<double> _depthAnimation;
-
-  @override
-  void initState() {
-    super.initState();
-    _controller = AnimationController(
-      vsync: this,
-      duration: const Duration(milliseconds: 90),
-      reverseDuration: const Duration(milliseconds: 240),
-    );
-    _scaleAnimation = Tween<double>(begin: 1.0, end: 0.92).animate(
-      CurvedAnimation(
-        parent: _controller,
-        curve: Curves.easeOutQuad,
-        reverseCurve: Curves.easeOutBack,
-      ),
-    );
-    _depthAnimation = Tween<double>(begin: 0.0, end: 1.4).animate(
-      CurvedAnimation(
-        parent: _controller,
-        curve: Curves.easeOutQuad,
-        reverseCurve: Curves.easeOutBack,
-      ),
-    );
-  }
-
-  @override
-  void dispose() {
-    _controller.dispose();
-    super.dispose();
-  }
-
-  void _onTapDown(TapDownDetails _) {
-    _controller.forward();
-  }
-
-  void _onTapUp(TapUpDetails _) {
-    Future.delayed(const Duration(milliseconds: 70), () {
-      if (mounted) _controller.reverse();
-    });
-    widget.onTap?.call();
-  }
-
-  void _onTapCancel() {
-    _controller.reverse();
-  }
+class _MapLiquidGlassActionButtonState extends State<_MapLiquidGlassActionButton> {
+  bool _isPressed = false;
 
   @override
   Widget build(BuildContext context) {
-    final double size = widget.size;
-    final double iconSize = size * 0.42;
-
     return Tooltip(
       message: widget.tooltip,
       child: GestureDetector(
-        onTapDown: _onTapDown,
-        onTapUp: _onTapUp,
-        onTapCancel: _onTapCancel,
-        behavior: HitTestBehavior.opaque,
-        child: AnimatedBuilder(
-          animation: _controller,
-          builder: (context, _) {
-            final double scale = _scaleAnimation.value;
-            final double depth = _depthAnimation.value;
-
-            return Transform.scale(
-              scale: scale,
-              child: Transform.translate(
-                offset: Offset(0, depth),
-                child: SizedBox(
-                  width: size,
-                  height: size,
-                  child: Stack(
-                    clipBehavior: Clip.none,
-                    children: [
-                      Positioned.fill(
-                        child: _AppleLiquidGlassContainer(
-                          radius: size / 2.0,
-                          child: Center(
-                            child: Icon(
-                              widget.icon,
-                              color: const Color(0xFF1E293B),
-                              size: iconSize,
-                            ),
-                          ),
-                        ),
-                      ),
-                      if (widget.hasBadge)
-                        Positioned(
-                          top: 2,
-                          right: 2,
-                          child: Container(
-                            width: 10,
-                            height: 10,
-                            decoration: BoxDecoration(
-                              color: const Color(0xFFEF4444),
-                              shape: BoxShape.circle,
-                              border: Border.all(color: Colors.white, width: 1.5),
-                              boxShadow: [
-                                BoxShadow(
-                                  color: Colors.black.withValues(alpha: 0.20),
-                                  blurRadius: 3,
-                                  offset: const Offset(0, 1),
-                                ),
-                              ],
-                            ),
-                          ),
-                        ),
-                    ],
+        onTapDown: (_) => setState(() => _isPressed = true),
+        onTapUp: (_) {
+          setState(() => _isPressed = false);
+          widget.onTap?.call();
+        },
+        onTapCancel: () => setState(() => _isPressed = false),
+        child: AnimatedScale(
+          scale: _isPressed ? 0.93 : 1.0,
+          duration: const Duration(milliseconds: 140),
+          curve: Curves.easeOutCubic,
+          child: Stack(
+            clipBehavior: Clip.none,
+            children: [
+              LiquidGlassContainer(
+                isCircle: true,
+                width: widget.size,
+                height: widget.size,
+                frostBlur: 20.0,
+                child: Center(
+                  child: Icon(
+                    widget.icon,
+                    color: const Color(0xFF1E293B),
+                    size: widget.size * 0.42,
                   ),
                 ),
               ),
-            );
-          },
+              if (widget.hasBadge)
+                Positioned(
+                  top: 2,
+                  right: 2,
+                  child: IgnorePointer(
+                    child: Container(
+                      width: 10,
+                      height: 10,
+                      decoration: BoxDecoration(
+                        color: const Color(0xFFEF4444),
+                        shape: BoxShape.circle,
+                        border: Border.all(color: Colors.white, width: 1.5),
+                        boxShadow: [
+                          BoxShadow(
+                            color: Colors.black.withValues(alpha: 0.20),
+                            blurRadius: 3,
+                            offset: const Offset(0, 1),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+            ],
+          ),
         ),
       ),
     );
@@ -4420,14 +4583,14 @@ class _FluidMergeSearchBarState extends State<FluidMergeSearchBar>
     super.initState();
     _animController = AnimationController(
       vsync: this,
-      duration: const Duration(milliseconds: 360),
-      reverseDuration: const Duration(milliseconds: 400),
+      duration: const Duration(milliseconds: 380),
+      reverseDuration: const Duration(milliseconds: 380),
     );
 
     _animation = CurvedAnimation(
       parent: _animController,
-      curve: Curves.easeOutCubic,
-      reverseCurve: Curves.easeOutBack,
+      curve: Curves.easeInOutCubic,
+      reverseCurve: Curves.easeInOutCubic,
     );
 
     if (widget.focusNode.hasFocus) {
@@ -4469,259 +4632,16 @@ class _FluidMergeSearchBarState extends State<FluidMergeSearchBar>
           animation: _animation,
           builder: (context, _) {
             final t = _animation.value;
-
-            // 1. SPLIT STATE (Idle, t == 0):
-            // Discrete Apple Liquid Glass containers with native BoxShadow and ClipRRect
-            // for authentic frosted translucency, blurred map background, and specular rims.
-            if (t <= 0.001) {
-              return SizedBox(
-                width: totalWidth,
-                height: totalHeight,
-                child: Stack(
-                  clipBehavior: Clip.none,
-                  children: [
-                    // Back Button (50x50 Liquid Glass Circle)
-                    Positioned(
-                      left: 0,
-                      top: 0,
-                      width: 50,
-                      height: totalHeight,
-                      child: _AppleLiquidGlassContainer(
-                        radius: 25.0,
-                        child: Center(
-                          child: IconButton(
-                            padding: EdgeInsets.zero,
-                            constraints: const BoxConstraints(minWidth: 50, minHeight: 50),
-                            icon: Icon(
-                              LucideIcons.arrowLeft,
-                              color: Colors.grey.shade800,
-                              size: 22,
-                            ),
-                            tooltip: 'Back',
-                            onPressed: widget.onBack,
-                          ),
-                        ),
-                      ),
-                    ),
-
-                    // Search Bar (Liquid Glass Capsule)
-                    Positioned(
-                      left: 58.0,
-                      right: 0,
-                      top: 0,
-                      height: totalHeight,
-                      child: _AppleLiquidGlassContainer(
-                        radius: 25.0,
-                        child: Stack(
-                          children: [
-                            // Touch catcher for instant 1-tap focus anywhere on the pill
-                            Positioned.fill(
-                              child: GestureDetector(
-                                behavior: HitTestBehavior.translucent,
-                                onTap: () {
-                                  widget.focusNode.requestFocus();
-                                  SystemChannels.textInput.invokeMethod('TextInput.show');
-                                  if (!_animController.isCompleted) {
-                                    _animController.forward();
-                                  }
-                                },
-                              ),
-                            ),
-
-                            // Search Magnifying Glass Icon
-                            const Positioned(
-                              left: 14.0,
-                              top: 0,
-                              width: 26,
-                              height: totalHeight,
-                              child: IgnorePointer(
-                                child: Center(
-                                  child: Icon(
-                                    LucideIcons.search,
-                                    color: Color(0xFF334155),
-                                    size: 21,
-                                  ),
-                                ),
-                              ),
-                            ),
-
-                            // Centered Search Input Field
-                            Positioned(
-                              left: 48.0,
-                              right: 48.0,
-                              top: 0,
-                              height: totalHeight,
-                              child: Center(
-                                child: TextField(
-                                  focusNode: widget.focusNode,
-                                  controller: widget.controller,
-                                  onTap: () {
-                                    SystemChannels.textInput.invokeMethod('TextInput.show');
-                                    if (!_animController.isCompleted) {
-                                      _animController.forward();
-                                    }
-                                  },
-                                  onChanged: widget.onSearchChanged,
-                                  onSubmitted: widget.onSearchSubmitted,
-                                  textAlign: TextAlign.center,
-                                  textAlignVertical: const TextAlignVertical(y: -0.2),
-                                  style: const TextStyle(
-                                    fontSize: 15.0,
-                                    fontWeight: FontWeight.w600,
-                                    color: Color(0xFF0F172A),
-                                    letterSpacing: 0.6,
-                                    height: 1.0,
-                                    leadingDistribution: TextLeadingDistribution.even,
-                                  ),
-                                  decoration: const InputDecoration(
-                                    isDense: true,
-                                    hintText: 'SEARCH',
-                                    hintStyle: TextStyle(
-                                      color: Color(0xFF475569),
-                                      fontSize: 15.0,
-                                      fontWeight: FontWeight.w700,
-                                      letterSpacing: 1.2,
-                                      height: 1.0,
-                                      leadingDistribution: TextLeadingDistribution.even,
-                                    ),
-                                    border: InputBorder.none,
-                                    contentPadding: EdgeInsets.only(bottom: 3.5, left: 6.0, right: 6.0),
-                                  ),
-                                ),
-                              ),
-                            ),
-
-                            // Trailing Suffix (Progress Spinner or Clear Button)
-                            Positioned(
-                              right: 4,
-                              top: 0,
-                              width: 42,
-                              height: totalHeight,
-                              child: Center(
-                                child: widget.isSearching
-                                    ? const SizedBox(
-                                        width: 18,
-                                        height: 18,
-                                        child: CircularProgressIndicator(strokeWidth: 2.0),
-                                      )
-                                    : (widget.controller.text.isNotEmpty
-                                        ? IconButton(
-                                            padding: EdgeInsets.zero,
-                                            constraints: const BoxConstraints(minWidth: 36, minHeight: 50),
-                                            icon: Icon(LucideIcons.x, size: 19, color: Colors.grey.shade600),
-                                            onPressed: widget.onClearText,
-                                          )
-                                        : const SizedBox.shrink()),
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-              );
-            }
-
-            // 2. FULLY MERGED STATE (Active Search, t == 1):
-            if (t >= 0.999) {
-              return SizedBox(
-                width: totalWidth,
-                height: totalHeight,
-                child: _AppleLiquidGlassContainer(
-                  radius: 25.0,
-                  child: Stack(
-                    children: [
-                      // Back / Cancel Button on left
-                      Positioned(
-                        left: 0,
-                        top: 0,
-                        width: 50,
-                        height: totalHeight,
-                        child: Center(
-                          child: IconButton(
-                            padding: EdgeInsets.zero,
-                            constraints: const BoxConstraints(minWidth: 50, minHeight: 50),
-                            icon: Icon(
-                              LucideIcons.arrowLeft,
-                              color: Colors.grey.shade800,
-                              size: 22,
-                            ),
-                            tooltip: 'Close search',
-                            onPressed: widget.onCancelSearch,
-                          ),
-                        ),
-                      ),
-
-                      // Full width Search Input Field
-                      Positioned(
-                        left: 50.0,
-                        right: 48.0,
-                        top: 0,
-                        height: totalHeight,
-                        child: Center(
-                          child: TextField(
-                            focusNode: widget.focusNode,
-                            controller: widget.controller,
-                            onChanged: widget.onSearchChanged,
-                            onSubmitted: widget.onSearchSubmitted,
-                            textAlign: TextAlign.left,
-                            style: const TextStyle(
-                              fontSize: 15.0,
-                              fontWeight: FontWeight.w600,
-                              color: Color(0xFF1A202C),
-                              letterSpacing: 0.6,
-                            ),
-                            decoration: const InputDecoration(
-                              isDense: true,
-                              hintText: 'Search anywhere...',
-                              hintStyle: TextStyle(
-                                color: Color(0xFF94A3B8),
-                                fontSize: 15.0,
-                                fontWeight: FontWeight.w500,
-                              ),
-                              border: InputBorder.none,
-                              contentPadding: EdgeInsets.symmetric(horizontal: 8.0, vertical: 14.0),
-                            ),
-                          ),
-                        ),
-                      ),
-
-                      // Trailing Suffix
-                      Positioned(
-                        right: 4,
-                        top: 0,
-                        width: 42,
-                        height: totalHeight,
-                        child: Center(
-                          child: widget.isSearching
-                              ? const SizedBox(
-                                  width: 18,
-                                  height: 18,
-                                  child: CircularProgressIndicator(strokeWidth: 2.0),
-                                )
-                              : (widget.controller.text.isNotEmpty
-                                  ? IconButton(
-                                      padding: EdgeInsets.zero,
-                                      constraints: const BoxConstraints(minWidth: 36, minHeight: 50),
-                                      icon: Icon(LucideIcons.x, size: 19, color: Colors.grey.shade600),
-                                      onPressed: widget.onClearText,
-                                    )
-                                  : const SizedBox.shrink()),
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              );
-            }
-
-            // 3. MORPH TRANSITION STATE (0.001 < t < 0.999):
             final isMerged = t > 0.5;
-            final textLeft = 58.0 + 50.0 * (1.0 - t).clamp(0.0, 1.0);
+
+            // Compute exact geometric path once per frame for all painters and clippers
+            final headerPath = buildFluidHeaderPath(totalWidth, totalHeight, t);
+
+            // Smooth animated positioning
+            final searchIconOpacity = (1.0 - t * 2.5).clamp(0.0, 1.0);
+            final centerLeft = (totalWidth + 58.0) / 2.0 - 32.0;
+            final textLeft = lerpDouble(centerLeft, 54.0, t)!;
             const textRight = 48.0;
-            final searchIconOpacity = (1.0 - t * 2.8).clamp(0.0, 1.0);
-            final searchIconSlide = 14.0 * t.clamp(0.0, 1.0);
 
             return SizedBox(
               width: totalWidth,
@@ -4729,28 +4649,30 @@ class _FluidMergeSearchBarState extends State<FluidMergeSearchBar>
               child: Stack(
                 clipBehavior: Clip.none,
                 children: [
-                  // Soft blurred drop shadow beneath the morphing silhouette
+                  // 1. Dual Soft Floating Shadows beneath the fluid glass shape
                   Positioned.fill(
                     child: CustomPaint(
-                      painter: _FluidShadowPainter(progress: t),
+                      painter: _FluidShadowPainter(path: headerPath),
                     ),
                   ),
 
-                  // Hardware Acrylic Backdrop Blur & Translucent Glass Glaze
+                  // 2. Hardware Backdrop Blur & Translucent Glass Tint
                   Positioned.fill(
                     child: ClipPath(
-                      clipper: _FluidHeaderClipper(progress: t),
+                      clipper: _FluidHeaderClipper(path: headerPath),
                       child: BackdropFilter(
-                        filter: ImageFilter.blur(sigmaX: 25, sigmaY: 25),
+                        filter: ImageFilter.blur(sigmaX: 24.0, sigmaY: 24.0),
                         child: Container(
                           decoration: BoxDecoration(
                             gradient: LinearGradient(
                               begin: Alignment.topCenter,
                               end: Alignment.bottomCenter,
                               colors: [
-                                Colors.white.withValues(alpha: 0.38),
-                                Colors.white.withValues(alpha: 0.18),
+                                Colors.white.withValues(alpha: 0.42),
+                                Colors.white.withValues(alpha: 0.22),
+                                Colors.white.withValues(alpha: 0.14),
                               ],
+                              stops: const [0.0, 0.45, 1.0],
                             ),
                           ),
                         ),
@@ -4758,63 +4680,43 @@ class _FluidMergeSearchBarState extends State<FluidMergeSearchBar>
                     ),
                   ),
 
-                  // 3D Convex Liquid Sheen
+                  // 3. Convex Lens Refraction (0.28) & Curvature (0.25) Sheen
                   Positioned.fill(
                     child: ClipPath(
-                      clipper: _FluidHeaderClipper(progress: t),
-                      child: ShaderMask(
-                        blendMode: BlendMode.dstIn,
-                        shaderCallback: (Rect bounds) {
-                          return RadialGradient(
-                            center: Alignment.center,
+                      clipper: _FluidHeaderClipper(path: headerPath),
+                      child: Container(
+                        decoration: BoxDecoration(
+                          gradient: RadialGradient(
+                            center: const Alignment(-0.25, -0.25),
                             radius: 0.95,
-                            colors: const [
+                            colors: [
+                              Colors.white.withValues(alpha: 0.30),
+                              Colors.white.withValues(alpha: 0.08),
                               Colors.transparent,
-                              Colors.transparent,
-                              Color(0x59FFFFFF),
-                              Colors.white,
                             ],
-                            stops: const [0.0, 0.40, 0.75, 1.0],
-                          ).createShader(bounds);
-                        },
-                        child: BackdropFilter(
-                          filter: ImageFilter.blur(sigmaX: 5.0, sigmaY: 5.0),
-                          child: Container(
-                            decoration: BoxDecoration(
-                              gradient: LinearGradient(
-                                begin: Alignment.topCenter,
-                                end: Alignment.bottomCenter,
-                                colors: [
-                                  Colors.white.withValues(alpha: 0.14),
-                                  Colors.white.withValues(alpha: 0.04),
-                                  Colors.white.withValues(alpha: 0.01),
-                                ],
-                                stops: const [0.0, 0.45, 1.0],
-                              ),
-                            ),
+                            stops: const [0.0, 0.50, 1.0],
                           ),
                         ),
                       ),
                     ),
                   ),
 
-                  // Specular Highlight Rim
+                  // 4. Directional Specular Edge Glint (Edge: 0.03, light angle -0.15, -0.15)
                   Positioned.fill(
-                    child: CustomPaint(
-                      painter: _FluidBorderPainter(progress: t),
+                    child: IgnorePointer(
+                      child: CustomPaint(
+                        painter: _FluidBorderPainter(path: headerPath),
+                      ),
                     ),
                   ),
 
-                  // Back Arrow Button
+                  // 5. Back / Cancel Arrow Button
                   Positioned(
                     left: 0,
                     top: 0,
                     width: 50,
                     height: totalHeight,
-                    child: Material(
-                      color: Colors.transparent,
-                      shape: const CircleBorder(),
-                      clipBehavior: Clip.antiAlias,
+                    child: Center(
                       child: IconButton(
                         padding: EdgeInsets.zero,
                         constraints: const BoxConstraints(minWidth: 50, minHeight: 50),
@@ -4835,57 +4737,48 @@ class _FluidMergeSearchBarState extends State<FluidMergeSearchBar>
                     ),
                   ),
 
-                  // Touch catcher
+                  // 6. Touch catcher for instant focus when tapping search
                   Positioned(
-                    left: 50.0 + 8.0 * (1.0 - t).clamp(0.0, 1.0),
-                    right: 0,
+                    left: 54.0,
+                    right: 48.0,
                     top: 0,
                     bottom: 0,
                     child: GestureDetector(
                       behavior: HitTestBehavior.translucent,
                       onTap: () {
-                        widget.focusNode.requestFocus();
-                        SystemChannels.textInput.invokeMethod('TextInput.show');
-                        if (!_animController.isCompleted) {
-                          _animController.forward();
-                        }
-                      },
-                    ),
-                  ),
-
-                  // Search Magnifying Glass Icon
-                  if (searchIconOpacity > 0.01)
-                    Positioned(
-                      left: 58.0 + 12.0 + searchIconSlide,
-                      top: 0,
-                      width: 26,
-                      height: totalHeight,
-                      child: GestureDetector(
-                        behavior: HitTestBehavior.opaque,
-                        onTap: () {
+                        if (!widget.focusNode.hasFocus) {
                           widget.focusNode.requestFocus();
                           SystemChannels.textInput.invokeMethod('TextInput.show');
                           if (!_animController.isCompleted) {
                             _animController.forward();
                           }
-                        },
+                        }
+                      },
+                    ),
+                  ),
+
+                  // 7. Search Magnifying Glass Icon (fades out smoothly on focus)
+                  if (searchIconOpacity > 0.01)
+                    Positioned(
+                      left: 70.0,
+                      top: 0,
+                      width: 24,
+                      height: totalHeight,
+                      child: IgnorePointer(
                         child: Opacity(
                           opacity: searchIconOpacity,
-                          child: Transform.scale(
-                            scale: (1.0 - t * 0.35).clamp(0.0, 1.0),
-                            child: const Center(
-                              child: Icon(
-                                LucideIcons.search,
-                                color: Color(0xFF64748B),
-                                size: 21,
-                              ),
+                          child: const Center(
+                            child: Icon(
+                              LucideIcons.search,
+                              color: Color(0xFF334155),
+                              size: 20,
                             ),
                           ),
                         ),
                       ),
                     ),
 
-                  // Search Field
+                  // 8. Search Input Field (Always "SEARCH", consistent typography)
                   Positioned(
                     left: textLeft,
                     right: textRight,
@@ -4903,12 +4796,12 @@ class _FluidMergeSearchBarState extends State<FluidMergeSearchBar>
                         },
                         onChanged: widget.onSearchChanged,
                         onSubmitted: widget.onSearchSubmitted,
-                        textAlign: TextAlign.center,
+                        textAlign: TextAlign.left,
                         textAlignVertical: const TextAlignVertical(y: -0.2),
                         style: const TextStyle(
                           fontSize: 15.0,
                           fontWeight: FontWeight.w600,
-                          color: Color(0xFF1A202C),
+                          color: Color(0xFF0F172A),
                           letterSpacing: 0.6,
                           height: 1.0,
                           leadingDistribution: TextLeadingDistribution.even,
@@ -4917,21 +4810,21 @@ class _FluidMergeSearchBarState extends State<FluidMergeSearchBar>
                           isDense: true,
                           hintText: 'SEARCH',
                           hintStyle: TextStyle(
-                            color: Color(0xFF94A3B8),
+                            color: Color(0xFF475569),
                             fontSize: 15.0,
-                            fontWeight: FontWeight.w600,
+                            fontWeight: FontWeight.w700,
                             letterSpacing: 1.2,
                             height: 1.0,
                             leadingDistribution: TextLeadingDistribution.even,
                           ),
                           border: InputBorder.none,
-                          contentPadding: EdgeInsets.only(bottom: 3.5, left: 6.0, right: 6.0),
+                          contentPadding: EdgeInsets.only(bottom: 3.5),
                         ),
                       ),
                     ),
                   ),
 
-                  // Trailing Suffix
+                  // 9. Trailing Suffix (Progress Spinner or Clear Button)
                   Positioned(
                     right: 4,
                     top: 0,
@@ -4964,143 +4857,55 @@ class _FluidMergeSearchBarState extends State<FluidMergeSearchBar>
   }
 }
 
-/// Builds the morphing geometric path between the circular button and search pill.
+/// Builds the mathematically continuous geometric path between the circular button and search pill.
+/// Uses native Boolean path union for 100% butter-smooth, continuous liquid coalescing.
 Path buildFluidHeaderPath(double width, double height, double v) {
-  final path = Path();
-  final clampedV = v.clamp(0.0, 1.0);
-  final r = height / 2; // 25.0
+  const r = 25.0;
+  final pillLeft = 58.0 * (1.0 - v.clamp(0.0, 1.0));
 
-  if (clampedV <= 0.08) {
-    // Split State: Independent circle droplet and search capsule
-    final bounceOffset = 6.0 * (v < 0.0 ? v : 0.0);
-    final circleCenterX = r + bounceOffset;
+  final circlePath = Path()
+    ..addOval(const Rect.fromLTWH(0, 0, 50, 50));
 
-    // Circle (50x50)
-    path.addOval(Rect.fromCircle(
-      center: Offset(circleCenterX, r),
-      radius: r,
-    ));
-
-    // Search bar capsule retracting to x=58
-    final pillLeft = 58.0 - 8.0 * (clampedV / 0.08);
-    path.addRRect(RRect.fromRectAndRadius(
+  final pillPath = Path()
+    ..addRRect(RRect.fromRectAndRadius(
       Rect.fromLTWH(pillLeft, 0, width - pillLeft, height),
-      Radius.circular(r),
+      const Radius.circular(r),
     ));
-    return path;
-  }
 
-  // Merging State: Liquid neck bridges the two shapes
-  final u = ((clampedV - 0.08) / 0.92).clamp(0.0, 1.0);
-
-  if (u >= 0.999) {
-    // 100% Fully Merged Continuous Capsule
-    path.addRRect(RRect.fromRectAndRadius(
-      Rect.fromLTWH(0, 0, width, height),
-      Radius.circular(r),
-    ));
-    return path;
-  }
-
-  final leftCapCenter = r;
-  final rightCapCenter = width - r;
-
-  // Fluid neck waist physics
-  final waistX = 54.0 - 4.0 * u;
-  final halfNeckWidth = 14.0 * (1.0 - u);
-  final dipDepth = r * (1.0 - u);
-  final yTopWaist = dipDepth;
-  final yBottomWaist = height - dipDepth;
-
-  final waistLeft = (waistX - halfNeckWidth).clamp(leftCapCenter, rightCapCenter);
-  final waistRight = (waistX + halfNeckWidth).clamp(leftCapCenter, rightCapCenter);
-
-  // 1. Move to bottom-left where left semicircle starts
-  path.moveTo(leftCapCenter, height);
-
-  // 2. Left semicircle cap: clockwise from (r, height) around (r, r) to (r, 0)
-  path.arcTo(
-    Rect.fromCircle(center: Offset(leftCapCenter, r), radius: r),
-    math.pi / 2,
-    math.pi,
-    false,
-  );
-
-  // 3. Top edge to the neck waist
-  path.lineTo(waistLeft, 0);
-
-  // 4. Top waist liquid dip (smooth cubic bezier)
-  path.cubicTo(
-    waistLeft + halfNeckWidth * 0.45, yTopWaist,
-    waistRight - halfNeckWidth * 0.45, yTopWaist,
-    waistRight, 0,
-  );
-
-  // 5. Top edge to right cap
-  path.lineTo(rightCapCenter, 0);
-
-  // 6. Right semicircle cap: clockwise from (width - r, 0) around (width - r, r) to (width - r, height)
-  path.arcTo(
-    Rect.fromCircle(center: Offset(rightCapCenter, r), radius: r),
-    -math.pi / 2,
-    math.pi,
-    false,
-  );
-
-  // 7. Bottom edge to neck waist
-  path.lineTo(waistRight, height);
-
-  // 8. Bottom waist liquid dip (smooth cubic bezier)
-  path.cubicTo(
-    waistRight - halfNeckWidth * 0.45, yBottomWaist,
-    waistLeft + halfNeckWidth * 0.45, yBottomWaist,
-    waistLeft, height,
-  );
-
-  // 9. Close back to left cap
-  path.lineTo(leftCapCenter, height);
-  path.close();
-
-  return path;
+  return Path.combine(PathOperation.union, circlePath, pillPath);
 }
 
 class _FluidHeaderClipper extends CustomClipper<Path> {
-  final double progress;
+  final Path path;
 
-  _FluidHeaderClipper({required this.progress});
-
-  @override
-  Path getClip(Size size) {
-    return buildFluidHeaderPath(size.width, size.height, progress);
-  }
+  const _FluidHeaderClipper({required this.path});
 
   @override
-  bool shouldReclip(covariant _FluidHeaderClipper oldClipper) {
-    return oldClipper.progress != progress;
-  }
+  Path getClip(Size size) => path;
+
+  @override
+  bool shouldReclip(covariant _FluidHeaderClipper oldClipper) => oldClipper.path != path;
 }
 
 class _FluidShadowPainter extends CustomPainter {
-  final double progress;
+  final Path path;
 
-  _FluidShadowPainter({required this.progress});
+  const _FluidShadowPainter({required this.path});
 
   @override
   void paint(Canvas canvas, Size size) {
-    final path = buildFluidHeaderPath(size.width, size.height, progress);
-
-    // Apple Liquid Glass dual ambient elevation shadow
+    // Colin McKee dual ambient floating drop shadows
     final shadow1 = Paint()
-      ..color = Colors.black.withValues(alpha: 0.08)
-      ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 20);
+      ..color = Colors.black.withValues(alpha: 0.10)
+      ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 16);
     canvas.save();
-    canvas.translate(0, 6);
+    canvas.translate(0, 7);
     canvas.drawPath(path, shadow1);
     canvas.restore();
 
     final shadow2 = Paint()
-      ..color = Colors.black.withValues(alpha: 0.03)
-      ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 6);
+      ..color = Colors.black.withValues(alpha: 0.04)
+      ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 4);
     canvas.save();
     canvas.translate(0, 2);
     canvas.drawPath(path, shadow2);
@@ -5109,200 +4914,58 @@ class _FluidShadowPainter extends CustomPainter {
 
   @override
   bool shouldRepaint(covariant _FluidShadowPainter oldDelegate) {
-    return oldDelegate.progress != progress;
+    return oldDelegate.path != path;
   }
 }
 
 class _FluidBorderPainter extends CustomPainter {
-  final double progress;
+  final Path path;
 
-  _FluidBorderPainter({required this.progress});
+  const _FluidBorderPainter({required this.path});
 
   @override
   void paint(Canvas canvas, Size size) {
-    final path = buildFluidHeaderPath(size.width, size.height, progress);
     final rect = Offset.zero & size;
 
-    // Apple Liquid Glass 1.0px hairline specular gradient rim
-    final borderPaint = Paint()
+    // Specular Hairline Rim (1.2px) aligned to top-left (-0.15, -0.15) light
+    final outerPaint = Paint()
       ..style = PaintingStyle.stroke
-      ..strokeWidth = 1.0
+      ..strokeWidth = 1.2
       ..shader = const LinearGradient(
-        begin: Alignment.topCenter,
-        end: Alignment.bottomCenter,
+        begin: Alignment(-0.6, -0.6),
+        end: Alignment(0.6, 0.6),
         colors: [
-          Color(0xD9FFFFFF), // 85% specular white glint at top curve
-          Color(0x40CBD5E1), // Delicate slate highlight transition
-          Color(0x2094A3B8), // Hairline definition on sides
-          Color(0x3564748B), // Subtle bottom rim shadow
+          Color(0xF5FFFFFF), // Pure white specular glint on top-left
+          Color(0x75FFFFFF), // Transition highlight
+          Color(0x25FFFFFF), // Subtle hairline on sides
+          Color(0x60FFFFFF), // Bottom-right ambient rim catch
         ],
-        stops: [0.0, 0.30, 0.70, 1.0],
+        stops: [0.0, 0.35, 0.70, 1.0],
       ).createShader(rect);
 
-    canvas.drawPath(path, borderPaint);
+    canvas.drawPath(path, outerPaint);
+
+    // Inner Caustic Meniscus Rim (0.8px, subtle depth)
+    final innerPaint = Paint()
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 0.8
+      ..shader = const LinearGradient(
+        begin: Alignment.topLeft,
+        end: Alignment.bottomRight,
+        colors: [
+          Color(0x40FFFFFF),
+          Color(0x10FFFFFF),
+          Colors.transparent,
+        ],
+        stops: [0.0, 0.40, 1.0],
+      ).createShader(rect);
+
+    canvas.drawPath(path, innerPaint);
   }
 
   @override
   bool shouldRepaint(covariant _FluidBorderPainter oldDelegate) {
-    return oldDelegate.progress != progress;
-  }
-}
-
-/// Liquid Glass Specular Gradient Border Painter
-/// Renders a delicate 1.0px hairline stroke with a brilliant specular glint on top
-/// and subtle ambient shadow falloff at the bottom (Apple Liquid Glass).
-class _SpecularGlassBorderPainter extends CustomPainter {
-  final double radius;
-  final double strokeWidth;
-
-  const _SpecularGlassBorderPainter({
-    required this.radius,
-    this.strokeWidth = 1.0,
-  });
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    final rect = Offset.zero & size;
-    final rrect = RRect.fromRectAndRadius(
-      rect.deflate(strokeWidth / 2.0),
-      Radius.circular(radius),
-    );
-
-    final paint = Paint()
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = strokeWidth
-      ..shader = const LinearGradient(
-        begin: Alignment.topCenter,
-        end: Alignment.bottomCenter,
-        colors: [
-          Color(0xD9FFFFFF), // 85% specular white glint at top curve
-          Color(0x40CBD5E1), // Delicate slate highlight transition
-          Color(0x2094A3B8), // Hairline definition on sides
-          Color(0x3564748B), // Subtle bottom rim shadow
-        ],
-        stops: [0.0, 0.30, 0.70, 1.0],
-      ).createShader(rect);
-
-    canvas.drawRRect(rrect, paint);
-  }
-
-  @override
-  bool shouldRepaint(covariant _SpecularGlassBorderPainter oldDelegate) {
-    return oldDelegate.radius != radius || oldDelegate.strokeWidth != strokeWidth;
-  }
-}
-
-/// Apple Liquid Glass Container
-/// Applies physical frosted glass optics: hardware acrylic backdrop blur (sigma 20),
-/// translucent gradient glaze (70% down to 50% opacity), 3D convex liquid meniscus sheen,
-/// hairline specular gradient rim, and dual ambient drop shadows.
-class _AppleLiquidGlassContainer extends StatelessWidget {
-  final double radius;
-  final Widget child;
-
-  const _AppleLiquidGlassContainer({
-    required this.radius,
-    required this.child,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(radius),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: 0.10),
-            blurRadius: 18,
-            offset: const Offset(0, 5),
-            spreadRadius: 0,
-          ),
-          BoxShadow(
-            color: Colors.black.withValues(alpha: 0.04),
-            blurRadius: 6,
-            offset: const Offset(0, 1.5),
-            spreadRadius: 0,
-          ),
-        ],
-      ),
-      child: ClipRRect(
-        borderRadius: BorderRadius.circular(radius),
-        child: Stack(
-          children: [
-            // 1. Hardware Acrylic Backdrop Blur & Translucent Glass Glaze
-            Positioned.fill(
-              child: BackdropFilter(
-                filter: ImageFilter.blur(sigmaX: 25, sigmaY: 25),
-                child: Container(
-                  decoration: BoxDecoration(
-                    gradient: LinearGradient(
-                      begin: Alignment.topCenter,
-                      end: Alignment.bottomCenter,
-                      colors: [
-                        Colors.white.withValues(alpha: 0.38),
-                        Colors.white.withValues(alpha: 0.18),
-                      ],
-                    ),
-                  ),
-                ),
-              ),
-            ),
-
-            // 2. 3D Convex Meniscus Lens Liquid Sheen (Apple Liquid Glass)
-            Positioned.fill(
-              child: ShaderMask(
-                blendMode: BlendMode.dstIn,
-                shaderCallback: (Rect bounds) {
-                  return RadialGradient(
-                    center: Alignment.center,
-                    radius: 0.95,
-                    colors: const [
-                      Colors.transparent,
-                      Colors.transparent,
-                      Color(0x59FFFFFF),
-                      Colors.white,
-                    ],
-                    stops: const [0.0, 0.40, 0.75, 1.0],
-                  ).createShader(bounds);
-                },
-                child: BackdropFilter(
-                  filter: ImageFilter.blur(sigmaX: 5.0, sigmaY: 5.0),
-                  child: Container(
-                    decoration: BoxDecoration(
-                      gradient: LinearGradient(
-                        begin: Alignment.topCenter,
-                        end: Alignment.bottomCenter,
-                        colors: [
-                          Colors.white.withValues(alpha: 0.14),
-                          Colors.white.withValues(alpha: 0.04),
-                          Colors.white.withValues(alpha: 0.01),
-                        ],
-                        stops: const [0.0, 0.45, 1.0],
-                      ),
-                    ),
-                  ),
-                ),
-              ),
-            ),
-
-            // 3. Liquid Specular Gradient Rim (1.0px hairline with top light glint)
-            Positioned.fill(
-              child: IgnorePointer(
-                child: CustomPaint(
-                  painter: _SpecularGlassBorderPainter(
-                    radius: radius,
-                    strokeWidth: 1.0,
-                  ),
-                ),
-              ),
-            ),
-
-            // 4. Content
-            child,
-          ],
-        ),
-      ),
-    );
+    return oldDelegate.path != path;
   }
 }
 
