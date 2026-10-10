@@ -1,6 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
+import 'config/supabase_config.dart';
+import 'screens/auth/auth_choice_screen.dart';
+import 'screens/auth/authority_login_screen.dart';
 import 'screens/heatmap_ui/map_screen.dart';
 import 'screens/home_page.dart';
 import 'screens/interactive_map/map_screen.dart';
@@ -15,6 +19,12 @@ export 'screens/home_page.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+
+  await Supabase.initialize(
+    url: SupabaseConfig.supabaseUrl,
+    publishableKey: SupabaseConfig.supabasePublishableKey,
+  );
+
   PaintingBinding.instance.imageCache.maximumSize = 3000;
   PaintingBinding.instance.imageCache.maximumSizeBytes = 300 * 1024 * 1024;
   ErrorWidget.builder = (FlutterErrorDetails details) {
@@ -59,6 +69,8 @@ class UniSafeApp extends StatelessWidget {
         '/citizen-auth-login': (context) => const CitizenLoginScreen(),
         '/citizen-auth-signup': (context) => const CitizenSignupScreen(),
         '/citizen-auth-forget-password': (context) => const ForgetPasswordScreen(),
+        '/auth-choice': (context) => const AuthChoiceScreen(),
+        '/authority-login': (context) => const AuthorityLoginScreen(),
       },
     );
   }

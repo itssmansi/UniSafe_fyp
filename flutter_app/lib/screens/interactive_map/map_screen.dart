@@ -1368,7 +1368,24 @@ class _InteractiveMapScreenState extends ConsumerState<InteractiveMapScreen> {
                               overflow: TextOverflow.ellipsis,
                               style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w800),
                             ),
-                            Text(style.label, style: TextStyle(fontSize: 14, color: Colors.grey.shade500, fontWeight: FontWeight.w600)),
+                            Row(
+                              children: [
+                                Text(style.label, style: TextStyle(fontSize: 14, color: Colors.grey.shade500, fontWeight: FontWeight.w600)),
+                                if (report.citizenName != null && report.citizenName!.isNotEmpty) ...[
+                                  Text(' • ', style: TextStyle(color: Colors.grey.shade400)),
+                                  Icon(LucideIcons.user, size: 12, color: Colors.grey.shade600),
+                                  const SizedBox(width: 3),
+                                  Flexible(
+                                    child: Text(
+                                      report.citizenName!,
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
+                                      style: TextStyle(fontSize: 13, color: Colors.grey.shade700, fontWeight: FontWeight.w600),
+                                    ),
+                                  ),
+                                ],
+                              ],
+                            ),
                           ],
                         ),
                       ),
