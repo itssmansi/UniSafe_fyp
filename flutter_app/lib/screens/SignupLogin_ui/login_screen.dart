@@ -1,5 +1,7 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
+import '../../services/auth_service.dart';
 import 'widgets/auth_header.dart';
 import 'widgets/auth_background.dart';
 import 'widgets/rounded_input_field.dart';
@@ -19,6 +21,7 @@ class _CitizenLoginScreenState extends State<CitizenLoginScreen> {
   final _loginFormKey = GlobalKey<FormState>();
   final TextEditingController _identifierController = TextEditingController();
   final TextEditingController _passwordController = TextEditingController();
+  final AuthService _authService = AuthService();
 
   bool _rememberMe = false;
   bool _isLoading = false;
@@ -29,32 +32,6 @@ class _CitizenLoginScreenState extends State<CitizenLoginScreen> {
     _identifierController.dispose();
     _passwordController.dispose();
     super.dispose();
-  }
-
-  void _fillDemoCredentials() {
-    setState(() {
-      _identifierController.text = 'citizen@unisafe.org';
-      _passwordController.text = 'safety123';
-      _errorMessage = null;
-    });
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: const Row(
-          children: [
-            Icon(Icons.check_circle_outline, color: Colors.white, size: 18),
-            SizedBox(width: 8),
-            Text(
-              'Demo credentials filled (citizen@unisafe.org / safety123)',
-              style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
-            ),
-          ],
-        ),
-        backgroundColor: const Color(0xFF133838),
-        duration: const Duration(milliseconds: 1400),
-        behavior: SnackBarBehavior.floating,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-      ),
-    );
   }
 
   void _handleLogin() async {
@@ -71,43 +48,71 @@ class _CitizenLoginScreenState extends State<CitizenLoginScreen> {
       _isLoading = true;
     });
 
-    await Future.delayed(const Duration(milliseconds: 900));
-    if (!mounted) return;
+    try {
+      final AuthResponse response;
+      if (identifier.contains('@')) {
+        response = await _authService.loginWithEmail(
+          email: identifier,
+          password: password,
+        );
+      } else {
+        response = await _authService.loginWithPhone(
+          phone: identifier,
+          password: password,
+        );
+      }
 
-    final bool isAuthorized = (identifier.isNotEmpty && password.length >= 6);
-
-    if (isAuthorized) {
-      setState(() => _isLoading = false);
-
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: const Row(
-            children: [
-              Icon(Icons.check_circle_rounded, color: Colors.white, size: 20),
-              SizedBox(width: 10),
-              Expanded(
-                child: Text(
-                  'Login successful! Redirecting to dashboard...',
-                  style: TextStyle(fontWeight: FontWeight.w600),
-                ),
-              ),
-            ],
-          ),
-          backgroundColor: const Color(0xFF10B981),
-          duration: const Duration(milliseconds: 1500),
-          behavior: SnackBarBehavior.floating,
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-        ),
-      );
-
-      await Future.delayed(const Duration(milliseconds: 400));
       if (!mounted) return;
-      Navigator.of(context).pushNamedAndRemoveUntil('/home', (route) => false);
-    } else {
+
+      if (response.user != null) {
+        setState(() => _isLoading = false);
+
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: const Row(
+              children: [
+                Icon(Icons.check_circle_rounded, color: Colors.white, size: 20),
+                SizedBox(width: 10),
+                Expanded(
+                  child: Text(
+                    'Login successful! Redirecting to dashboard...',
+                    style: TextStyle(fontWeight: FontWeight.w600),
+                  ),
+                ),
+              ],
+            ),
+            backgroundColor: const Color(0xFF10B981),
+            duration: const Duration(milliseconds: 1500),
+            behavior: SnackBarBehavior.floating,
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+          ),
+        );
+
+        await Future.delayed(const Duration(milliseconds: 400));
+        if (!mounted) return;
+        Navigator.of(context).pushNamedAndRemoveUntil('/home', (route) => false);
+      } else {
+        setState(() {
+          _isLoading = false;
+          _errorMessage = 'Login failed. Please check your credentials.';
+        });
+      }
+    } on AuthException catch (e) {
+      if (!mounted) return;
       setState(() {
         _isLoading = false;
-        _errorMessage = 'Login not successful: Incorrect email, phone or password.';
+        _errorMessage = e.message;
       });
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _isLoading = false;
+        _errorMessage = 'Something went wrong: $e';
+      });
+    } finally {
+      if (mounted) {
+        setState(() => _isLoading = false);
+      }
     }
   }
 
@@ -137,16 +142,10 @@ class _CitizenLoginScreenState extends State<CitizenLoginScreen> {
                     child: child,
                   );
                 },
-                child: AuthHeader(
+                child: const AuthHeader(
                   title: 'LOGIN',
                   isCentered: true,
-                  onBack: () {
-                    if (Navigator.of(context).canPop()) {
-                      Navigator.of(context).pop();
-                    } else {
-                      Navigator.of(context).pushReplacementNamed('/home');
-                    }
-                  },
+                  showBackButton: false,
                 ),
               ),
             ),
@@ -386,35 +385,6 @@ class _CitizenLoginScreenState extends State<CitizenLoginScreen> {
                                   ),
                                 ),
                               ],
-                            ),
-                            const SizedBox(height: 22),
-
-                            // Discrete Autofill Demo Credential Chip
-                            GestureDetector(
-                              onTap: _fillDemoCredentials,
-                              child: Container(
-                                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
-                                decoration: BoxDecoration(
-                                  color: const Color(0xFFF1F5F9),
-                                  borderRadius: BorderRadius.circular(16),
-                                  border: Border.all(color: const Color(0xFFE2E8F0)),
-                                ),
-                                child: const Row(
-                                  mainAxisSize: MainAxisSize.min,
-                                  children: [
-                                    Icon(Icons.vpn_key_outlined, size: 14, color: Color(0xFF64748B)),
-                                    SizedBox(width: 6),
-                                    Text(
-                                      'Demo: citizen@unisafe.org • Tap to fill',
-                                      style: TextStyle(
-                                        fontSize: 11.5,
-                                        fontWeight: FontWeight.w600,
-                                        color: Color(0xFF64748B),
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                              ),
                             ),
                           ],
                         ),

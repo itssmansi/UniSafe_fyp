@@ -1,8 +1,12 @@
 import 'package:flutter/material.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
+import '../../config/supabase_config.dart';
 import 'widgets/auth_header.dart';
 import 'widgets/auth_background.dart';
+import 'widgets/auth_slide_route.dart';
 import 'widgets/rounded_input_field.dart';
 import 'widgets/custom_form_button.dart';
+import 'reset_password_otp_screen.dart';
 
 class ForgetPasswordScreen extends StatefulWidget {
   const ForgetPasswordScreen({super.key});
@@ -15,6 +19,7 @@ class _ForgetPasswordScreenState extends State<ForgetPasswordScreen> {
   final _formKey = GlobalKey<FormState>();
   final TextEditingController _emailController = TextEditingController();
   bool _isSubmitting = false;
+  String? _errorMessage;
 
   @override
   void dispose() {
@@ -23,23 +28,39 @@ class _ForgetPasswordScreenState extends State<ForgetPasswordScreen> {
   }
 
   void _handleForgetPassword() async {
+    FocusScope.of(context).unfocus();
     if (_formKey.currentState!.validate()) {
-      setState(() => _isSubmitting = true);
-      await Future.delayed(const Duration(milliseconds: 900));
-      if (!mounted) return;
-      setState(() => _isSubmitting = false);
+      final email = _emailController.text.trim();
+      setState(() {
+        _isSubmitting = true;
+        _errorMessage = null;
+      });
 
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: const Text('Password recovery link sent! Check your email.'),
-          backgroundColor: const Color(0xFF133838),
-          behavior: SnackBarBehavior.floating,
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-        ),
-      );
-      await Future.delayed(const Duration(milliseconds: 600));
-      if (!mounted) return;
-      Navigator.of(context).pop();
+      try {
+        await SupabaseConfig.client.auth.resetPasswordForEmail(email);
+
+        if (!mounted) return;
+        setState(() => _isSubmitting = false);
+
+        Navigator.push(
+          context,
+          createAuthSlideRoute(
+            ResetPasswordOtpScreen(email: email),
+          ),
+        );
+      } on AuthException catch (e) {
+        if (!mounted) return;
+        setState(() {
+          _isSubmitting = false;
+          _errorMessage = e.message;
+        });
+      } catch (e) {
+        if (!mounted) return;
+        setState(() {
+          _isSubmitting = false;
+          _errorMessage = 'Could not send reset code: $e';
+        });
+      }
     }
   }
 
@@ -125,6 +146,37 @@ class _ForgetPasswordScreenState extends State<ForgetPasswordScreen> {
                             child: Column(
                               mainAxisSize: MainAxisSize.min,
                               children: [
+                                if (_errorMessage != null) ...[
+                                  Padding(
+                                    padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 4),
+                                    child: Container(
+                                      width: double.infinity,
+                                      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                                      decoration: BoxDecoration(
+                                        color: const Color(0xFFFEF2F2),
+                                        borderRadius: BorderRadius.circular(12),
+                                        border: Border.all(color: const Color(0xFFFECACA)),
+                                      ),
+                                      child: Row(
+                                        children: [
+                                          const Icon(Icons.error_outline, color: Color(0xFFDC2626), size: 18),
+                                          const SizedBox(width: 8),
+                                          Expanded(
+                                            child: Text(
+                                              _errorMessage!,
+                                              style: const TextStyle(
+                                                color: Color(0xFFDC2626),
+                                                fontSize: 13,
+                                                fontWeight: FontWeight.w600,
+                                              ),
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                  ),
+                                  const SizedBox(height: 10),
+                                ],
                                 RoundedInputField(
                                   controller: _emailController,
                                   labelText: 'Email Address',
@@ -142,7 +194,7 @@ class _ForgetPasswordScreenState extends State<ForgetPasswordScreen> {
                                 ),
                                 const SizedBox(height: 22),
                                 CustomFormButton(
-                                  innerText: 'Send Recovery Link',
+                                  innerText: 'Send Verification Code',
                                   onPressed: _handleForgetPassword,
                                   isLoading: _isSubmitting,
                                 ),

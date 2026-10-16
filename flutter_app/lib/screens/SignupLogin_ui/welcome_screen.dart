@@ -64,17 +64,11 @@ class _WelcomeSelectionScreenState extends State<WelcomeSelectionScreen>
             child: Column(
               children: [
                 // Teal Top Area with centered UNISAFE
-            Expanded(
+            const Expanded(
               child: AuthHeader(
                 title: 'UNISAFE',
                 isCentered: true,
-                onBack: () {
-                  if (Navigator.of(context).canPop()) {
-                    Navigator.of(context).pop();
-                  } else {
-                    Navigator.of(context).pushReplacementNamed('/home');
-                  }
-                },
+                showBackButton: false,
               ),
             ),
 

@@ -13,6 +13,7 @@ import 'package:image_picker/image_picker.dart';
 import 'package:flutter_map_marker_cluster/flutter_map_marker_cluster.dart';
 import 'report_model.dart';
 import 'report_provider.dart';
+import 'street_view_modal.dart';
 import '../home_page.dart';
 
 /// Centralized visual identity for each issue category.
@@ -113,7 +114,7 @@ class MapStyleOption {
 const List<MapStyleOption> kMapStyles = [
   MapStyleOption(
     style: MapStyle.streets,
-    title: 'Streets',
+    title: 'Default',
     subtitle: 'Standard OpenStreetMap',
     urlTemplate: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
     icon: LucideIcons.map,
@@ -130,17 +131,8 @@ const List<MapStyleOption> kMapStyles = [
     maxNativeZoom: 18,
   ),
   MapStyleOption(
-    style: MapStyle.cleanLight,
-    title: 'Humanitarian',
-    subtitle: 'High-contrast OSM (Clean & Keyless)',
-    urlTemplate: 'https://a.tile.openstreetmap.fr/hot/{z}/{x}/{y}.png',
-    icon: LucideIcons.heartHandshake,
-    previewColor: Color(0xFFF4F4F5),
-    maxNativeZoom: 19,
-  ),
-  MapStyleOption(
     style: MapStyle.outdoor,
-    title: 'Outdoor / Topo',
+    title: 'Terrain',
     subtitle: 'OpenTopoMap',
     urlTemplate: 'https://tile.opentopomap.org/{z}/{x}/{y}.png',
     icon: LucideIcons.mountain,
@@ -150,9 +142,10 @@ const List<MapStyleOption> kMapStyles = [
 ];
 
 enum MapOverlayType {
-  hybridLabels,
   transit,
+  cycling,
   footpaths,
+  hybridLabels,
 }
 
 class MapOverlayOption {
@@ -177,29 +170,38 @@ class MapOverlayOption {
 
 const List<MapOverlayOption> kMapOverlays = [
   MapOverlayOption(
-    type: MapOverlayType.hybridLabels,
-    title: 'Street Names & Places',
-    subtitle: 'Overlays roads and labels on Satellite (Hybrid)',
-    urlTemplate: 'https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Boundaries_and_Places/MapServer/tile/{z}/{y}/{x}',
-    icon: LucideIcons.tags,
-    activeColor: Color(0xFF2563EB),
-  ),
-  MapOverlayOption(
     type: MapOverlayType.transit,
-    title: 'Metro & Railway Lines',
+    title: 'Public transport',
     subtitle: 'OpenRailwayMap train, tram & metro tracks',
     urlTemplate: 'https://{s}.tiles.openrailwaymap.org/standard/{z}/{x}/{y}.png',
     subdomains: ['a', 'b', 'c'],
     icon: LucideIcons.train,
-    activeColor: Color(0xFFEA580C),
+    activeColor: Color(0xFF1A73E8),
+  ),
+  MapOverlayOption(
+    type: MapOverlayType.cycling,
+    title: 'Bicycling',
+    subtitle: 'CyclOSM cycle paths & bike routes',
+    urlTemplate: 'https://{s}.tile-cyclosm.openstreetmap.fr/cyclosm/{z}/{x}/{y}.png',
+    subdomains: ['a', 'b', 'c'],
+    icon: LucideIcons.bike,
+    activeColor: Color(0xFF0F9D58),
   ),
   MapOverlayOption(
     type: MapOverlayType.footpaths,
-    title: 'Walking Trails & Footpaths',
+    title: 'Walking trails',
     subtitle: 'Waymarked pedestrian routes and paths',
     urlTemplate: 'https://tile.waymarkedtrails.org/hiking/{z}/{x}/{y}.png',
     icon: LucideIcons.footprints,
-    activeColor: Color(0xFF16A34A),
+    activeColor: Color(0xFFE37400),
+  ),
+  MapOverlayOption(
+    type: MapOverlayType.hybridLabels,
+    title: 'Street labels',
+    subtitle: 'Overlays roads and labels on Satellite (Hybrid)',
+    urlTemplate: 'https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Boundaries_and_Places/MapServer/tile/{z}/{y}/{x}',
+    icon: LucideIcons.tags,
+    activeColor: Color(0xFF1A73E8),
   ),
 ];
 
@@ -341,10 +343,21 @@ class MapPinShape extends StatelessWidget {
   }
 }
 class InteractiveMapScreen extends ConsumerStatefulWidget {
-  const InteractiveMapScreen({super.key});
+  final LatLng? initialCenter;
+  final String? initialReportId;
+  final double? initialZoom;
+
+  const InteractiveMapScreen({
+    super.key,
+    this.initialCenter,
+    this.initialReportId,
+    this.initialZoom,
+  });
+
   @override
   ConsumerState<InteractiveMapScreen> createState() => _InteractiveMapScreenState();
 }
+
 class _InteractiveMapScreenState extends ConsumerState<InteractiveMapScreen> {
   final MapController _mapController = MapController();
   final TextEditingController _searchController = TextEditingController();
@@ -363,6 +376,7 @@ class _InteractiveMapScreenState extends ConsumerState<InteractiveMapScreen> {
   MapStyle _selectedMapStyle = MapStyle.streets;
   final Set<MapOverlayType> _activeOverlays = {MapOverlayType.hybridLabels};
   bool _showCategoryHint = true;
+
   @override
   void initState() {
     super.initState();
@@ -370,7 +384,11 @@ class _InteractiveMapScreenState extends ConsumerState<InteractiveMapScreen> {
       if (mounted) setState(() {});
     });
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      _goToMyLocation();
+      if (widget.initialCenter != null) {
+        _mapController.move(widget.initialCenter!, widget.initialZoom ?? 16.5);
+      } else {
+        _goToMyLocation();
+      }
     });
   }
   @override
@@ -571,8 +589,8 @@ class _InteractiveMapScreenState extends ConsumerState<InteractiveMapScreen> {
                 child: FlutterMap(
                   mapController: _mapController,
                   options: MapOptions(
-              initialCenter: const LatLng(28.6139, 77.2090),
-              initialZoom: 14.0,
+                    initialCenter: widget.initialCenter ?? const LatLng(28.6139, 77.2090),
+                    initialZoom: widget.initialCenter != null ? (widget.initialZoom ?? 16.5) : 14.0,
               minZoom: 3.0,
               maxZoom: 22.0,
               onTap: (_, __) => FocusScope.of(context).unfocus(),
@@ -834,22 +852,21 @@ class _InteractiveMapScreenState extends ConsumerState<InteractiveMapScreen> {
                         if (_suggestions.isNotEmpty)
                           Container(
                             margin: const EdgeInsets.only(top: 12),
+                            constraints: const BoxConstraints(maxHeight: 280),
                             decoration: BoxDecoration(
+                              color: Colors.white,
+                              borderRadius: BorderRadius.circular(20),
+                              border: Border.all(color: const Color(0xFFE2E8F0), width: 1.0),
                               boxShadow: [
-                                BoxShadow(color: Colors.black.withOpacity(0.08), blurRadius: 24, offset: const Offset(0, 10)),
+                                BoxShadow(
+                                  color: Colors.black.withValues(alpha: 0.08),
+                                  blurRadius: 20,
+                                  offset: const Offset(0, 8),
+                                ),
                               ],
                             ),
                             child: ClipRRect(
-                              borderRadius: BorderRadius.circular(24),
-                              child: BackdropFilter(
-                                filter: ImageFilter.blur(sigmaX: 20, sigmaY: 20),
-                                child: Container(
-                                  constraints: const BoxConstraints(maxHeight: 280),
-                                  decoration: BoxDecoration(
-                                    color: Colors.white.withOpacity(0.65),
-                                    borderRadius: BorderRadius.circular(24),
-                                    border: Border.all(color: Colors.white.withOpacity(0.8), width: 1.5),
-                                  ),
+                              borderRadius: BorderRadius.circular(20),
                                   child: ListView.separated(
                                     shrinkWrap: true,
                                     padding: const EdgeInsets.symmetric(vertical: 8),
@@ -885,8 +902,6 @@ class _InteractiveMapScreenState extends ConsumerState<InteractiveMapScreen> {
                                   ),
                                 ),
                               ),
-                            ),
-                          ),
                       ],
                     ),
                   ],
@@ -992,97 +1007,87 @@ class _InteractiveMapScreenState extends ConsumerState<InteractiveMapScreen> {
   }
 
   Widget _buildPendingActionPanel() {
-    return ClipRRect(
-      borderRadius: BorderRadius.circular(24),
-      child: BackdropFilter(
-        filter: ImageFilter.blur(sigmaX: 16, sigmaY: 16),
-        child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-          decoration: BoxDecoration(
-            color: Colors.white.withValues(alpha: 0.92),
-            borderRadius: BorderRadius.circular(24),
-            border: Border.all(color: Colors.white.withValues(alpha: 0.85), width: 1.5),
-            boxShadow: [
-              BoxShadow(
-                color: Colors.black.withValues(alpha: 0.12),
-                blurRadius: 30,
-                offset: const Offset(0, 10),
-              ),
-            ],
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: const Color(0xFFE2E8F0), width: 1.0),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.10),
+            blurRadius: 24,
+            offset: const Offset(0, 8),
           ),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
+        ],
+      ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              Row(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  const Icon(LucideIcons.mapPin, size: 14, color: Color(0xFF059669)),
-                  const SizedBox(width: 6),
-                  Text(
-                    'Drag pin to adjust position',
-                    style: TextStyle(
-                      color: Colors.grey.shade700,
-                      fontSize: 12,
-                      fontWeight: FontWeight.w600,
-                      letterSpacing: 0.2,
-                    ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 10),
-              Row(
-                children: [
-                  CircularCancelButton(
-                    onTap: () {
-                      setState(() {
-                        _droppedLocation = null;
-                        _selectedCategory = null;
-                      });
-                    },
-                  ),
-                  const SizedBox(width: 10),
-                  Expanded(
-                    child: EmbossedActionButton(
-                      onTap: () {
-                        _showReportForm(context, _droppedLocation!);
-                      },
-                      label: 'Confirm Location',
-                      icon: LucideIcons.check,
-                      gradientColors: const [
-                        Color(0xFF34D399), // Emerald highlight
-                        Color(0xFF10B981), // Emerald base
-                        Color(0xFF059669), // Deep emerald
-                      ],
-                    ),
-                  ),
-                ],
+              const Icon(LucideIcons.mapPin, size: 14, color: Color(0xFF059669)),
+              const SizedBox(width: 6),
+              Text(
+                'Drag pin to adjust position',
+                style: TextStyle(
+                  color: Colors.grey.shade700,
+                  fontSize: 12,
+                  fontWeight: FontWeight.w600,
+                  letterSpacing: 0.2,
+                ),
               ),
             ],
           ),
-        ),
+          const SizedBox(height: 10),
+          Row(
+            children: [
+              CircularCancelButton(
+                onTap: () {
+                  setState(() {
+                    _droppedLocation = null;
+                    _selectedCategory = null;
+                  });
+                },
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: EmbossedActionButton(
+                  onTap: () {
+                    _showReportForm(context, _droppedLocation!);
+                  },
+                  label: 'Confirm Location',
+                  icon: LucideIcons.check,
+                  gradientColors: const [
+                    Color(0xFF34D399), // Emerald highlight
+                    Color(0xFF10B981), // Emerald base
+                    Color(0xFF059669), // Deep emerald
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ],
       ),
     );
   }
 
   Widget _buildEditingActionPanel() {
-    return ClipRRect(
-      borderRadius: BorderRadius.circular(24),
-      child: BackdropFilter(
-        filter: ImageFilter.blur(sigmaX: 16, sigmaY: 16),
-        child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-          decoration: BoxDecoration(
-            color: Colors.white.withValues(alpha: 0.92),
-            borderRadius: BorderRadius.circular(24),
-            border: Border.all(color: Colors.white.withValues(alpha: 0.85), width: 1.5),
-            boxShadow: [
-              BoxShadow(
-                color: Colors.black.withValues(alpha: 0.12),
-                blurRadius: 30,
-                offset: const Offset(0, 10),
-              ),
-            ],
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: const Color(0xFFE2E8F0), width: 1.0),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.10),
+            blurRadius: 24,
+            offset: const Offset(0, 8),
           ),
+        ],
+      ),
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
@@ -1129,8 +1134,6 @@ class _InteractiveMapScreenState extends ConsumerState<InteractiveMapScreen> {
               ),
             ],
           ),
-        ),
-      ),
     );
   }
   Future<void> _takeInstantPictureAndReport() async {
@@ -1267,9 +1270,11 @@ class _InteractiveMapScreenState extends ConsumerState<InteractiveMapScreen> {
                   maxScale: 4.0,
                   child: imageBytes != null
                       ? Image.memory(imageBytes, fit: BoxFit.contain)
-                      : (imagePath != null && (imagePath.startsWith('http') || imagePath.startsWith('blob:'))
-                          ? Image.network(imagePath, fit: BoxFit.contain)
-                          : const Icon(LucideIcons.image, size: 80, color: Colors.white54)),
+                      : (imagePath != null && imagePath.startsWith('data:image')
+                          ? Image.memory(base64Decode(imagePath.split(',').last), fit: BoxFit.contain)
+                          : (imagePath != null && imagePath.startsWith('http')
+                              ? Image.network(imagePath, fit: BoxFit.contain)
+                              : const Icon(LucideIcons.image, size: 80, color: Colors.white54))),
                 ),
               ),
               SafeArea(
@@ -1423,9 +1428,11 @@ class _InteractiveMapScreenState extends ConsumerState<InteractiveMapScreen> {
                               color: Colors.grey.shade100,
                               child: report.imageBytes != null
                                   ? Image.memory(report.imageBytes!, fit: BoxFit.cover)
-                                  : (report.imagePath!.startsWith('http') || report.imagePath!.startsWith('blob:')
-                                      ? Image.network(report.imagePath!, fit: BoxFit.cover)
-                                      : const Center(child: Icon(LucideIcons.image, size: 40, color: Colors.grey))),
+                                  : (report.imagePath != null && report.imagePath!.startsWith('data:image')
+                                      ? Image.memory(base64Decode(report.imagePath!.split(',').last), fit: BoxFit.cover)
+                                      : (report.imagePath != null && report.imagePath!.startsWith('http')
+                                          ? Image.network(report.imagePath!, fit: BoxFit.cover)
+                                          : const Center(child: Icon(LucideIcons.image, size: 40, color: Colors.grey)))),
                             ),
                           ),
                           Positioned(
@@ -1454,8 +1461,42 @@ class _InteractiveMapScreenState extends ConsumerState<InteractiveMapScreen> {
                       ),
                     ),
                   ],
-                  
-                  const SizedBox(height: 20),
+                  const SizedBox(height: 16),
+                  SizedBox(
+                    width: double.infinity,
+                    child: OutlinedButton.icon(
+                      onPressed: () {
+                        Navigator.pop(context);
+                        StreetViewModal.show(
+                          context,
+                          latitude: report.location.latitude,
+                          longitude: report.location.longitude,
+                          title: report.title,
+                        );
+                      },
+                      icon: const Icon(LucideIcons.compass, size: 18, color: Color(0xFF059669)),
+                      label: const Text(
+                        'Open 360° Street View',
+                        style: TextStyle(
+                          fontSize: 15,
+                          fontWeight: FontWeight.w700,
+                          color: Color(0xFF059669),
+                        ),
+                      ),
+                      style: OutlinedButton.styleFrom(
+                        padding: const EdgeInsets.symmetric(vertical: 14),
+                        backgroundColor: const Color(0xFF059669).withValues(alpha: 0.08),
+                        side: BorderSide(
+                          color: const Color(0xFF059669).withValues(alpha: 0.35),
+                          width: 1.5,
+                        ),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(16),
+                        ),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 12),
                   Row(
                     children: [
                       Expanded(
@@ -1534,447 +1575,279 @@ class _InteractiveMapScreenState extends ConsumerState<InteractiveMapScreen> {
       ),
     );
   }
-    void _showFilterDialog() {
+  void _showFilterDialog() {
     Set<IssueCategory> tempHidden = Set.from(_hiddenCategories);
-    showDialog<bool>(
+    showModalBottomSheet<void>(
       context: context,
-      barrierColor: Colors.black.withValues(alpha: 0.45),
+      backgroundColor: Colors.white,
+      elevation: 8,
+      isScrollControlled: true,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      ),
       builder: (context) {
         return StatefulBuilder(
-          builder: (context, setStateDialog) {
-            return Dialog(
-              backgroundColor: Colors.transparent,
-              elevation: 0,
-              insetPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 24),
-              child: ClipRRect(
-                borderRadius: BorderRadius.circular(28),
-                child: BackdropFilter(
-                  filter: ImageFilter.blur(sigmaX: 20, sigmaY: 20),
-                  child: Container(
-                    constraints: const BoxConstraints(maxWidth: 420),
-                    decoration: BoxDecoration(
-                      gradient: LinearGradient(
-                        colors: [
-                          Colors.white.withValues(alpha: 0.96),
-                          const Color(0xFFF8FAFC).withValues(alpha: 0.96),
-                        ],
-                        begin: Alignment.topCenter,
-                        end: Alignment.bottomCenter,
-                      ),
-                      borderRadius: BorderRadius.circular(28),
-                      border: Border.all(
-                        color: Colors.white.withValues(alpha: 0.9),
-                        width: 1.5,
-                      ),
-                      boxShadow: [
-                        BoxShadow(
-                          color: Colors.black.withValues(alpha: 0.18),
-                          blurRadius: 36,
-                          offset: const Offset(0, 16),
+          builder: (context, setSheetState) {
+            return SafeArea(
+              top: false,
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(20, 10, 20, 24),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    // Top drag pill
+                    Center(
+                      child: Container(
+                        width: 36,
+                        height: 4,
+                        decoration: BoxDecoration(
+                          color: const Color(0xFFDADCE0),
+                          borderRadius: BorderRadius.circular(2),
                         ),
-                        BoxShadow(
-                          color: Colors.white.withValues(alpha: 0.9),
-                          offset: const Offset(0, -1),
-                          blurRadius: 2,
-                        ),
-                      ],
+                      ),
                     ),
-                    padding: const EdgeInsets.fromLTRB(20, 20, 20, 20),
-                    child: Column(
-                      mainAxisSize: MainAxisSize.min,
-                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                    const SizedBox(height: 12),
+                    // Header row: "Filter categories" + Reset + Close
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
-                        // Header
+                        const Text(
+                          'Filter categories',
+                          style: TextStyle(
+                            fontSize: 18,
+                            fontWeight: FontWeight.w700,
+                            color: Color(0xFF202124),
+                            letterSpacing: -0.2,
+                          ),
+                        ),
                         Row(
+                          mainAxisSize: MainAxisSize.min,
                           children: [
-                            Container(
-                              width: 38,
-                              height: 38,
-                              decoration: BoxDecoration(
-                                shape: BoxShape.circle,
-                                gradient: const LinearGradient(
-                                  colors: [
-                                    Color(0xFFFFFFFF),
-                                    Color(0xFFF8FAFC),
-                                    Color(0xFFE2E8F0),
-                                  ],
-                                  begin: Alignment.topLeft,
-                                  end: Alignment.bottomRight,
-                                ),
-                                border: Border.all(color: Colors.white, width: 1.2),
-                                boxShadow: [
-                                  BoxShadow(
-                                    color: Colors.black.withValues(alpha: 0.10),
-                                    blurRadius: 4,
-                                    offset: const Offset(0, 2),
-                                  ),
-                                ],
-                              ),
-                              child: const Center(
-                                child: Icon(LucideIcons.filter, color: Color(0xFF1E293B), size: 18),
-                              ),
-                            ),
-                            const SizedBox(width: 12),
-                            const Expanded(
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Text(
-                                    'Filter Categories',
-                                    style: TextStyle(
-                                      fontWeight: FontWeight.w800,
-                                      fontSize: 18,
-                                      color: Color(0xFF0F172A),
-                                      letterSpacing: -0.2,
-                                    ),
-                                  ),
-                                  Text(
-                                    'Toggle visible issues on map',
-                                    style: TextStyle(
-                                      fontSize: 11,
-                                      color: Color(0xFF64748B),
-                                      fontWeight: FontWeight.w500,
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ),
                             if (tempHidden.isNotEmpty)
                               Padding(
                                 padding: const EdgeInsets.only(right: 8.0),
-                                child: GestureDetector(
-                                  onTap: () {
-                                    setStateDialog(() {
+                                child: TextButton(
+                                  onPressed: () {
+                                    setSheetState(() {
                                       tempHidden.clear();
                                     });
                                   },
-                                  child: Container(
-                                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-                                    decoration: BoxDecoration(
-                                      color: const Color(0xFFEFF6FF),
-                                      borderRadius: BorderRadius.circular(10),
-                                      border: Border.all(color: const Color(0xFFBFDBFE), width: 1.0),
-                                    ),
-                                    child: const Text(
-                                      'Reset',
-                                      style: TextStyle(
-                                        color: Color(0xFF2563EB),
-                                        fontWeight: FontWeight.w700,
-                                        fontSize: 11.5,
-                                      ),
+                                  style: TextButton.styleFrom(
+                                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                                    minimumSize: Size.zero,
+                                    tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                                  ),
+                                  child: const Text(
+                                    'Reset',
+                                    style: TextStyle(
+                                      color: Color(0xFF1A73E8),
+                                      fontWeight: FontWeight.w700,
+                                      fontSize: 13,
                                     ),
                                   ),
                                 ),
                               ),
-                            _EmbossedDialogCloseButton(
-                              onTap: () => Navigator.pop(context, false),
+                            IconButton(
+                              icon: const Icon(LucideIcons.x, size: 20, color: Color(0xFF5F6368)),
+                              splashRadius: 20,
+                              padding: EdgeInsets.zero,
+                              constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
+                              onPressed: () => Navigator.pop(context),
                             ),
-                          ],
-                        ),
-                        const SizedBox(height: 16),
-                        // List of categories
-                        ...IssueCategory.values.map((category) {
-                          final isVisible = !tempHidden.contains(category);
-                          return _EmbossedFilterTile(
-                            key: ValueKey(category),
-                            category: category,
-                            isVisible: isVisible,
-                            onTap: () {
-                              setStateDialog(() {
-                                if (isVisible) {
-                                  tempHidden.add(category);
-                                } else {
-                                  tempHidden.remove(category);
-                                }
-                              });
-                            },
-                          );
-                        }),
-                        const SizedBox(height: 8),
-                        // Apply Filters button
-                        EmbossedActionButton(
-                          onTap: () => Navigator.pop(context, true),
-                          label: 'Apply Filters',
-                          icon: LucideIcons.checkCheck,
-                          height: 50,
-                          gradientColors: const [
-                            Color(0xFF334155),
-                            Color(0xFF1E293B),
-                            Color(0xFF0F172A),
                           ],
                         ),
                       ],
                     ),
-                  ),
+                    const SizedBox(height: 4),
+                    const Text(
+                      'Toggle visible issues on map',
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: Color(0xFF5F6368),
+                        fontWeight: FontWeight.w400,
+                      ),
+                    ),
+                    const SizedBox(height: 18),
+                    // Row of 4 Category Filters: Infrastructure, Sanitation, Safety, Greenery
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceAround,
+                      children: IssueCategory.values.map((category) {
+                        final isVisible = !tempHidden.contains(category);
+                        return _CategoryFilterCard(
+                          category: category,
+                          isSelected: isVisible,
+                          onTap: () {
+                            setSheetState(() {
+                              if (isVisible) {
+                                tempHidden.add(category);
+                              } else {
+                                tempHidden.remove(category);
+                              }
+                            });
+                          },
+                        );
+                      }).toList(),
+                    ),
+                    const SizedBox(height: 24),
+                    // Blue Save Filters Button
+                    SizedBox(
+                      width: double.infinity,
+                      height: 48,
+                      child: ElevatedButton(
+                        onPressed: () {
+                          setState(() {
+                            _hiddenCategories = tempHidden;
+                          });
+                          Navigator.pop(context);
+                        },
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: const Color(0xFF1A73E8),
+                          foregroundColor: Colors.white,
+                          elevation: 0,
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(14),
+                          ),
+                          padding: const EdgeInsets.symmetric(vertical: 12),
+                        ),
+                        child: const Row(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            Icon(LucideIcons.check, size: 18, color: Colors.white),
+                            SizedBox(width: 8),
+                            Text(
+                              'Save Filters',
+                              style: TextStyle(
+                                fontSize: 15,
+                                fontWeight: FontWeight.w700,
+                                color: Colors.white,
+                                letterSpacing: 0.1,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ],
                 ),
               ),
             );
           },
         );
       },
-    ).then((applied) {
-      if (applied == true) {
-        setState(() {
-          _hiddenCategories = tempHidden;
-        });
-      }
-    });
+    );
   }
 
   void _showMapStyleDialog() {
-    showDialog<void>(
+    showModalBottomSheet<void>(
       context: context,
-      barrierColor: Colors.black.withValues(alpha: 0.45),
+      backgroundColor: Colors.white,
+      elevation: 8,
+      isScrollControlled: true,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      ),
       builder: (context) {
         return StatefulBuilder(
-          builder: (context, setDialogState) {
-            return Dialog(
-              backgroundColor: Colors.transparent,
-              elevation: 0,
-              insetPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 24),
-              child: ClipRRect(
-                borderRadius: BorderRadius.circular(28),
-                child: BackdropFilter(
-                  filter: ImageFilter.blur(sigmaX: 20, sigmaY: 20),
-                  child: Container(
-                    constraints: const BoxConstraints(maxWidth: 420, maxHeight: 620),
-                    decoration: BoxDecoration(
-                      gradient: LinearGradient(
-                        colors: [
-                          Colors.white.withValues(alpha: 0.96),
-                          const Color(0xFFF8FAFC).withValues(alpha: 0.96),
-                        ],
-                        begin: Alignment.topCenter,
-                        end: Alignment.bottomCenter,
-                      ),
-                      borderRadius: BorderRadius.circular(28),
-                      border: Border.all(
-                        color: Colors.white.withValues(alpha: 0.9),
-                        width: 1.5,
-                      ),
-                      boxShadow: [
-                        BoxShadow(
-                          color: Colors.black.withValues(alpha: 0.18),
-                          blurRadius: 36,
-                          offset: const Offset(0, 16),
+          builder: (context, setSheetState) {
+            return SafeArea(
+              top: false,
+              child: SingleChildScrollView(
+                padding: const EdgeInsets.fromLTRB(20, 10, 20, 28),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    // Top drag pill
+                    Center(
+                      child: Container(
+                        width: 36,
+                        height: 4,
+                        decoration: BoxDecoration(
+                          color: const Color(0xFFDADCE0),
+                          borderRadius: BorderRadius.circular(2),
                         ),
-                        BoxShadow(
-                          color: Colors.white.withValues(alpha: 0.9),
-                          offset: const Offset(0, -1),
-                          blurRadius: 2,
-                        ),
-                      ],
+                      ),
                     ),
-                    padding: const EdgeInsets.fromLTRB(20, 20, 20, 20),
-                    child: Column(
-                      mainAxisSize: MainAxisSize.min,
-                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                    const SizedBox(height: 12),
+                    // Header row: "Map type" + close button
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
-                        // Header
-                        Row(
-                          children: [
-                            Container(
-                              width: 38,
-                              height: 38,
-                              decoration: BoxDecoration(
-                                shape: BoxShape.circle,
-                                gradient: const LinearGradient(
-                                  colors: [
-                                    Color(0xFFFFFFFF),
-                                    Color(0xFFF8FAFC),
-                                    Color(0xFFE2E8F0),
-                                  ],
-                                  begin: Alignment.topLeft,
-                                  end: Alignment.bottomRight,
-                                ),
-                                border: Border.all(color: Colors.white, width: 1.2),
-                                boxShadow: [
-                                  BoxShadow(
-                                    color: Colors.black.withValues(alpha: 0.10),
-                                    blurRadius: 4,
-                                    offset: const Offset(0, 2),
-                                  ),
-                                ],
-                              ),
-                              child: const Center(
-                                child: Icon(LucideIcons.layers, color: Color(0xFF2563EB), size: 18),
-                              ),
-                            ),
-                            const SizedBox(width: 12),
-                            const Expanded(
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Text(
-                                    'Layers & Overlays',
-                                    style: TextStyle(
-                                      fontWeight: FontWeight.w800,
-                                      fontSize: 18,
-                                      color: Color(0xFF0F172A),
-                                      letterSpacing: -0.2,
-                                    ),
-                                  ),
-                                  Text(
-                                    'Choose base style and active overlays',
-                                    style: TextStyle(
-                                      fontSize: 11,
-                                      color: Color(0xFF64748B),
-                                      fontWeight: FontWeight.w500,
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ),
-                            _EmbossedDialogCloseButton(
-                              onTap: () => Navigator.pop(context),
-                            ),
-                          ],
-                        ),
-                        const SizedBox(height: 14),
-                        // Scrollable content
-                        Flexible(
-                          child: SingleChildScrollView(
-                            physics: const BouncingScrollPhysics(),
-                            child: Column(
-                              mainAxisSize: MainAxisSize.min,
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                // Section 1: Base Map
-                                Row(
-                                  children: [
-                                    Icon(LucideIcons.map, size: 14, color: Colors.grey.shade600),
-                                    const SizedBox(width: 6),
-                                    Text(
-                                      'BASE MAP',
-                                      style: TextStyle(
-                                        fontSize: 11,
-                                        fontWeight: FontWeight.w800,
-                                        letterSpacing: 1.0,
-                                        color: Colors.grey.shade600,
-                                      ),
-                                    ),
-                                    const Spacer(),
-                                    Container(
-                                      padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
-                                      decoration: BoxDecoration(
-                                        color: const Color(0xFFF1F5F9),
-                                        borderRadius: BorderRadius.circular(8),
-                                      ),
-                                      child: Text(
-                                        'Select 1',
-                                        style: TextStyle(
-                                          fontSize: 10,
-                                          color: Colors.grey.shade600,
-                                          fontWeight: FontWeight.w600,
-                                        ),
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                                const SizedBox(height: 8),
-                                ...kMapStyles.map((option) {
-                                  final isSelected = _selectedMapStyle == option.style;
-                                  return _EmbossedMapStyleTile(
-                                    key: ValueKey(option.style),
-                                    option: option,
-                                    isSelected: isSelected,
-                                    onTap: () {
-                                      setDialogState(() {
-                                        _selectedMapStyle = option.style;
-                                      });
-                                      setState(() {});
-                                    },
-                                  );
-                                }),
-                                const SizedBox(height: 10),
-                                const Divider(color: Color(0xFFE2E8F0), height: 1),
-                                const SizedBox(height: 10),
-                                // Section 2: Overlays
-                                Row(
-                                  children: [
-                                    const Icon(LucideIcons.layers, size: 14, color: Color(0xFF2563EB)),
-                                    const SizedBox(width: 6),
-                                    const Text(
-                                      'MAP OVERLAYS',
-                                      style: TextStyle(
-                                        fontSize: 11,
-                                        fontWeight: FontWeight.w800,
-                                        letterSpacing: 1.0,
-                                        color: Color(0xFF1D4ED8),
-                                      ),
-                                    ),
-                                    const Spacer(),
-                                    Container(
-                                      padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
-                                      decoration: BoxDecoration(
-                                        color: _activeOverlays.isNotEmpty
-                                            ? const Color(0xFFEFF6FF)
-                                            : const Color(0xFFF1F5F9),
-                                        borderRadius: BorderRadius.circular(8),
-                                        border: Border.all(
-                                          color: _activeOverlays.isNotEmpty
-                                              ? const Color(0xFFBFDBFE)
-                                              : Colors.transparent,
-                                          width: 0.8,
-                                        ),
-                                      ),
-                                      child: Text(
-                                        '${_activeOverlays.length} active',
-                                        style: TextStyle(
-                                          fontSize: 10,
-                                          fontWeight: FontWeight.w700,
-                                          color: _activeOverlays.isNotEmpty
-                                              ? const Color(0xFF1D4ED8)
-                                              : Colors.grey.shade600,
-                                        ),
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                                const SizedBox(height: 2),
-                                Text(
-                                  'Stacked transparently on top of any base map',
-                                  style: TextStyle(fontSize: 10.5, color: Colors.grey.shade500),
-                                ),
-                                const SizedBox(height: 8),
-                                ...kMapOverlays.map((overlay) {
-                                  final isOverlayActive = _activeOverlays.contains(overlay.type);
-                                  return _EmbossedOverlayTile(
-                                    key: ValueKey(overlay.type),
-                                    overlay: overlay,
-                                    isActive: isOverlayActive,
-                                    onChanged: (active) {
-                                      setDialogState(() {
-                                        if (active) {
-                                          _activeOverlays.add(overlay.type);
-                                        } else {
-                                          _activeOverlays.remove(overlay.type);
-                                        }
-                                      });
-                                      setState(() {});
-                                    },
-                                  );
-                                }),
-                              ],
-                            ),
+                        const Text(
+                          'Map type',
+                          style: TextStyle(
+                            fontSize: 18,
+                            fontWeight: FontWeight.w700,
+                            color: Color(0xFF202124),
+                            letterSpacing: -0.2,
                           ),
                         ),
-                        const SizedBox(height: 12),
-                        // Done button
-                        EmbossedActionButton(
-                          onTap: () => Navigator.pop(context),
-                          label: 'Done',
-                          icon: LucideIcons.check,
-                          height: 50,
-                          gradientColors: const [
-                            Color(0xFF3B82F6),
-                            Color(0xFF2563EB),
-                            Color(0xFF1D4ED8),
-                          ],
+                        IconButton(
+                          icon: const Icon(LucideIcons.x, size: 20, color: Color(0xFF5F6368)),
+                          splashRadius: 20,
+                          padding: EdgeInsets.zero,
+                          constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
+                          onPressed: () => Navigator.pop(context),
                         ),
                       ],
                     ),
-                  ),
+                    const SizedBox(height: 16),
+                    // Row of 3 Map Types: Default, Satellite, Terrain
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceAround,
+                      children: kMapStyles.map((styleOption) {
+                        final isSelected = _selectedMapStyle == styleOption.style;
+                        return _MapTypeCard(
+                          title: styleOption.title,
+                          isSelected: isSelected,
+                          thumbnail: _buildMapThumbnail(styleOption.style),
+                          onTap: () {
+                            setSheetState(() {
+                              _selectedMapStyle = styleOption.style;
+                            });
+                            setState(() {});
+                          },
+                        );
+                      }).toList(),
+                    ),
+                    const SizedBox(height: 20),
+                    const Divider(height: 1, thickness: 1, color: Color(0xFFF1F3F4)),
+                    const SizedBox(height: 18),
+                    // "Map details" header
+                    const Text(
+                      'Map details',
+                      style: TextStyle(
+                        fontSize: 18,
+                        fontWeight: FontWeight.w700,
+                        color: Color(0xFF202124),
+                        letterSpacing: -0.2,
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+                    // Details Grid (OSM supported details)
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceAround,
+                      children: kMapOverlays.map((overlay) {
+                        final isOverlayActive = _activeOverlays.contains(overlay.type);
+                        return _MapDetailButton(
+                          title: overlay.title,
+                          isSelected: isOverlayActive,
+                          iconWidget: _buildOverlayIcon(overlay.type, isOverlayActive),
+                          onTap: () {
+                            setSheetState(() {
+                              if (isOverlayActive) {
+                                _activeOverlays.remove(overlay.type);
+                              } else {
+                                _activeOverlays.add(overlay.type);
+                              }
+                            });
+                            setState(() {});
+                          },
+                        );
+                      }).toList(),
+                    ),
+                  ],
                 ),
               ),
             );
@@ -1985,16 +1858,26 @@ class _InteractiveMapScreenState extends ConsumerState<InteractiveMapScreen> {
   }
 }
 
-class _EmbossedDialogCloseButton extends StatefulWidget {
+
+
+class _MapTypeCard extends StatefulWidget {
+  final String title;
+  final bool isSelected;
+  final Widget thumbnail;
   final VoidCallback onTap;
 
-  const _EmbossedDialogCloseButton({required this.onTap});
+  const _MapTypeCard({
+    required this.title,
+    required this.isSelected,
+    required this.thumbnail,
+    required this.onTap,
+  });
 
   @override
-  State<_EmbossedDialogCloseButton> createState() => _EmbossedDialogCloseButtonState();
+  State<_MapTypeCard> createState() => _MapTypeCardState();
 }
 
-class _EmbossedDialogCloseButtonState extends State<_EmbossedDialogCloseButton> {
+class _MapTypeCardState extends State<_MapTypeCard> {
   bool _isPressed = false;
 
   @override
@@ -2006,182 +1889,223 @@ class _EmbossedDialogCloseButtonState extends State<_EmbossedDialogCloseButton> 
         widget.onTap();
       },
       onTapCancel: () => setState(() => _isPressed = false),
+      behavior: HitTestBehavior.opaque,
       child: AnimatedScale(
-        scale: _isPressed ? 0.90 : 1.0,
+        scale: _isPressed ? 0.94 : 1.0,
         duration: const Duration(milliseconds: 100),
-        curve: Curves.easeOutCubic,
-        child: Container(
-          width: 32,
-          height: 32,
-          decoration: BoxDecoration(
-            shape: BoxShape.circle,
-            gradient: const LinearGradient(
-              colors: [
-                Color(0xFFFFFFFF),
-                Color(0xFFF8FAFC),
-                Color(0xFFE2E8F0),
-              ],
-              begin: Alignment.topLeft,
-              end: Alignment.bottomRight,
-            ),
-            border: Border.all(
-              color: Colors.white,
-              width: 1.0,
-            ),
-            boxShadow: [
-              BoxShadow(
-                color: Colors.black.withValues(alpha: 0.10),
-                offset: const Offset(0, 2),
-                blurRadius: 4,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(
+              width: 74,
+              height: 74,
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(18),
+                border: Border.all(
+                  color: widget.isSelected ? const Color(0xFF1A73E8) : const Color(0xFFDADCE0),
+                  width: widget.isSelected ? 2.5 : 1.0,
+                ),
               ),
-              BoxShadow(
-                color: Colors.white.withValues(alpha: 0.8),
-                offset: const Offset(0, -0.8),
-                blurRadius: 1,
+              child: ClipRRect(
+                borderRadius: BorderRadius.circular(widget.isSelected ? 15.5 : 17),
+                child: widget.thumbnail,
               ),
-            ],
-          ),
-          child: const Center(
-            child: Icon(
-              LucideIcons.x,
-              size: 16,
-              color: Color(0xFF64748B),
             ),
-          ),
+            const SizedBox(height: 8),
+            Text(
+              widget.title,
+              style: TextStyle(
+                fontSize: 12.5,
+                fontWeight: widget.isSelected ? FontWeight.w700 : FontWeight.w500,
+                color: widget.isSelected ? const Color(0xFF1A73E8) : const Color(0xFF3C4043),
+              ),
+            ),
+          ],
         ),
       ),
     );
   }
 }
 
-class _EmbossedToggleSwitch extends StatelessWidget {
-  final bool value;
-  final Color activeColor;
-  final ValueChanged<bool> onChanged;
-
-  const _EmbossedToggleSwitch({
-    required this.value,
-    required this.activeColor,
-    required this.onChanged,
-  });
+class _DefaultMapThumbnail extends StatelessWidget {
+  const _DefaultMapThumbnail();
 
   @override
   Widget build(BuildContext context) {
-    return GestureDetector(
-      onTap: () => onChanged(!value),
-      behavior: HitTestBehavior.opaque,
-      child: AnimatedContainer(
-        duration: const Duration(milliseconds: 200),
-        curve: Curves.easeOutCubic,
-        width: 44,
-        height: 25,
-        padding: const EdgeInsets.all(2.5),
-        decoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(13),
-          gradient: value
-              ? LinearGradient(
-                  colors: [
-                    activeColor,
-                    Color.lerp(activeColor, Colors.black, 0.15)!,
-                  ],
-                  begin: Alignment.topCenter,
-                  end: Alignment.bottomCenter,
-                )
-              : const LinearGradient(
-                  colors: [
-                    Color(0xFFCBD5E1),
-                    Color(0xFFE2E8F0),
-                  ],
-                  begin: Alignment.topCenter,
-                  end: Alignment.bottomCenter,
-                ),
-          border: Border.all(
-            color: value
-                ? Colors.white.withValues(alpha: 0.45)
-                : const Color(0xFFCBD5E1),
-            width: 1.0,
-          ),
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black.withValues(alpha: 0.10),
-              offset: const Offset(0, 1.5),
-              blurRadius: 2.5,
-            ),
-            if (value)
-              BoxShadow(
-                color: activeColor.withValues(alpha: 0.35),
-                blurRadius: 6,
-                offset: const Offset(0, 2),
+    return Container(
+      color: const Color(0xFFD4E4FA),
+      child: Stack(
+        children: [
+          // Green park patch
+          Positioned(
+            right: 0,
+            bottom: 0,
+            child: Container(
+              width: 36,
+              height: 36,
+              decoration: const BoxDecoration(
+                color: Color(0xFFCEEAD6),
+                borderRadius: BorderRadius.only(topLeft: Radius.circular(16)),
               ),
-          ],
-        ),
-        child: AnimatedAlign(
-          duration: const Duration(milliseconds: 200),
-          curve: Curves.easeOutBack,
-          alignment: value ? Alignment.centerRight : Alignment.centerLeft,
-          child: Container(
-            width: 20,
-            height: 20,
-            decoration: BoxDecoration(
-              shape: BoxShape.circle,
-              gradient: const LinearGradient(
-                colors: [
-                  Color(0xFFFFFFFF),
-                  Color(0xFFF1F5F9),
-                ],
-                begin: Alignment.topCenter,
-                end: Alignment.bottomCenter,
-              ),
-              border: Border.all(
-                color: Colors.white,
-                width: 0.8,
-              ),
-              boxShadow: [
-                BoxShadow(
-                  color: Colors.black.withValues(alpha: 0.18),
-                  offset: const Offset(0, 1.5),
-                  blurRadius: 3,
-                ),
-                BoxShadow(
-                  color: Colors.white.withValues(alpha: 0.8),
-                  offset: const Offset(0, -0.6),
-                  blurRadius: 1,
-                ),
-              ],
             ),
           ),
-        ),
+          // Yellow main road
+          Positioned(
+            left: -10,
+            bottom: 14,
+            right: -10,
+            child: Transform.rotate(
+              angle: -0.38,
+              child: Container(
+                height: 9,
+                decoration: BoxDecoration(
+                  color: const Color(0xFFFEEFC3),
+                  border: Border.symmetric(
+                    horizontal: BorderSide(color: const Color(0xFFF9AB00).withValues(alpha: 0.6), width: 0.8),
+                  ),
+                ),
+              ),
+            ),
+          ),
+          // White crossing street
+          Positioned(
+            top: -10,
+            left: 24,
+            bottom: -10,
+            child: Transform.rotate(
+              angle: 0.32,
+              child: Container(
+                width: 8,
+                decoration: const BoxDecoration(
+                  color: Colors.white,
+                  border: Border.symmetric(
+                    vertical: BorderSide(color: Color(0xFFDADCE0), width: 0.8),
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ],
       ),
     );
   }
 }
 
-class _EmbossedFilterTile extends StatefulWidget {
-  final IssueCategory category;
-  final bool isVisible;
+class _SatelliteMapThumbnail extends StatelessWidget {
+  const _SatelliteMapThumbnail();
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      decoration: const BoxDecoration(
+        gradient: LinearGradient(
+          colors: [Color(0xFF263238), Color(0xFF1E293B)],
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+        ),
+      ),
+      child: CustomPaint(
+        painter: _SatelliteRoadPainter(),
+        size: const Size(74, 74),
+      ),
+    );
+  }
+}
+
+class _SatelliteRoadPainter extends CustomPainter {
+  @override
+  void paint(Canvas canvas, Size size) {
+    // Dark vegetation patch
+    final darkPatch = Paint()..color = const Color(0xFF1C2D27);
+    canvas.drawCircle(Offset(size.width * 0.75, size.height * 0.3), 20, darkPatch);
+
+    // Curved white road across satellite
+    final roadPaint = Paint()
+      ..color = const Color(0xFFCBD5E1)
+      ..strokeWidth = 3.2
+      ..style = PaintingStyle.stroke
+      ..strokeCap = StrokeCap.round;
+
+    final path = Path()
+      ..moveTo(0, size.height * 0.42)
+      ..cubicTo(
+        size.width * 0.4, size.height * 0.48,
+        size.width * 0.55, size.height * 0.72,
+        size.width, size.height * 0.68,
+      );
+    canvas.drawPath(path, roadPaint);
+  }
+
+  @override
+  bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
+}
+
+class _TerrainMapThumbnail extends StatelessWidget {
+  const _TerrainMapThumbnail();
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      color: const Color(0xFFE8EEF5),
+      child: CustomPaint(
+        painter: _TerrainContourPainter(),
+        size: const Size(74, 74),
+      ),
+    );
+  }
+}
+
+class _TerrainContourPainter extends CustomPainter {
+  @override
+  void paint(Canvas canvas, Size size) {
+    final contourPaint = Paint()
+      ..color = const Color(0xFF94A3B8)
+      ..strokeWidth = 1.6
+      ..style = PaintingStyle.stroke;
+
+    // 3 smooth contour lines spanning across the card
+    for (int i = 1; i <= 3; i++) {
+      final yOffset = size.height * (0.24 * i);
+      final path = Path()
+        ..moveTo(0, yOffset + 4)
+        ..quadraticBezierTo(
+          size.width * 0.5,
+          yOffset - 10,
+          size.width,
+          yOffset + 6,
+        );
+      canvas.drawPath(path, contourPaint);
+    }
+  }
+
+  @override
+  bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
+}
+
+class _MapDetailButton extends StatefulWidget {
+  final String title;
+  final bool isSelected;
+  final Widget iconWidget;
   final VoidCallback onTap;
 
-  const _EmbossedFilterTile({
-    super.key,
-    required this.category,
-    required this.isVisible,
+  const _MapDetailButton({
+    required this.title,
+    required this.isSelected,
+    required this.iconWidget,
     required this.onTap,
   });
 
   @override
-  State<_EmbossedFilterTile> createState() => _EmbossedFilterTileState();
+  State<_MapDetailButton> createState() => _MapDetailButtonState();
 }
 
-class _EmbossedFilterTileState extends State<_EmbossedFilterTile> {
+class _MapDetailButtonState extends State<_MapDetailButton> {
   bool _isPressed = false;
 
   @override
   Widget build(BuildContext context) {
-    final style = kCategoryStyles[widget.category]!;
-    final isVisible = widget.isVisible;
-
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 10.0),
+    return SizedBox(
+      width: 72,
       child: GestureDetector(
         onTapDown: (_) => setState(() => _isPressed = true),
         onTapUp: (_) {
@@ -2191,151 +2115,58 @@ class _EmbossedFilterTileState extends State<_EmbossedFilterTile> {
         onTapCancel: () => setState(() => _isPressed = false),
         behavior: HitTestBehavior.opaque,
         child: AnimatedScale(
-          scale: _isPressed ? 0.97 : 1.0,
+          scale: _isPressed ? 0.94 : 1.0,
           duration: const Duration(milliseconds: 100),
-          curve: Curves.easeOutCubic,
-          child: AnimatedContainer(
-            duration: const Duration(milliseconds: 180),
-            curve: Curves.easeOutCubic,
-            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 11),
-            decoration: BoxDecoration(
-              borderRadius: BorderRadius.circular(18),
-              gradient: isVisible
-                  ? LinearGradient(
-                      colors: [
-                        Colors.white,
-                        style.color.withValues(alpha: 0.08),
-                      ],
-                      begin: Alignment.topLeft,
-                      end: Alignment.bottomRight,
-                    )
-                  : const LinearGradient(
-                      colors: [
-                        Color(0xFFFAFAFA),
-                        Color(0xFFF1F5F9),
-                      ],
-                      begin: Alignment.topLeft,
-                      end: Alignment.bottomRight,
-                    ),
-              border: Border.all(
-                color: isVisible
-                    ? style.color.withValues(alpha: 0.45)
-                    : const Color(0xFFE2E8F0),
-                width: isVisible ? 1.5 : 1.0,
-              ),
-              boxShadow: isVisible
-                  ? [
-                      BoxShadow(
-                        color: style.color.withValues(alpha: 0.14),
-                        blurRadius: 10,
-                        offset: const Offset(0, 3),
-                      ),
-                      BoxShadow(
-                        color: Colors.white.withValues(alpha: 0.8),
-                        offset: const Offset(0, -1),
-                        blurRadius: 1.5,
-                      ),
-                    ]
-                  : [
-                      BoxShadow(
-                        color: Colors.black.withValues(alpha: 0.03),
-                        blurRadius: 4,
-                        offset: const Offset(0, 1.5),
-                      ),
-                    ],
-            ),
-            child: Row(
-              children: [
-                // 3D Category Icon
-                if (isVisible)
-                  EmbossedCategoryIcon(
-                    category: widget.category,
-                    size: 40,
-                    iconSize: 20,
-                  )
-                else
-                  Container(
-                    width: 40,
-                    height: 40,
-                    decoration: BoxDecoration(
-                      shape: BoxShape.circle,
-                      color: const Color(0xFFE2E8F0),
-                      border: Border.all(color: Colors.white, width: 1.0),
-                    ),
-                    child: Icon(
-                      style.icon,
-                      color: const Color(0xFF94A3B8),
-                      size: 20,
-                    ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              AnimatedContainer(
+                duration: const Duration(milliseconds: 180),
+                curve: Curves.easeOutCubic,
+                width: 56,
+                height: 56,
+                decoration: BoxDecoration(
+                  color: widget.isSelected
+                      ? const Color(0xFFE8F0FE)
+                      : const Color(0xFFF8F9FA),
+                  borderRadius: BorderRadius.circular(18),
+                  border: Border.all(
+                    color: widget.isSelected
+                        ? const Color(0xFF1A73E8)
+                        : const Color(0xFFE8EAED),
+                    width: widget.isSelected ? 2.4 : 1.0,
                   ),
-                const SizedBox(width: 14),
-                Expanded(
-                  child: Text(
-                    style.label,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: TextStyle(
-                      fontSize: 15,
-                      fontWeight: isVisible ? FontWeight.w700 : FontWeight.w600,
-                      color: isVisible ? const Color(0xFF0F172A) : const Color(0xFF64748B),
-                      letterSpacing: 0.2,
-                    ),
-                  ),
-                ),
-                // Embossed Checkmark Dial
-                AnimatedContainer(
-                  duration: const Duration(milliseconds: 180),
-                  width: 26,
-                  height: 26,
-                  decoration: BoxDecoration(
-                    shape: BoxShape.circle,
-                    gradient: isVisible
-                        ? LinearGradient(
-                            colors: style.gradientColors.isNotEmpty
-                                ? style.gradientColors
-                                : [style.color, style.color],
-                            begin: Alignment.topCenter,
-                            end: Alignment.bottomCenter,
-                          )
-                        : const LinearGradient(
-                            colors: [
-                              Color(0xFFE2E8F0),
-                              Color(0xFFCBD5E1),
-                            ],
-                            begin: Alignment.topCenter,
-                            end: Alignment.bottomCenter,
+                  boxShadow: widget.isSelected
+                      ? [
+                          BoxShadow(
+                            color: const Color(0xFF1A73E8).withValues(alpha: 0.15),
+                            blurRadius: 8,
+                            offset: const Offset(0, 2),
                           ),
-                    border: Border.all(
-                      color: isVisible
-                          ? Colors.white.withValues(alpha: 0.8)
-                          : const Color(0xFFCBD5E1),
-                      width: 1.2,
-                    ),
-                    boxShadow: isVisible
-                        ? [
-                            BoxShadow(
-                              color: style.color.withValues(alpha: 0.35),
-                              blurRadius: 5,
-                              offset: const Offset(0, 1.5),
-                            ),
-                            BoxShadow(
-                              color: Colors.white.withValues(alpha: 0.8),
-                              offset: const Offset(0, -0.6),
-                              blurRadius: 1,
-                            ),
-                          ]
-                        : null,
-                  ),
-                  child: Center(
-                    child: Icon(
-                      LucideIcons.check,
-                      color: isVisible ? Colors.white : Colors.transparent,
-                      size: 15,
-                    ),
+                        ]
+                      : null,
+                ),
+                child: Center(child: widget.iconWidget),
+              ),
+              const SizedBox(height: 6),
+              FittedBox(
+                fit: BoxFit.scaleDown,
+                child: Text(
+                  widget.title,
+                  textAlign: TextAlign.center,
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    fontSize: 11,
+                    height: 1.15,
+                    fontWeight: widget.isSelected ? FontWeight.w700 : FontWeight.w500,
+                    color: widget.isSelected
+                        ? const Color(0xFF1A73E8)
+                        : const Color(0xFF3C4043),
                   ),
                 ),
-              ],
-            ),
+              ),
+            ],
           ),
         ),
       ),
@@ -2343,32 +2174,32 @@ class _EmbossedFilterTileState extends State<_EmbossedFilterTile> {
   }
 }
 
-class _EmbossedMapStyleTile extends StatefulWidget {
-  final MapStyleOption option;
+class _CategoryFilterCard extends StatefulWidget {
+  final IssueCategory category;
   final bool isSelected;
   final VoidCallback onTap;
 
-  const _EmbossedMapStyleTile({
-    super.key,
-    required this.option,
+  const _CategoryFilterCard({
+    required this.category,
     required this.isSelected,
     required this.onTap,
   });
 
   @override
-  State<_EmbossedMapStyleTile> createState() => _EmbossedMapStyleTileState();
+  State<_CategoryFilterCard> createState() => _CategoryFilterCardState();
 }
 
-class _EmbossedMapStyleTileState extends State<_EmbossedMapStyleTile> {
+class _CategoryFilterCardState extends State<_CategoryFilterCard> {
   bool _isPressed = false;
 
   @override
   Widget build(BuildContext context) {
-    final option = widget.option;
+    final style = kCategoryStyles[widget.category]!;
     final isSelected = widget.isSelected;
+    final categoryColor = style.color;
 
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 8.0),
+    return SizedBox(
+      width: 74,
       child: GestureDetector(
         onTapDown: (_) => setState(() => _isPressed = true),
         onTapUp: (_) {
@@ -2378,175 +2209,60 @@ class _EmbossedMapStyleTileState extends State<_EmbossedMapStyleTile> {
         onTapCancel: () => setState(() => _isPressed = false),
         behavior: HitTestBehavior.opaque,
         child: AnimatedScale(
-          scale: _isPressed ? 0.97 : 1.0,
+          scale: _isPressed ? 0.93 : 1.0,
           duration: const Duration(milliseconds: 100),
           curve: Curves.easeOutCubic,
-          child: AnimatedContainer(
-            duration: const Duration(milliseconds: 180),
-            curve: Curves.easeOutCubic,
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-            decoration: BoxDecoration(
-              borderRadius: BorderRadius.circular(16),
-              gradient: isSelected
-                  ? const LinearGradient(
-                      colors: [
-                        Colors.white,
-                        Color(0xFFEFF6FF),
-                      ],
-                      begin: Alignment.topLeft,
-                      end: Alignment.bottomRight,
-                    )
-                  : const LinearGradient(
-                      colors: [
-                        Color(0xFFFFFFFF),
-                        Color(0xFFF8FAFC),
-                      ],
-                      begin: Alignment.topLeft,
-                      end: Alignment.bottomRight,
-                    ),
-              border: Border.all(
-                color: isSelected
-                    ? const Color(0xFF2563EB)
-                    : const Color(0xFFE2E8F0),
-                width: isSelected ? 1.6 : 1.0,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              AnimatedContainer(
+                duration: const Duration(milliseconds: 180),
+                curve: Curves.easeOutCubic,
+                width: 60,
+                height: 60,
+                decoration: BoxDecoration(
+                  color: isSelected
+                      ? categoryColor.withValues(alpha: 0.12)
+                      : const Color(0xFFF8F9FA),
+                  borderRadius: BorderRadius.circular(18),
+                  border: Border.all(
+                    color: isSelected ? categoryColor : const Color(0xFFE2E8F0),
+                    width: isSelected ? 2.2 : 1.0,
+                  ),
+                  boxShadow: isSelected
+                      ? [
+                          BoxShadow(
+                            color: categoryColor.withValues(alpha: 0.22),
+                            blurRadius: 10,
+                            offset: const Offset(0, 3),
+                          ),
+                        ]
+                      : null,
+                ),
+                child: Center(
+                  child: Icon(
+                    style.icon,
+                    color: isSelected ? categoryColor : const Color(0xFF94A3B8),
+                    size: 28,
+                  ),
+                ),
               ),
-              boxShadow: isSelected
-                  ? [
-                      BoxShadow(
-                        color: const Color(0xFF2563EB).withValues(alpha: 0.14),
-                        blurRadius: 10,
-                        offset: const Offset(0, 3),
-                      ),
-                      BoxShadow(
-                        color: Colors.white.withValues(alpha: 0.9),
-                        offset: const Offset(0, -1),
-                        blurRadius: 1.5,
-                      ),
-                    ]
-                  : [
-                      BoxShadow(
-                        color: Colors.black.withValues(alpha: 0.03),
-                        blurRadius: 4,
-                        offset: const Offset(0, 1.5),
-                      ),
-                      BoxShadow(
-                        color: Colors.white.withValues(alpha: 0.8),
-                        offset: const Offset(0, -0.6),
-                        blurRadius: 1,
-                      ),
-                    ],
-            ),
-            child: Row(
-              children: [
-                // 3D Beveled Preview Squircle
-                Container(
-                  width: 36,
-                  height: 36,
-                  decoration: BoxDecoration(
-                    color: option.previewColor,
-                    borderRadius: BorderRadius.circular(10),
-                    border: Border.all(
-                      color: Colors.white,
-                      width: 1.2,
-                    ),
-                    boxShadow: [
-                      BoxShadow(
-                        color: Colors.black.withValues(alpha: 0.12),
-                        offset: const Offset(0, 2),
-                        blurRadius: 4,
-                      ),
-                      BoxShadow(
-                        color: Colors.white.withValues(alpha: 0.8),
-                        offset: const Offset(0, -0.6),
-                        blurRadius: 1,
-                      ),
-                    ],
-                  ),
-                  child: Center(
-                    child: Icon(
-                      option.icon,
-                      color: option.style == MapStyle.darkMode || option.style == MapStyle.satellite
-                          ? Colors.white
-                          : const Color(0xFF1E293B),
-                      size: 19,
-                    ),
+              const SizedBox(height: 7),
+              FittedBox(
+                fit: BoxFit.scaleDown,
+                child: Text(
+                  style.label,
+                  textAlign: TextAlign.center,
+                  maxLines: 1,
+                  style: TextStyle(
+                    fontSize: 12,
+                    fontWeight: isSelected ? FontWeight.w700 : FontWeight.w500,
+                    color: isSelected ? categoryColor : const Color(0xFF64748B),
+                    letterSpacing: -0.1,
                   ),
                 ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Text(
-                        option.title,
-                        style: TextStyle(
-                          fontWeight: FontWeight.w700,
-                          fontSize: 14,
-                          color: isSelected ? const Color(0xFF1E3A8A) : const Color(0xFF0F172A),
-                        ),
-                      ),
-                      Text(
-                        option.subtitle,
-                        style: TextStyle(
-                          fontSize: 11,
-                          color: isSelected ? const Color(0xFF3B82F6) : const Color(0xFF64748B),
-                          fontWeight: isSelected ? FontWeight.w600 : FontWeight.w400,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-                // Concentric 3D Radio Dial
-                Container(
-                  width: 22,
-                  height: 22,
-                  decoration: BoxDecoration(
-                    shape: BoxShape.circle,
-                    border: Border.all(
-                      color: isSelected ? const Color(0xFF2563EB) : const Color(0xFFCBD5E1),
-                      width: isSelected ? 2.0 : 1.5,
-                    ),
-                    color: Colors.white,
-                    boxShadow: isSelected
-                        ? [
-                            BoxShadow(
-                              color: const Color(0xFF2563EB).withValues(alpha: 0.25),
-                              blurRadius: 4,
-                              offset: const Offset(0, 1),
-                            ),
-                          ]
-                        : null,
-                  ),
-                  child: Center(
-                    child: isSelected
-                        ? Container(
-                            width: 10,
-                            height: 10,
-                            decoration: BoxDecoration(
-                              shape: BoxShape.circle,
-                              gradient: const LinearGradient(
-                                colors: [
-                                  Color(0xFF3B82F6),
-                                  Color(0xFF1D4ED8),
-                                ],
-                                begin: Alignment.topCenter,
-                                end: Alignment.bottomCenter,
-                              ),
-                              boxShadow: [
-                                BoxShadow(
-                                  color: Colors.black.withValues(alpha: 0.2),
-                                  blurRadius: 2,
-                                  offset: const Offset(0, 1),
-                                ),
-                              ],
-                            ),
-                          )
-                        : null,
-                  ),
-                ),
-              ],
-            ),
+              ),
+            ],
           ),
         ),
       ),
@@ -2554,140 +2270,57 @@ class _EmbossedMapStyleTileState extends State<_EmbossedMapStyleTile> {
   }
 }
 
-class _EmbossedOverlayTile extends StatelessWidget {
-  final MapOverlayOption overlay;
-  final bool isActive;
-  final ValueChanged<bool> onChanged;
-
-  const _EmbossedOverlayTile({
-    super.key,
-    required this.overlay,
-    required this.isActive,
-    required this.onChanged,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 8.0),
-      child: AnimatedContainer(
-        duration: const Duration(milliseconds: 180),
-        curve: Curves.easeOutCubic,
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+Widget _buildOverlayIcon(MapOverlayType type, bool isSelected) {
+  switch (type) {
+    case MapOverlayType.transit:
+      return Container(
+        width: 32,
+        height: 32,
         decoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(16),
-          gradient: isActive
-              ? LinearGradient(
-                  colors: [
-                    Colors.white,
-                    overlay.activeColor.withValues(alpha: 0.08),
-                  ],
-                  begin: Alignment.topLeft,
-                  end: Alignment.bottomRight,
-                )
-              : const LinearGradient(
-                  colors: [
-                    Color(0xFFFFFFFF),
-                    Color(0xFFF8FAFC),
-                  ],
-                  begin: Alignment.topLeft,
-                  end: Alignment.bottomRight,
-                ),
-          border: Border.all(
-            color: isActive
-                ? overlay.activeColor.withValues(alpha: 0.45)
-                : const Color(0xFFE2E8F0),
-            width: isActive ? 1.6 : 1.0,
-          ),
-          boxShadow: isActive
-              ? [
-                  BoxShadow(
-                    color: overlay.activeColor.withValues(alpha: 0.12),
-                    blurRadius: 8,
-                    offset: const Offset(0, 3),
-                  ),
-                  BoxShadow(
-                    color: Colors.white.withValues(alpha: 0.8),
-                    offset: const Offset(0, -1),
-                    blurRadius: 1.5,
-                  ),
-                ]
-              : [
-                  BoxShadow(
-                    color: Colors.black.withValues(alpha: 0.03),
-                    blurRadius: 4,
-                    offset: const Offset(0, 1.5),
-                  ),
-                ],
+          color: const Color(0xFF1A73E8),
+          borderRadius: BorderRadius.circular(8),
         ),
-        child: Row(
-          children: [
-            // 3D Beveled Icon Box
-            Container(
-              width: 36,
-              height: 36,
-              decoration: BoxDecoration(
-                color: isActive ? overlay.activeColor : const Color(0xFFF1F5F9),
-                borderRadius: BorderRadius.circular(10),
-                border: Border.all(
-                  color: Colors.white,
-                  width: 1.2,
-                ),
-                boxShadow: [
-                  BoxShadow(
-                    color: Colors.black.withValues(alpha: 0.10),
-                    offset: const Offset(0, 2),
-                    blurRadius: 4,
-                  ),
-                  BoxShadow(
-                    color: Colors.white.withValues(alpha: 0.8),
-                    offset: const Offset(0, -0.6),
-                    blurRadius: 1,
-                  ),
-                ],
-              ),
-              child: Center(
-                child: Icon(
-                  overlay.icon,
-                  color: isActive ? Colors.white : const Color(0xFF64748B),
-                  size: 19,
-                ),
-              ),
-            ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Text(
-                    overlay.title,
-                    style: TextStyle(
-                      fontWeight: FontWeight.w700,
-                      fontSize: 13.5,
-                      color: isActive ? const Color(0xFF0F172A) : const Color(0xFF334155),
-                    ),
-                  ),
-                  Text(
-                    overlay.subtitle,
-                    style: TextStyle(
-                      fontSize: 10.5,
-                      color: Colors.grey.shade500,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            const SizedBox(width: 8),
-            _EmbossedToggleSwitch(
-              value: isActive,
-              activeColor: overlay.activeColor,
-              onChanged: onChanged,
-            ),
-          ],
+        child: const Center(
+          child: Icon(LucideIcons.train, color: Colors.white, size: 19),
         ),
-      ),
-    );
+      );
+    case MapOverlayType.cycling:
+      return Container(
+        width: 32,
+        height: 32,
+        decoration: BoxDecoration(
+          shape: BoxShape.circle,
+          border: Border.all(color: const Color(0xFF0F9D58), width: 2.2),
+        ),
+        child: const Center(
+          child: Icon(LucideIcons.bike, color: Color(0xFF0F9D58), size: 17),
+        ),
+      );
+    case MapOverlayType.footpaths:
+      return const Icon(
+        LucideIcons.footprints,
+        color: Color(0xFFE37400),
+        size: 24,
+      );
+    case MapOverlayType.hybridLabels:
+      return const Icon(
+        LucideIcons.tags,
+        color: Color(0xFF1A73E8),
+        size: 24,
+      );
+  }
+}
+
+
+Widget _buildMapThumbnail(MapStyle style) {
+  switch (style) {
+    case MapStyle.streets:
+      return const _DefaultMapThumbnail();
+    case MapStyle.satellite:
+      return const _SatelliteMapThumbnail();
+    case MapStyle.outdoor:
+    default:
+      return const _TerrainMapThumbnail();
   }
 }
 class EmbossedTakePictureButton extends StatefulWidget {
@@ -3232,11 +2865,7 @@ class _MapActionButtonState extends State<_MapActionButton>
   }
 }
 
-/// Colin McKee's Liquid Glass optical container with calibrated parameters:
-/// - Frost: 24.0 (hardware ImageFilter.blur)
-/// - Refraction: 0.28 & Curve: 0.25 (convex meniscus caustic sheen)
-/// - Edge: 0.03 (directional specular hairline rim glint, light angle -0.15, -0.15)
-/// - Elevation: Dual ambient floating drop shadows
+/// Solid white container with refined border and soft ambient shadows.
 class LiquidGlassContainer extends StatelessWidget {
   final Widget child;
   final double? width;
@@ -3261,7 +2890,7 @@ class LiquidGlassContainer extends StatelessWidget {
     this.margin,
     this.onTap,
     this.frostBlur = 24.0,
-    this.tintColor = const Color(0x33FFFFFF),
+    this.tintColor = Colors.white,
     this.shadows,
   });
 
@@ -3271,15 +2900,15 @@ class LiquidGlassContainer extends StatelessWidget {
 
     final defaultShadows = shadows ?? [
       BoxShadow(
-        color: Colors.black.withValues(alpha: 0.10),
-        blurRadius: 20,
-        offset: const Offset(0, 8),
+        color: Colors.black.withValues(alpha: 0.08),
+        blurRadius: 16,
+        offset: const Offset(0, 4),
         spreadRadius: 0,
       ),
       BoxShadow(
-        color: Colors.black.withValues(alpha: 0.04),
-        blurRadius: 6,
-        offset: const Offset(0, 2),
+        color: Colors.black.withValues(alpha: 0.03),
+        blurRadius: 4,
+        offset: const Offset(0, 1),
         spreadRadius: 0,
       ),
     ];
@@ -3289,92 +2918,26 @@ class LiquidGlassContainer extends StatelessWidget {
       content = Padding(padding: padding!, child: content);
     }
 
-    final glassBody = Stack(
-      fit: StackFit.passthrough,
-      children: [
-        // 1. Frost Blur (Hardware BackdropFilter)
-        Positioned.fill(
-          child: BackdropFilter(
-            filter: ImageFilter.blur(sigmaX: frostBlur, sigmaY: frostBlur),
-            child: const SizedBox.expand(),
-          ),
-        ),
-
-        // 2. Translucent Glass Acrylic Tint
-        Positioned.fill(
-          child: Container(
-            decoration: BoxDecoration(
-              shape: isCircle ? BoxShape.circle : BoxShape.rectangle,
-              borderRadius: effectiveBorderRadius,
-              gradient: LinearGradient(
-                begin: Alignment.topCenter,
-                end: Alignment.bottomCenter,
-                colors: [
-                  Colors.white.withValues(alpha: 0.42),
-                  Colors.white.withValues(alpha: 0.22),
-                  Colors.white.withValues(alpha: 0.14),
-                ],
-                stops: const [0.0, 0.45, 1.0],
-              ),
-            ),
-          ),
-        ),
-
-        // 3. Convex Lens Refraction (0.28) & Curvature (0.25) Meniscus Caustic
-        // Radial gradient centered at top-left (-0.25, -0.25) creating lens gathering light
-        Positioned.fill(
-          child: Container(
-            decoration: BoxDecoration(
-              shape: isCircle ? BoxShape.circle : BoxShape.rectangle,
-              borderRadius: effectiveBorderRadius,
-              gradient: RadialGradient(
-                center: const Alignment(-0.25, -0.25),
-                radius: 0.95,
-                colors: [
-                  Colors.white.withValues(alpha: 0.30),
-                  Colors.white.withValues(alpha: 0.08),
-                  Colors.transparent,
-                ],
-                stops: const [0.0, 0.50, 1.0],
-              ),
-            ),
-          ),
-        ),
-
-        // 4. Directional Specular Edge Glint (Edge: 0.03, light angle -0.15, -0.15)
-        Positioned.fill(
-          child: IgnorePointer(
-            child: CustomPaint(
-              painter: _LiquidGlassBorderPainter(
-                borderRadius: borderRadius,
-                isCircle: isCircle,
-              ),
-            ),
-          ),
-        ),
-
-        // 5. Child content
-        content,
-      ],
-    );
-
-    Widget clipped = isCircle
-        ? ClipOval(child: glassBody)
-        : ClipRRect(
-            borderRadius: effectiveBorderRadius!,
-            child: glassBody,
-          );
-
     Widget container = Container(
       width: width,
       height: height,
       margin: margin,
       decoration: BoxDecoration(
+        color: Colors.white,
         shape: isCircle ? BoxShape.circle : BoxShape.rectangle,
         borderRadius: effectiveBorderRadius,
+        border: Border.all(
+          color: const Color(0xFFE2E8F0),
+          width: 1.0,
+        ),
         boxShadow: defaultShadows,
       ),
-      child: clipped,
+      child: isCircle
+          ? ClipOval(child: content)
+          : ClipRRect(
+              borderRadius: effectiveBorderRadius ?? BorderRadius.circular(borderRadius),
+              child: content,
+            ),
     );
 
     if (onTap != null) {
@@ -3386,73 +2949,6 @@ class LiquidGlassContainer extends StatelessWidget {
     }
 
     return container;
-  }
-}
-
-class _LiquidGlassBorderPainter extends CustomPainter {
-  final double borderRadius;
-  final bool isCircle;
-
-  const _LiquidGlassBorderPainter({
-    required this.borderRadius,
-    required this.isCircle,
-  });
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    final rect = Offset.zero & size;
-    final rrect = isCircle
-        ? null
-        : RRect.fromRectAndRadius(rect, Radius.circular(borderRadius));
-
-    // Outer Specular Hairline Rim (1.2px)
-    // Aligned to light coming from top-left (-0.15, -0.15)
-    final outerPaint = Paint()
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = 1.2
-      ..shader = const LinearGradient(
-        begin: Alignment(-0.6, -0.6),
-        end: Alignment(0.6, 0.6),
-        colors: [
-          Color(0xF5FFFFFF), // Crisp pure white specular glint on top-left
-          Color(0x75FFFFFF), // Transition highlight
-          Color(0x25FFFFFF), // Subtle hairline on sides
-          Color(0x60FFFFFF), // Bottom-right ambient rim catch
-        ],
-        stops: [0.0, 0.35, 0.70, 1.0],
-      ).createShader(rect);
-
-    if (isCircle) {
-      canvas.drawOval(rect.deflate(0.6), outerPaint);
-    } else {
-      canvas.drawRRect(rrect!.deflate(0.6), outerPaint);
-    }
-
-    // Inner Caustic Meniscus Inset Stroke (0.8px, inset by 1.4px)
-    final innerPaint = Paint()
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = 0.8
-      ..shader = const LinearGradient(
-        begin: Alignment.topLeft,
-        end: Alignment.bottomRight,
-        colors: [
-          Color(0x45FFFFFF),
-          Color(0x12FFFFFF),
-          Colors.transparent,
-        ],
-        stops: [0.0, 0.40, 1.0],
-      ).createShader(rect);
-
-    if (isCircle) {
-      canvas.drawOval(rect.deflate(1.4), innerPaint);
-    } else {
-      canvas.drawRRect(rrect!.deflate(1.4), innerPaint);
-    }
-  }
-
-  @override
-  bool shouldRepaint(covariant _LiquidGlassBorderPainter oldDelegate) {
-    return oldDelegate.borderRadius != borderRadius || oldDelegate.isCircle != isCircle;
   }
 }
 
@@ -4592,397 +4088,260 @@ class FluidMergeSearchBar extends StatefulWidget {
 
 class _FluidMergeSearchBarState extends State<FluidMergeSearchBar>
     with SingleTickerProviderStateMixin {
-  late final AnimationController _animController;
-  late final Animation<double> _animation;
+  late final AnimationController _focusAnimController;
+  late final Animation<double> _focusCurve;
+  bool _isBackPressed = false;
 
   @override
   void initState() {
     super.initState();
-    _animController = AnimationController(
+    _focusAnimController = AnimationController(
       vsync: this,
-      duration: const Duration(milliseconds: 380),
-      reverseDuration: const Duration(milliseconds: 380),
+      duration: const Duration(milliseconds: 280),
+      reverseDuration: const Duration(milliseconds: 220),
     );
 
-    _animation = CurvedAnimation(
-      parent: _animController,
-      curve: Curves.easeInOutCubic,
-      reverseCurve: Curves.easeInOutCubic,
+    _focusCurve = CurvedAnimation(
+      parent: _focusAnimController,
+      curve: Curves.easeOutCubic,
+      reverseCurve: Curves.easeInCubic,
     );
 
     if (widget.focusNode.hasFocus) {
-      _animController.value = 1.0;
+      _focusAnimController.value = 1.0;
     }
 
-    widget.focusNode.addListener(_onFocusChange);
     widget.controller.addListener(_onTextChange);
-  }
-
-  void _onFocusChange() {
-    if (widget.focusNode.hasFocus) {
-      _animController.forward();
-    } else {
-      _animController.reverse();
-    }
+    widget.focusNode.addListener(_onFocusChange);
   }
 
   void _onTextChange() {
     if (mounted) setState(() {});
   }
 
+  void _onFocusChange() {
+    if (widget.focusNode.hasFocus) {
+      _focusAnimController.forward();
+    } else {
+      _focusAnimController.reverse();
+    }
+    if (mounted) setState(() {});
+  }
+
   @override
   void dispose() {
-    widget.focusNode.removeListener(_onFocusChange);
+    _focusAnimController.dispose();
     widget.controller.removeListener(_onTextChange);
-    _animController.dispose();
+    widget.focusNode.removeListener(_onFocusChange);
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
-    return LayoutBuilder(
-      builder: (context, constraints) {
-        final totalWidth = constraints.maxWidth;
-        const totalHeight = 50.0;
+    const totalHeight = 50.0;
 
-        return AnimatedBuilder(
-          animation: _animation,
-          builder: (context, _) {
-            final t = _animation.value;
-            final isMerged = t > 0.5;
+    final defaultShadows = [
+      BoxShadow(
+        color: Colors.black.withValues(alpha: 0.08),
+        blurRadius: 16,
+        offset: const Offset(0, 4),
+      ),
+      BoxShadow(
+        color: Colors.black.withValues(alpha: 0.03),
+        blurRadius: 4,
+        offset: const Offset(0, 1),
+      ),
+    ];
 
-            // Compute exact geometric path once per frame for all painters and clippers
-            final headerPath = buildFluidHeaderPath(totalWidth, totalHeight, t);
-
-            // Smooth animated positioning
-            final searchIconOpacity = (1.0 - t * 2.5).clamp(0.0, 1.0);
-            final centerLeft = (totalWidth + 58.0) / 2.0 - 32.0;
-            final textLeft = lerpDouble(centerLeft, 54.0, t)!;
-            const textRight = 48.0;
-
-            return SizedBox(
-              width: totalWidth,
-              height: totalHeight,
-              child: Stack(
-                clipBehavior: Clip.none,
-                children: [
-                  // 1. Dual Soft Floating Shadows beneath the fluid glass shape
-                  Positioned.fill(
-                    child: CustomPaint(
-                      painter: _FluidShadowPainter(path: headerPath),
-                    ),
+    return SizedBox(
+      height: totalHeight,
+      child: Row(
+        children: [
+          // 1. Clean Circular Back Button with tactile spring feedback
+          GestureDetector(
+            onTapDown: (_) => setState(() => _isBackPressed = true),
+            onTapUp: (_) => setState(() => _isBackPressed = false),
+            onTapCancel: () => setState(() => _isBackPressed = false),
+            onTap: () {
+              if (widget.focusNode.hasFocus) {
+                widget.onCancelSearch();
+              } else {
+                widget.onBack();
+              }
+            },
+            child: AnimatedScale(
+              scale: _isBackPressed ? 0.92 : 1.0,
+              duration: const Duration(milliseconds: 140),
+              curve: Curves.easeOutCubic,
+              child: Container(
+                width: 50,
+                height: 50,
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  shape: BoxShape.circle,
+                  border: Border.all(
+                    color: const Color(0xFFE2E8F0),
+                    width: 1.0,
                   ),
+                  boxShadow: defaultShadows,
+                ),
+                child: Center(
+                  child: Icon(
+                    LucideIcons.arrowLeft,
+                    color: Colors.grey.shade800,
+                    size: 20,
+                  ),
+                ),
+              ),
+            ),
+          ),
 
-                  // 2. Hardware Backdrop Blur & Translucent Glass Tint
-                  Positioned.fill(
-                    child: ClipPath(
-                      clipper: _FluidHeaderClipper(path: headerPath),
-                      child: BackdropFilter(
-                        filter: ImageFilter.blur(sigmaX: 24.0, sigmaY: 24.0),
-                        child: Container(
-                          decoration: BoxDecoration(
-                            gradient: LinearGradient(
-                              begin: Alignment.topCenter,
-                              end: Alignment.bottomCenter,
-                              colors: [
-                                Colors.white.withValues(alpha: 0.42),
-                                Colors.white.withValues(alpha: 0.22),
-                                Colors.white.withValues(alpha: 0.14),
-                              ],
-                              stops: const [0.0, 0.45, 1.0],
-                            ),
-                          ),
-                        ),
+          const SizedBox(width: 10),
+
+          // 2. Animated Search Pill with Fluid Blue Bloom Glow & Micro-Lift
+          Expanded(
+            child: AnimatedBuilder(
+              animation: _focusCurve,
+              builder: (context, _) {
+                final t = _focusCurve.value;
+                final borderColor = Color.lerp(
+                  const Color(0xFFE2E8F0),
+                  const Color(0xFF2563EB),
+                  t,
+                )!;
+                final borderWidth = lerpDouble(1.0, 1.8, t)!;
+                final iconColor = Color.lerp(
+                  const Color(0xFF64748B),
+                  const Color(0xFF2563EB),
+                  t,
+                )!;
+                final iconScale = lerpDouble(1.0, 1.10, t)!;
+                final iconRotation = lerpDouble(0.0, -0.06, t)!;
+                final translateY = lerpDouble(0.0, -1.0, t)!;
+
+                final searchShadows = <BoxShadow>[
+                  // Blooming luminous electric blue aura
+                  if (t > 0.005)
+                    BoxShadow(
+                      color: const Color(0xFF3B82F6).withValues(alpha: 0.24 * t),
+                      blurRadius: lerpDouble(4, 16, t)!,
+                      spreadRadius: lerpDouble(0, 2.5, t)!,
+                      offset: Offset.zero,
+                    ),
+                  if (t > 0.005)
+                    BoxShadow(
+                      color: const Color(0xFF60A5FA).withValues(alpha: 0.12 * t),
+                      blurRadius: lerpDouble(2, 6, t)!,
+                      spreadRadius: lerpDouble(0, 1.0, t)!,
+                      offset: Offset.zero,
+                    ),
+                  // Ambient baseline drop shadow
+                  BoxShadow(
+                    color: Colors.black.withValues(alpha: lerpDouble(0.06, 0.09, t)!),
+                    blurRadius: lerpDouble(14, 20, t)!,
+                    offset: Offset(0, lerpDouble(3, 5, t)!),
+                  ),
+                  BoxShadow(
+                    color: Colors.black.withValues(alpha: 0.03),
+                    blurRadius: 4,
+                    offset: const Offset(0, 1),
+                  ),
+                ];
+
+                return Transform.translate(
+                  offset: Offset(0, translateY),
+                  child: Container(
+                    height: 50,
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      borderRadius: BorderRadius.circular(25.0),
+                      border: Border.all(
+                        color: borderColor,
+                        width: borderWidth,
                       ),
+                      boxShadow: searchShadows,
                     ),
-                  ),
-
-                  // 3. Convex Lens Refraction (0.28) & Curvature (0.25) Sheen
-                  Positioned.fill(
-                    child: ClipPath(
-                      clipper: _FluidHeaderClipper(path: headerPath),
-                      child: Container(
-                        decoration: BoxDecoration(
-                          gradient: RadialGradient(
-                            center: const Alignment(-0.25, -0.25),
-                            radius: 0.95,
-                            colors: [
-                              Colors.white.withValues(alpha: 0.30),
-                              Colors.white.withValues(alpha: 0.08),
-                              Colors.transparent,
-                            ],
-                            stops: const [0.0, 0.50, 1.0],
-                          ),
-                        ),
-                      ),
-                    ),
-                  ),
-
-                  // 4. Directional Specular Edge Glint (Edge: 0.03, light angle -0.15, -0.15)
-                  Positioned.fill(
-                    child: IgnorePointer(
-                      child: CustomPaint(
-                        painter: _FluidBorderPainter(path: headerPath),
-                      ),
-                    ),
-                  ),
-
-                  // 5. Back / Cancel Arrow Button
-                  Positioned(
-                    left: 0,
-                    top: 0,
-                    width: 50,
-                    height: totalHeight,
-                    child: Center(
-                      child: IconButton(
-                        padding: EdgeInsets.zero,
-                        constraints: const BoxConstraints(minWidth: 50, minHeight: 50),
-                        icon: Icon(
-                          LucideIcons.arrowLeft,
-                          color: Colors.grey.shade800,
-                          size: 22,
-                        ),
-                        tooltip: isMerged ? 'Close search' : 'Back',
-                        onPressed: () {
-                          if (widget.focusNode.hasFocus) {
-                            widget.onCancelSearch();
-                          } else {
-                            widget.onBack();
-                          }
-                        },
-                      ),
-                    ),
-                  ),
-
-                  // 6. Touch catcher for instant focus when tapping search
-                  Positioned(
-                    left: 54.0,
-                    right: 48.0,
-                    top: 0,
-                    bottom: 0,
-                    child: GestureDetector(
-                      behavior: HitTestBehavior.translucent,
-                      onTap: () {
-                        if (!widget.focusNode.hasFocus) {
-                          widget.focusNode.requestFocus();
-                          SystemChannels.textInput.invokeMethod('TextInput.show');
-                          if (!_animController.isCompleted) {
-                            _animController.forward();
-                          }
-                        }
-                      },
-                    ),
-                  ),
-
-                  // 7. Search Magnifying Glass Icon (fades out smoothly on focus)
-                  if (searchIconOpacity > 0.01)
-                    Positioned(
-                      left: 70.0,
-                      top: 0,
-                      width: 24,
-                      height: totalHeight,
-                      child: IgnorePointer(
-                        child: Opacity(
-                          opacity: searchIconOpacity,
-                          child: const Center(
+                    child: Row(
+                      children: [
+                        const SizedBox(width: 16),
+                        Transform.rotate(
+                          angle: iconRotation,
+                          child: Transform.scale(
+                            scale: iconScale,
                             child: Icon(
                               LucideIcons.search,
-                              color: Color(0xFF334155),
-                              size: 20,
+                              color: iconColor,
+                              size: 19,
                             ),
                           ),
                         ),
-                      ),
-                    ),
-
-                  // 8. Search Input Field (Always "SEARCH", consistent typography)
-                  Positioned(
-                    left: textLeft,
-                    right: textRight,
-                    top: 0,
-                    height: totalHeight,
-                    child: Center(
-                      child: TextField(
-                        focusNode: widget.focusNode,
-                        controller: widget.controller,
-                        onTap: () {
-                          SystemChannels.textInput.invokeMethod('TextInput.show');
-                          if (!_animController.isCompleted) {
-                            _animController.forward();
-                          }
-                        },
-                        onChanged: widget.onSearchChanged,
-                        onSubmitted: widget.onSearchSubmitted,
-                        textAlign: TextAlign.left,
-                        textAlignVertical: const TextAlignVertical(y: -0.2),
-                        style: const TextStyle(
-                          fontSize: 15.0,
-                          fontWeight: FontWeight.w600,
-                          color: Color(0xFF0F172A),
-                          letterSpacing: 0.6,
-                          height: 1.0,
-                          leadingDistribution: TextLeadingDistribution.even,
-                        ),
-                        decoration: const InputDecoration(
-                          isDense: true,
-                          hintText: 'SEARCH',
-                          hintStyle: TextStyle(
-                            color: Color(0xFF475569),
-                            fontSize: 15.0,
-                            fontWeight: FontWeight.w700,
-                            letterSpacing: 1.2,
-                            height: 1.0,
-                            leadingDistribution: TextLeadingDistribution.even,
+                        const SizedBox(width: 10),
+                        Expanded(
+                          child: TextField(
+                            focusNode: widget.focusNode,
+                            controller: widget.controller,
+                            onChanged: widget.onSearchChanged,
+                            onSubmitted: widget.onSearchSubmitted,
+                            textAlign: TextAlign.left,
+                            style: const TextStyle(
+                              fontSize: 14.5,
+                              fontWeight: FontWeight.w600,
+                              color: Color(0xFF0F172A),
+                              letterSpacing: 0.2,
+                            ),
+                            decoration: const InputDecoration(
+                              isDense: true,
+                              hintText: 'Search location...',
+                              hintStyle: TextStyle(
+                                color: Color(0xFF94A3B8),
+                                fontSize: 14.5,
+                                fontWeight: FontWeight.w500,
+                                letterSpacing: 0.2,
+                              ),
+                              border: InputBorder.none,
+                              contentPadding: EdgeInsets.symmetric(vertical: 14),
+                            ),
                           ),
-                          border: InputBorder.none,
-                          contentPadding: EdgeInsets.only(bottom: 3.5),
                         ),
-                      ),
-                    ),
-                  ),
-
-                  // 9. Trailing Suffix (Progress Spinner or Clear Button)
-                  Positioned(
-                    right: 4,
-                    top: 0,
-                    width: 42,
-                    height: totalHeight,
-                    child: Center(
-                      child: widget.isSearching
-                          ? const SizedBox(
+                        if (widget.isSearching)
+                          const Padding(
+                            padding: EdgeInsets.only(right: 14),
+                            child: SizedBox(
                               width: 18,
                               height: 18,
                               child: CircularProgressIndicator(strokeWidth: 2.0),
-                            )
-                          : (widget.controller.text.isNotEmpty
-                              ? IconButton(
-                                  padding: EdgeInsets.zero,
-                                  constraints: const BoxConstraints(minWidth: 36, minHeight: 50),
-                                  icon: Icon(LucideIcons.x, size: 19, color: Colors.grey.shade600),
-                                  onPressed: widget.onClearText,
-                                )
-                              : const SizedBox.shrink()),
+                            ),
+                          )
+                        else
+                          AnimatedSwitcher(
+                            duration: const Duration(milliseconds: 180),
+                            transitionBuilder: (child, anim) => ScaleTransition(
+                              scale: anim,
+                              child: FadeTransition(opacity: anim, child: child),
+                            ),
+                            child: widget.controller.text.isNotEmpty
+                                ? IconButton(
+                                    key: const ValueKey('clear_btn'),
+                                    padding: EdgeInsets.zero,
+                                    constraints: const BoxConstraints(minWidth: 40, minHeight: 50),
+                                    icon: Icon(LucideIcons.x, size: 18, color: Colors.grey.shade600),
+                                    onPressed: widget.onClearText,
+                                  )
+                                : const SizedBox(
+                                    key: ValueKey('empty_suffix'),
+                                    width: 14,
+                                  ),
+                          ),
+                      ],
                     ),
                   ),
-                ],
-              ),
-            );
-          },
-        );
-      },
+                );
+              },
+            ),
+          ),
+        ],
+      ),
     );
-  }
-}
-
-/// Builds the mathematically continuous geometric path between the circular button and search pill.
-/// Uses native Boolean path union for 100% butter-smooth, continuous liquid coalescing.
-Path buildFluidHeaderPath(double width, double height, double v) {
-  const r = 25.0;
-  final pillLeft = 58.0 * (1.0 - v.clamp(0.0, 1.0));
-
-  final circlePath = Path()
-    ..addOval(const Rect.fromLTWH(0, 0, 50, 50));
-
-  final pillPath = Path()
-    ..addRRect(RRect.fromRectAndRadius(
-      Rect.fromLTWH(pillLeft, 0, width - pillLeft, height),
-      const Radius.circular(r),
-    ));
-
-  return Path.combine(PathOperation.union, circlePath, pillPath);
-}
-
-class _FluidHeaderClipper extends CustomClipper<Path> {
-  final Path path;
-
-  const _FluidHeaderClipper({required this.path});
-
-  @override
-  Path getClip(Size size) => path;
-
-  @override
-  bool shouldReclip(covariant _FluidHeaderClipper oldClipper) => oldClipper.path != path;
-}
-
-class _FluidShadowPainter extends CustomPainter {
-  final Path path;
-
-  const _FluidShadowPainter({required this.path});
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    // Colin McKee dual ambient floating drop shadows
-    final shadow1 = Paint()
-      ..color = Colors.black.withValues(alpha: 0.10)
-      ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 16);
-    canvas.save();
-    canvas.translate(0, 7);
-    canvas.drawPath(path, shadow1);
-    canvas.restore();
-
-    final shadow2 = Paint()
-      ..color = Colors.black.withValues(alpha: 0.04)
-      ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 4);
-    canvas.save();
-    canvas.translate(0, 2);
-    canvas.drawPath(path, shadow2);
-    canvas.restore();
-  }
-
-  @override
-  bool shouldRepaint(covariant _FluidShadowPainter oldDelegate) {
-    return oldDelegate.path != path;
-  }
-}
-
-class _FluidBorderPainter extends CustomPainter {
-  final Path path;
-
-  const _FluidBorderPainter({required this.path});
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    final rect = Offset.zero & size;
-
-    // Specular Hairline Rim (1.2px) aligned to top-left (-0.15, -0.15) light
-    final outerPaint = Paint()
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = 1.2
-      ..shader = const LinearGradient(
-        begin: Alignment(-0.6, -0.6),
-        end: Alignment(0.6, 0.6),
-        colors: [
-          Color(0xF5FFFFFF), // Pure white specular glint on top-left
-          Color(0x75FFFFFF), // Transition highlight
-          Color(0x25FFFFFF), // Subtle hairline on sides
-          Color(0x60FFFFFF), // Bottom-right ambient rim catch
-        ],
-        stops: [0.0, 0.35, 0.70, 1.0],
-      ).createShader(rect);
-
-    canvas.drawPath(path, outerPaint);
-
-    // Inner Caustic Meniscus Rim (0.8px, subtle depth)
-    final innerPaint = Paint()
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = 0.8
-      ..shader = const LinearGradient(
-        begin: Alignment.topLeft,
-        end: Alignment.bottomRight,
-        colors: [
-          Color(0x40FFFFFF),
-          Color(0x10FFFFFF),
-          Colors.transparent,
-        ],
-        stops: [0.0, 0.40, 1.0],
-      ).createShader(rect);
-
-    canvas.drawPath(path, innerPaint);
-  }
-
-  @override
-  bool shouldRepaint(covariant _FluidBorderPainter oldDelegate) {
-    return oldDelegate.path != path;
   }
 }
 

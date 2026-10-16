@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'dart:typed_data';
 import 'package:latlong2/latlong.dart';
 import 'package:uuid/uuid.dart';
@@ -19,6 +20,7 @@ class ReportModel {
   final Uint8List? imageBytes;
   final String? citizenId;
   final String? citizenName;
+  final String? authUserId;
   final String? address;
   final String status;
   final int upvoteCount;
@@ -34,6 +36,7 @@ class ReportModel {
     this.imageBytes,
     this.citizenId,
     this.citizenName,
+    this.authUserId,
     this.address,
     this.status = 'pending',
     this.upvoteCount = 0,
@@ -50,6 +53,7 @@ class ReportModel {
     Uint8List? imageBytes,
     String? citizenId,
     String? citizenName,
+    String? authUserId,
     String? address,
     String? status,
     int? upvoteCount,
@@ -65,6 +69,7 @@ class ReportModel {
       imageBytes: imageBytes ?? this.imageBytes,
       citizenId: citizenId ?? this.citizenId,
       citizenName: citizenName ?? this.citizenName,
+      authUserId: authUserId ?? this.authUserId,
       address: address ?? this.address,
       status: status ?? this.status,
       upvoteCount: upvoteCount ?? this.upvoteCount,
@@ -111,15 +116,35 @@ class ReportModel {
       createdAt = DateTime.tryParse(json['created_at'].toString());
     }
 
+    // Image handling: decode persistent data URI or ignore expired session blob URLs
+    final rawImageUrl = json['image_url']?.toString();
+    Uint8List? decodedBytes;
+    String? effectiveImagePath = rawImageUrl;
+
+    if (rawImageUrl != null && rawImageUrl.startsWith('data:image')) {
+      try {
+        final commaIdx = rawImageUrl.indexOf(',');
+        if (commaIdx != -1) {
+          decodedBytes = base64Decode(rawImageUrl.substring(commaIdx + 1));
+        }
+      } catch (_) {}
+    } else if (rawImageUrl != null && rawImageUrl.startsWith('blob:')) {
+      // Ephemeral browser blob URLs expire when the page is refreshed or reloaded.
+      // Filter out stale blob references so they don't produce HTTP 404 image load errors.
+      effectiveImagePath = null;
+    }
+
     return ReportModel(
       id: json['id']?.toString() ?? const Uuid().v4(),
       location: LatLng(lat, lng),
       category: category,
       title: title,
       description: description,
-      imagePath: json['image_url']?.toString(),
+      imagePath: effectiveImagePath,
+      imageBytes: decodedBytes,
       citizenId: json['citizen_id']?.toString(),
       citizenName: citizenName,
+      authUserId: json['auth_user_id']?.toString(),
       address: json['address']?.toString(),
       status: json['status']?.toString() ?? 'pending',
       upvoteCount: (json['upvote_count'] as num?)?.toInt() ?? 0,
@@ -127,7 +152,7 @@ class ReportModel {
     );
   }
 
-  Map<String, dynamic> toSupabase({String? reporterCitizenId}) {
+  Map<String, dynamic> toSupabase({String? reporterCitizenId, String? reporterAuthUserId}) {
     final combinedDescription = title.isNotEmpty && description.isNotEmpty && title != description
         ? '$title\n$description'
         : (title.isNotEmpty ? title : description);
@@ -148,11 +173,19 @@ class ReportModel {
       map['citizen_id'] = effectiveCitizenId;
     }
 
+    final effectiveAuthUserId = reporterAuthUserId ?? authUserId;
+    if (effectiveAuthUserId != null && effectiveAuthUserId.isNotEmpty) {
+      map['auth_user_id'] = effectiveAuthUserId;
+    }
+
     if (address != null && address!.isNotEmpty) {
       map['address'] = address;
     }
 
-    if (imagePath != null && (imagePath!.startsWith('http') || imagePath!.startsWith('blob:'))) {
+    // Persist real image data: if imageBytes exist, store as persistent Base64 Data URI
+    if (imageBytes != null && imageBytes!.isNotEmpty) {
+      map['image_url'] = 'data:image/jpeg;base64,${base64Encode(imageBytes!)}';
+    } else if (imagePath != null && (imagePath!.startsWith('http') || imagePath!.startsWith('data:image'))) {
       map['image_url'] = imagePath;
     }
 

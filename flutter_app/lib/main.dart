@@ -9,7 +9,6 @@ import 'screens/heatmap_ui/map_screen.dart';
 import 'screens/home_page.dart';
 import 'screens/interactive_map/map_screen.dart';
 import 'screens/kanban_board_ui/kanban_board_screen.dart';
-import 'screens/SignupLogin_ui/splash_screen.dart';
 import 'screens/SignupLogin_ui/welcome_screen.dart';
 import 'screens/SignupLogin_ui/login_screen.dart';
 import 'screens/SignupLogin_ui/signup_screen.dart';
@@ -50,6 +49,8 @@ class UniSafeApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final bool hasActiveSession = SupabaseConfig.client.auth.currentSession != null;
+
     return MaterialApp(
       title: 'UniSafe',
       debugShowCheckedModeBanner: false,
@@ -58,7 +59,7 @@ class UniSafeApp extends StatelessWidget {
         useMaterial3: true,
         textTheme: GoogleFonts.interTextTheme(),
       ),
-      home: const WelcomeSelectionScreen(),
+      home: hasActiveSession ? const HomePage() : const WelcomeSelectionScreen(),
       routes: {
         '/home': (context) => const HomePage(),
         '/interactive-map': (context) => const InteractiveMapScreen(),

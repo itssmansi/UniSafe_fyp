@@ -9,6 +9,8 @@ class AuthHeader extends StatelessWidget {
   final bool isCentered;
   final bool showPattern;
 
+  final bool showBackButton;
+
   const AuthHeader({
     super.key,
     required this.title,
@@ -16,36 +18,39 @@ class AuthHeader extends StatelessWidget {
     this.onBack,
     this.isCentered = false,
     this.showPattern = false,
+    this.showBackButton = true,
   });
 
   @override
   Widget build(BuildContext context) {
-    final Widget backButton = Material(
-      color: Colors.transparent,
-      child: InkWell(
-        onTap: onBack ?? () => Navigator.of(context).maybePop(),
-        borderRadius: BorderRadius.circular(10),
-        child: Container(
-          width: 38,
-          height: 38,
-          decoration: BoxDecoration(
-            color: Colors.white.withValues(alpha: 0.12),
-            borderRadius: BorderRadius.circular(10),
-            border: Border.all(
-              color: Colors.white.withValues(alpha: 0.20),
-              width: 1,
+    final Widget? backButton = showBackButton
+        ? Material(
+            color: Colors.transparent,
+            child: InkWell(
+              onTap: onBack ?? () => Navigator.of(context).maybePop(),
+              borderRadius: BorderRadius.circular(10),
+              child: Container(
+                width: 38,
+                height: 38,
+                decoration: BoxDecoration(
+                  color: Colors.white.withValues(alpha: 0.12),
+                  borderRadius: BorderRadius.circular(10),
+                  border: Border.all(
+                    color: Colors.white.withValues(alpha: 0.20),
+                    width: 1,
+                  ),
+                ),
+                child: const Center(
+                  child: Icon(
+                    Icons.arrow_back_ios_new_rounded,
+                    color: Colors.white,
+                    size: 16,
+                  ),
+                ),
+              ),
             ),
-          ),
-          child: const Center(
-            child: Icon(
-              Icons.arrow_back_ios_new_rounded,
-              color: Colors.white,
-              size: 16,
-            ),
-          ),
-        ),
-      ),
-    );
+          )
+        : null;
 
     final Widget titleWidget = Container(
       width: double.infinity,
@@ -94,11 +99,12 @@ class AuthHeader extends StatelessWidget {
             ),
 
             // Pinned top-left back button
-            Positioned(
-              top: 8,
-              left: 16,
-              child: backButton,
-            ),
+            if (backButton != null)
+              Positioned(
+                top: 8,
+                left: 16,
+                child: backButton,
+              ),
           ],
         ),
       );
@@ -114,7 +120,7 @@ class AuthHeader extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                backButton,
+                ?backButton,
                 titleWidget,
               ],
             ),

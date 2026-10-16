@@ -1,0 +1,314 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+  <title>In-App Street & Surroundings Viewer</title>
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    html, body {
+      width: 100%;
+      height: 100%;
+      overflow: hidden;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+      background: #0f172a;
+    }
+
+    #stage-container {
+      width: 100%;
+      height: 100%;
+      position: relative;
+      perspective: 900px;
+      overflow: hidden;
+    }
+
+    #map-wrapper {
+      width: 130%;
+      height: 130%;
+      position: absolute;
+      top: -15%;
+      left: -15%;
+      transform-origin: center center;
+      transition: transform 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+    }
+
+    #map {
+      width: 100%;
+      height: 100%;
+      background: #0f172a;
+    }
+
+    /* 3D street perspective tilt */
+    .mode-3d #map-wrapper {
+      transform: rotateX(46deg) rotateZ(var(--rot, 0deg)) scale(1.1);
+    }
+    .mode-2d #map-wrapper {
+      transform: rotateX(0deg) rotateZ(0deg) scale(1.0);
+    }
+
+    /* Floating Overlay Controls */
+    .overlay-bar {
+      position: absolute;
+      top: 14px;
+      left: 14px;
+      right: 14px;
+      z-index: 1000;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      pointer-events: none;
+    }
+
+    .pill-group {
+      display: flex;
+      gap: 6px;
+      background: rgba(255, 255, 255, 0.94);
+      backdrop-filter: blur(12px);
+      padding: 4px;
+      border-radius: 30px;
+      box-shadow: 0 4px 16px rgba(0,0,0,0.18);
+      border: 1px solid rgba(226, 232, 240, 0.8);
+      pointer-events: auto;
+    }
+
+    .pill-btn {
+      border: none;
+      background: transparent;
+      padding: 6px 12px;
+      font-size: 11.5px;
+      font-weight: 700;
+      color: #475569;
+      border-radius: 20px;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      gap: 5px;
+      transition: all 0.2s;
+    }
+    .pill-btn.active {
+      background: #0f172a;
+      color: #ffffff;
+      box-shadow: 0 2px 6px rgba(0,0,0,0.15);
+    }
+
+    /* Compass / Rotation HUD on bottom left */
+    .hud-controls {
+      position: absolute;
+      bottom: 16px;
+      left: 14px;
+      z-index: 1000;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+    .hud-btn {
+      width: 38px;
+      height: 38px;
+      border-radius: 50%;
+      background: rgba(255, 255, 255, 0.94);
+      border: 1px solid #e2e8f0;
+      box-shadow: 0 3px 10px rgba(0,0,0,0.14);
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-weight: 800;
+      color: #0f172a;
+      transition: transform 0.15s;
+    }
+    .hud-btn:active { transform: scale(0.92); }
+
+    /* Street Pin Marker */
+    .street-marker {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      transform: translate(-50%, -100%);
+    }
+    .marker-cone {
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      width: 120px;
+      height: 120px;
+      background: radial-gradient(circle, rgba(5, 150, 105, 0.35) 0%, rgba(5, 150, 105, 0) 70%);
+      transform: translate(-50%, -50%);
+      border-radius: 50%;
+      pointer-events: none;
+      animation: pulse 2s infinite ease-in-out;
+    }
+    .marker-pin {
+      width: 32px;
+      height: 32px;
+      background: #059669;
+      border: 3px solid #ffffff;
+      border-radius: 50% 50% 50% 0;
+      transform: rotate(-45deg);
+      box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      position: relative;
+      z-index: 2;
+    }
+    .marker-pin span {
+      transform: rotate(45deg);
+      font-size: 13px;
+      color: white;
+    }
+    @keyframes pulse {
+      0%, 100% { transform: translate(-50%, -50%) scale(0.9); opacity: 0.6; }
+      50% { transform: translate(-50%, -50%) scale(1.2); opacity: 0.9; }
+    }
+
+    /* External Street View Link button on bottom right */
+    .ext-launcher {
+      position: absolute;
+      bottom: 16px;
+      right: 14px;
+      z-index: 1000;
+      background: rgba(15, 23, 42, 0.92);
+      color: #ffffff;
+      padding: 8px 14px;
+      border-radius: 20px;
+      text-decoration: none;
+      font-size: 12px;
+      font-weight: 700;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      box-shadow: 0 4px 14px rgba(0,0,0,0.25);
+      border: 1px solid rgba(255,255,255,0.15);
+      backdrop-filter: blur(8px);
+      cursor: pointer;
+    }
+    .ext-launcher:hover {
+      background: #000000;
+    }
+  </style>
+</head>
+<body class="mode-3d">
+
+  <div id="stage-container">
+    <div id="map-wrapper">
+      <div id="map"></div>
+    </div>
+
+    <!-- Top Overlay Mode Selector -->
+    <div class="overlay-bar">
+      <div class="pill-group">
+        <button class="pill-btn active" id="btn-3d" onclick="setPerspective(true)">
+          <span>👓</span> 3D Street Tilt
+        </button>
+        <button class="pill-btn" id="btn-2d" onclick="setPerspective(false)">
+          <span>🗺️</span> Overhead
+        </button>
+      </div>
+
+      <div class="pill-group">
+        <button class="pill-btn active" id="btn-sat" onclick="setLayer('sat')">
+          <span>🛰️</span> Real Satellite
+        </button>
+        <button class="pill-btn" id="btn-osm" onclick="setLayer('osm')">
+          <span>🏢</span> Buildings & Streets
+        </button>
+      </div>
+    </div>
+
+    <!-- Rotation Controls -->
+    <div class="hud-controls">
+      <button class="hud-btn" onclick="rotate(-45)" title="Rotate Left 45°">↺</button>
+      <button class="hud-btn" onclick="rotate(45)" title="Rotate Right 45°">↻</button>
+      <button class="hud-btn" onclick="resetNorth()" title="Reset North">N</button>
+    </div>
+
+    <!-- Quick External Google Street View Panorama Link -->
+    <a class="ext-launcher" id="ext-link" target="_blank" rel="noopener">
+      <span>🚶</span> Google Street View 360° ↗
+    </a>
+  </div>
+
+  <script>
+    const urlParams = new URLSearchParams(window.location.search);
+    const lat = parseFloat(urlParams.get('lat')) || 19.2263;
+    const lng = parseFloat(urlParams.get('lng')) || 72.8397;
+    let currentRotation = 0;
+
+    // Update external street view link
+    document.getElementById('ext-link').href = 
+      `https://www.google.com/maps/@?api=1&map_action=pano&viewpoint=${lat},${lng}`;
+
+    // Initialize Leaflet Map
+    const map = L.map('map', {
+      zoomControl: false,
+      attributionControl: false,
+      maxZoom: 19,
+      minZoom: 15
+    }).setView([lat, lng], 18);
+
+    // Layer 1: ESRI High-Resolution Photographic Satellite (Real Streets & Buildings)
+    const satLayer = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
+      maxZoom: 19,
+      maxNativeZoom: 18
+    }).addTo(map);
+
+    // Layer 2: Carto Voyager (Streets, Building Footprints & Labels)
+    const osmLayer = L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png', {
+      maxZoom: 19,
+      subdomains: 'abcd'
+    });
+
+    // Custom Street Marker with Direction Cone
+    const streetIcon = L.divIcon({
+      className: 'custom-street-icon',
+      html: `
+        <div class="street-marker">
+          <div class="marker-cone"></div>
+          <div class="marker-pin">
+            <span>📍</span>
+          </div>
+        </div>
+      `,
+      iconSize: [32, 32],
+      iconAnchor: [16, 32]
+    });
+
+    L.marker([lat, lng], { icon: streetIcon }).addTo(map);
+
+    // Mode Functions
+    function setPerspective(is3d) {
+      document.body.className = is3d ? 'mode-3d' : 'mode-2d';
+      document.getElementById('btn-3d').classList.toggle('active', is3d);
+      document.getElementById('btn-2d').classList.toggle('active', !is3d);
+      setTimeout(() => map.invalidateSize(), 300);
+    }
+
+    function setLayer(type) {
+      if (type === 'sat') {
+        map.removeLayer(osmLayer);
+        map.addLayer(satLayer);
+        document.getElementById('btn-sat').classList.add('active');
+        document.getElementById('btn-osm').classList.remove('active');
+      } else {
+        map.removeLayer(satLayer);
+        map.addLayer(osmLayer);
+        document.getElementById('btn-osm').classList.add('active');
+        document.getElementById('btn-sat').classList.remove('active');
+      }
+    }
+
+    function rotate(delta) {
+      currentRotation = (currentRotation + delta) % 360;
+      document.documentElement.style.setProperty('--rot', `${currentRotation}deg`);
+    }
+
+    function resetNorth() {
+      currentRotation = 0;
+      document.documentElement.style.setProperty('--rot', '0deg');
+    }
+  </script>
+</body>
+</html>

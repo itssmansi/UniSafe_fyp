@@ -109,6 +109,11 @@ class _OtpBoxInputState extends State<OtpBoxInput> {
 
   @override
   Widget build(BuildContext context) {
+    final double boxWidth = widget.length > 6 ? 35.0 : 44.0;
+    final double boxHeight = widget.length > 6 ? 48.0 : 52.0;
+    final double boxMargin = widget.length > 6 ? 2.5 : 4.0;
+    final double fontSize = widget.length > 6 ? 17.0 : 20.0;
+
     return Row(
       mainAxisAlignment: MainAxisAlignment.center,
       children: List.generate(widget.length, (index) {
@@ -116,12 +121,12 @@ class _OtpBoxInputState extends State<OtpBoxInput> {
         final hasValue = _boxControllers[index].text.isNotEmpty;
 
         return Container(
-          width: 44,
-          height: 52,
-          margin: const EdgeInsets.symmetric(horizontal: 4),
+          width: boxWidth,
+          height: boxHeight,
+          margin: EdgeInsets.symmetric(horizontal: boxMargin),
           decoration: BoxDecoration(
             color: isFocused ? Colors.white : const Color(0xFFF8FAFC),
-            borderRadius: BorderRadius.circular(12),
+            borderRadius: BorderRadius.circular(10),
             border: Border.all(
               color: isFocused
                   ? const Color(0xFF133838)
@@ -156,10 +161,10 @@ class _OtpBoxInputState extends State<OtpBoxInput> {
                 focusNode: _focusNodes[index],
                 keyboardType: TextInputType.number,
                 textAlign: TextAlign.center,
-                style: const TextStyle(
-                  fontSize: 20,
+                style: TextStyle(
+                  fontSize: fontSize,
                   fontWeight: FontWeight.w700,
-                  color: Color(0xFF133838),
+                  color: const Color(0xFF133838),
                 ),
                 inputFormatters: [
                   LengthLimitingTextInputFormatter(widget.length),

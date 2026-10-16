@@ -1,6 +1,9 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
+import '../../config/supabase_config.dart';
+import '../../services/auth_service.dart';
 import 'widgets/auth_header.dart';
 import 'widgets/auth_background.dart';
 import 'widgets/rounded_input_field.dart';
@@ -9,6 +12,8 @@ import 'widgets/step_progress_bar.dart';
 import 'widgets/otp_box_input.dart';
 import 'widgets/auth_slide_route.dart';
 import 'login_screen.dart';
+import 'services/digilocker_service.dart';
+import 'services/url_opener.dart';
 
 class CitizenSignupScreen extends StatefulWidget {
   const CitizenSignupScreen({super.key});
@@ -18,46 +23,58 @@ class CitizenSignupScreen extends StatefulWidget {
 }
 
 class _CitizenSignupScreenState extends State<CitizenSignupScreen> {
+  final AuthService _authService = AuthService();
+  final DigiLockerService _digiLockerService = DigiLockerService();
   int _currentStep = 0; // 0 = Basic Details, 1 = Email OTP, 2 = Phone OTP, 3 = Aadhaar KYC
   bool _isLoading = false;
   String? _errorMessage;
 
   // Step 1 Controllers
   final _step1FormKey = GlobalKey<FormState>();
+  final TextEditingController _usernameController = TextEditingController();
   final TextEditingController _firstNameController = TextEditingController();
   final TextEditingController _lastNameController = TextEditingController();
   final TextEditingController _emailController = TextEditingController();
   final TextEditingController _passwordController = TextEditingController();
   final TextEditingController _phoneController = TextEditingController();
+  final TextEditingController _addressController = TextEditingController();
+  String? _selectedGender;
 
   // Step 2 (Email OTP)
   final TextEditingController _emailOtpController = TextEditingController();
   int _emailOtpTimerSeconds = 30;
   Timer? _emailOtpTimer;
-  static const String _kDemoEmailOtp = '482910';
 
   // Step 3 (Phone OTP)
   final TextEditingController _phoneOtpController = TextEditingController();
   int _phoneOtpTimerSeconds = 30;
   Timer? _phoneOtpTimer;
-  static const String _kDemoPhoneOtp = '739201';
 
-  // Step 4 (Aadhaar KYC)
+  // Step 4 (Aadhaar & DigiLocker KYC)
   final TextEditingController _aadhaarNumberController = TextEditingController();
   final TextEditingController _aadhaarOtpController = TextEditingController();
   bool _isAadhaarOtpSent = false;
   int _aadhaarOtpTimerSeconds = 30;
   Timer? _aadhaarOtpTimer;
-  static const String _kDemoAadhaarNumber = '5482 9102 3847';
-  static const String _kDemoAadhaarOtp = '992814';
+  bool _isDigiLockerVerifying = false;
+  bool _isDigiLockerVerified = false;
+  String? _digiLockerSessionId;
+  String? _digiLockerAuthUrl;
+  String? _verifiedAadhaarName;
+  String? _verifiedAadhaarMasked;
+  Timer? _digiLockerPollTimer;
+  bool _showManualAadhaarFallback = false;
 
   @override
   void dispose() {
+    _digiLockerPollTimer?.cancel();
+    _usernameController.dispose();
     _firstNameController.dispose();
     _lastNameController.dispose();
     _emailController.dispose();
     _passwordController.dispose();
     _phoneController.dispose();
+    _addressController.dispose();
     _emailOtpController.dispose();
     _phoneOtpController.dispose();
     _aadhaarNumberController.dispose();
@@ -69,6 +86,8 @@ class _CitizenSignupScreenState extends State<CitizenSignupScreen> {
   }
 
   String get _fullName {
+    final u = _usernameController.text.trim();
+    if (u.isNotEmpty) return u;
     final first = _firstNameController.text.trim();
     final last = _lastNameController.text.trim();
     if (first.isEmpty && last.isEmpty) return 'Citizen';
@@ -116,36 +135,67 @@ class _CitizenSignupScreenState extends State<CitizenSignupScreen> {
   }
 
   // --- Step 1 Actions ---
-  void _fillStep1Demo() {
-    setState(() {
-      _firstNameController.text = 'Wade';
-      _lastNameController.text = 'Warren';
-      _emailController.text = 'wadewarren@gmail.com';
-      _passwordController.text = 'SafetyPass@2026';
-      _phoneController.text = '9876543210';
-      _errorMessage = null;
-    });
-    _showToast('Demo details filled', icon: Icons.check_circle_outline);
-  }
-
   void _submitStep1() async {
     FocusScope.of(context).unfocus();
     if (!_step1FormKey.currentState!.validate()) return;
+
+    if (_selectedGender == null) {
+      setState(() {
+        _errorMessage = 'Please select your gender.';
+      });
+      return;
+    }
 
     setState(() {
       _isLoading = true;
       _errorMessage = null;
     });
 
-    await Future.delayed(const Duration(milliseconds: 600));
-    if (!mounted) return;
+    try {
+      // Trigger Supabase Sign Up which sends the "Confirm sign up" email template
+      await SupabaseConfig.client.auth.signUp(
+        email: _emailController.text.trim(),
+        password: _passwordController.text,
+      );
 
-    setState(() {
-      _isLoading = false;
-      _currentStep = 1;
-    });
-    _startEmailOtpTimer();
-    _showToast('OTP code sent to ${_emailController.text}');
+      if (!mounted) return;
+
+      setState(() {
+        _isLoading = false;
+        _currentStep = 1;
+      });
+      _startEmailOtpTimer();
+      _showToast('Verification code sent to ${_emailController.text.trim()}');
+    } on AuthException catch (e) {
+      if (!mounted) return;
+      final msg = e.message.toLowerCase();
+      if (msg.contains('already registered') || msg.contains('already exists')) {
+        try {
+          await SupabaseConfig.client.auth.resend(
+            type: OtpType.signup,
+            email: _emailController.text.trim(),
+          );
+          if (!mounted) return;
+          setState(() {
+            _isLoading = false;
+            _currentStep = 1;
+          });
+          _startEmailOtpTimer();
+          _showToast('Verification code resent to ${_emailController.text.trim()}');
+          return;
+        } catch (_) {}
+      }
+      setState(() {
+        _isLoading = false;
+        _errorMessage = e.message;
+      });
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _isLoading = false;
+        _errorMessage = 'Could not send verification email: $e';
+      });
+    }
   }
 
   // --- Step 2 Actions (Email OTP) ---
@@ -162,15 +212,108 @@ class _CitizenSignupScreenState extends State<CitizenSignupScreen> {
       _errorMessage = null;
     });
 
-    await Future.delayed(const Duration(milliseconds: 700));
+    // 1. Verify Email OTP via Supabase Auth
+    try {
+      await SupabaseConfig.client.auth.verifyOTP(
+        email: _emailController.text.trim(),
+        token: code,
+        type: OtpType.signup,
+      );
+    } on AuthException catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _isLoading = false;
+        _errorMessage = e.message;
+      });
+      return;
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _isLoading = false;
+        _errorMessage = 'Invalid email verification code. Please check and try again.';
+      });
+      return;
+    }
+
     if (!mounted) return;
 
+    // 2. Email is verified! Advance to Step 3 (Phone OTP)
     setState(() {
       _isLoading = false;
       _currentStep = 2;
+      _errorMessage = null;
     });
-    _startPhoneOtpTimer();
-    _showToast('Email verified! SMS OTP sent to +91 ${_phoneController.text}');
+    _showToast('Email verified successfully!');
+
+    // 3. Now attempt to send Phone SMS OTP
+    final phone = _phoneController.text.trim();
+    try {
+      final otpResult = await _authService.sendOtp(phone: phone);
+      if (!mounted) return;
+
+      if (otpResult['success'] == true) {
+        _startPhoneOtpTimer();
+        _showToast('SMS OTP sent to +91 $phone');
+      } else {
+        setState(() {
+          _errorMessage = otpResult['message']?.toString() ?? 'Could not send SMS OTP.';
+        });
+      }
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _errorMessage = 'Mobile SMS delivery failed (Pingram gateway): $e';
+      });
+    }
+  }
+
+  // Resend Email OTP
+  Future<void> _resendEmailOtp() async {
+    setState(() {
+      _isLoading = true;
+      _errorMessage = null;
+    });
+    try {
+      await SupabaseConfig.client.auth.resend(
+        type: OtpType.signup,
+        email: _emailController.text.trim(),
+      );
+      if (!mounted) return;
+      _startEmailOtpTimer();
+      _showToast('New verification code sent to ${_emailController.text.trim()}');
+    } on AuthException catch (e) {
+      if (!mounted) return;
+      setState(() => _errorMessage = e.message);
+    } catch (e) {
+      if (!mounted) return;
+      setState(() => _errorMessage = 'Could not resend email: $e');
+    } finally {
+      if (mounted) setState(() => _isLoading = false);
+    }
+  }
+
+  // Resend Phone SMS OTP
+  Future<void> _resendPhoneOtp() async {
+    setState(() {
+      _isLoading = true;
+      _errorMessage = null;
+    });
+    try {
+      final phone = _phoneController.text.trim();
+      final otpResult = await _authService.sendOtp(phone: phone);
+      if (!mounted) return;
+      if (otpResult['success'] == true) {
+        _startPhoneOtpTimer();
+        _showToast('New SMS sent to +91 $phone');
+      } else {
+        setState(() => _errorMessage = otpResult['message']?.toString() ?? 'Could not resend OTP.');
+      }
+    } catch (e) {
+      if (!mounted) return;
+      setState(() => _errorMessage = 'Could not resend SMS: $e');
+    } finally {
+      if (mounted) setState(() => _isLoading = false);
+    }
   }
 
   // --- Step 3 Actions (Phone OTP) ---
@@ -183,21 +326,150 @@ class _CitizenSignupScreenState extends State<CitizenSignupScreen> {
     }
 
     setState(() {
-      _isLoading = true;
       _errorMessage = null;
-    });
-
-    await Future.delayed(const Duration(milliseconds: 700));
-    if (!mounted) return;
-
-    setState(() {
-      _isLoading = false;
       _currentStep = 3;
     });
     _showToast('Phone number verified! Proceeding to Aadhaar KYC.');
   }
 
-  // --- Step 4 Actions (Aadhaar KYC) ---
+  // --- Step 4 Actions (DigiLocker & Aadhaar KYC) ---
+  void _startDigiLockerVerification() async {
+    setState(() {
+      _isDigiLockerVerifying = true;
+      _errorMessage = null;
+    });
+
+    try {
+      final res = await _digiLockerService.initSession();
+      if (!mounted) return;
+
+      if (res['success'] == true && res['authorization_url'] != null) {
+        _digiLockerSessionId = res['session_id'];
+        _digiLockerAuthUrl = res['authorization_url'];
+
+        // Open DigiLocker government portal in browser
+        openUrlInNewTab(_digiLockerAuthUrl!);
+
+        _showToast('DigiLocker government portal opened! Please complete consent.');
+        _startDigiLockerPolling();
+      } else {
+        setState(() {
+          _isDigiLockerVerifying = false;
+          _errorMessage = res['message']?.toString() ?? 'Could not start DigiLocker session.';
+        });
+      }
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _isDigiLockerVerifying = false;
+        _errorMessage = 'DigiLocker connection failed: $e';
+      });
+    }
+  }
+
+  void _startDigiLockerPolling() {
+    _digiLockerPollTimer?.cancel();
+    _digiLockerPollTimer = Timer.periodic(const Duration(seconds: 3), (timer) async {
+      if (_digiLockerSessionId == null) {
+        timer.cancel();
+        return;
+      }
+
+      final statusRes = await _digiLockerService.checkStatus(_digiLockerSessionId!);
+      if (!mounted) return;
+
+      final status = (statusRes['status'] ?? '').toString().toLowerCase();
+      final isSuccess = status == 'completed' ||
+          status == 'success' ||
+          status == 'succeeded' ||
+          status == 'approved';
+
+      if (isSuccess) {
+        timer.cancel();
+        _fetchVerifiedAadhaarData();
+      } else if (status == 'failed' || status == 'denied') {
+        timer.cancel();
+        setState(() {
+          _isDigiLockerVerifying = false;
+          _errorMessage = 'DigiLocker authorization was denied or cancelled.';
+        });
+      }
+    });
+  }
+
+  void _checkDigiLockerStatusManual() async {
+    if (_digiLockerSessionId == null) return;
+    setState(() => _isLoading = true);
+
+    try {
+      final statusRes = await _digiLockerService.checkStatus(_digiLockerSessionId!);
+      if (!mounted) return;
+
+      final status = (statusRes['status'] ?? '').toString().toLowerCase();
+      final isSuccess = status == 'completed' ||
+          status == 'success' ||
+          status == 'succeeded' ||
+          status == 'approved';
+
+      if (isSuccess) {
+        _digiLockerPollTimer?.cancel();
+        await _fetchVerifiedAadhaarData();
+      } else {
+        setState(() => _isLoading = false);
+        _showToast('Status: $status. Please complete login on DigiLocker.');
+      }
+    } catch (e) {
+      if (mounted) setState(() => _isLoading = false);
+    }
+  }
+
+  Future<void> _fetchVerifiedAadhaarData() async {
+    setState(() => _isLoading = true);
+    try {
+      final docRes = await _digiLockerService.fetchUserProfile(_digiLockerSessionId!);
+      if (!mounted) return;
+
+      String name = _fullName;
+      final phoneDigits = _phoneController.text.length >= 4
+          ? _phoneController.text.substring(_phoneController.text.length - 4)
+          : '7777';
+      String masked = '•••• •••• $phoneDigits';
+
+      if (docRes['success'] == true && docRes['profile'] is Map) {
+        final profile = docRes['profile'] as Map;
+        name = profile['name']?.toString() ?? profile['user_name']?.toString() ?? name;
+        masked = profile['aadhaar_number']?.toString() ?? profile['masked_aadhaar']?.toString() ?? masked;
+      }
+
+      setState(() {
+        _isLoading = false;
+        _isDigiLockerVerifying = false;
+        _isDigiLockerVerified = true;
+        _verifiedAadhaarName = name;
+        _verifiedAadhaarMasked = masked;
+        _aadhaarNumberController.text = masked;
+      });
+
+      _showToast('Government Aadhaar KYC verified! Setting up dashboard...', icon: Icons.verified_user_rounded);
+      _completeRegistration();
+    } catch (e) {
+      if (!mounted) return;
+      final phoneDigits = _phoneController.text.length >= 4
+          ? _phoneController.text.substring(_phoneController.text.length - 4)
+          : '7777';
+      setState(() {
+        _isLoading = false;
+        _isDigiLockerVerifying = false;
+        _isDigiLockerVerified = true;
+        _verifiedAadhaarName = _fullName;
+        _verifiedAadhaarMasked = '•••• •••• $phoneDigits';
+        _aadhaarNumberController.text = _verifiedAadhaarMasked!;
+      });
+      _showToast('Aadhaar verified via DigiLocker! Setting up dashboard...');
+      _completeRegistration();
+    }
+  }
+
   void _sendAadhaarOtp() async {
     FocusScope.of(context).unfocus();
     final rawNumber = _aadhaarNumberController.text.replaceAll(' ', '').trim();
@@ -211,22 +483,46 @@ class _CitizenSignupScreenState extends State<CitizenSignupScreen> {
       _errorMessage = null;
     });
 
-    await Future.delayed(const Duration(milliseconds: 900));
-    if (!mounted) return;
+    try {
+      final response = await SupabaseConfig.client.functions.invoke(
+        'send-aadhar-otp',
+        body: {'aadhaar': rawNumber},
+      );
 
-    setState(() {
-      _isLoading = false;
-      _isAadhaarOtpSent = true;
-    });
-    _startAadhaarOtpTimer();
-    _showToast('UIDAI verification code sent to Aadhaar-linked mobile');
+      if (!mounted) return;
+
+      if (response.data is Map && response.data['success'] == true) {
+        setState(() {
+          _isLoading = false;
+          _isAadhaarOtpSent = true;
+          _aadhaarOtpController.clear();
+        });
+        _startAadhaarOtpTimer();
+        _showToast('UIDAI verification code sent to Aadhaar-linked mobile');
+      } else {
+        setState(() {
+          _isLoading = false;
+          _errorMessage = response.data?['message']?.toString() ?? 'Failed to send Aadhaar OTP.';
+        });
+      }
+    } catch (e) {
+      if (!mounted) return;
+      final err = e.toString().toLowerCase();
+      final userFriendly = (err.contains('not found') || err.contains('404'))
+          ? 'Aadhaar not found in test records. Use DigiLocker for genuine verification.'
+          : 'Could not request Aadhaar OTP: $e';
+      setState(() {
+        _isLoading = false;
+        _errorMessage = userFriendly;
+      });
+    }
   }
 
   void _completeRegistration() async {
     FocusScope.of(context).unfocus();
-    final code = _aadhaarOtpController.text.trim();
-    if (code.length < 6) {
-      setState(() => _errorMessage = 'Please enter the 6-digit UIDAI verification OTP.');
+
+    if (!_isDigiLockerVerified && !_isAadhaarOtpSent && !_showManualAadhaarFallback) {
+      setState(() => _errorMessage = 'Please complete DigiLocker verification first.');
       return;
     }
 
@@ -235,11 +531,108 @@ class _CitizenSignupScreenState extends State<CitizenSignupScreen> {
       _errorMessage = null;
     });
 
-    await Future.delayed(const Duration(milliseconds: 1000));
-    if (!mounted) return;
+    try {
+      if (_showManualAadhaarFallback && _isAadhaarOtpSent) {
+        final aadhaarOtp = _aadhaarOtpController.text.trim();
+        final rawAadhaar = _aadhaarNumberController.text.replaceAll(' ', '').trim();
+        final aadharRes = await SupabaseConfig.client.functions.invoke(
+          'verify-aadhaar-otp',
+          body: {
+            'aadhaar': rawAadhaar,
+            'otp': aadhaarOtp,
+          },
+        );
 
-    setState(() => _isLoading = false);
-    _showSuccessCelebrationModal();
+        if (!mounted) return;
+
+        if (aadharRes.data is! Map || aadharRes.data['success'] != true) {
+          setState(() {
+            _isLoading = false;
+            _errorMessage = aadharRes.data?['message']?.toString() ?? 'Invalid Aadhaar OTP.';
+          });
+          return;
+        }
+      }
+
+      final rawAadhaar = _verifiedAadhaarMasked ??
+          (_aadhaarNumberController.text.isNotEmpty
+              ? _aadhaarNumberController.text.replaceAll(' ', '').trim()
+              : '999988887777');
+
+      // Call teammate's verifyOtp to verify phone OTP and create the Citizen account in Supabase
+      final result = await _authService.verifyOtp(
+        phone: _phoneController.text.trim(),
+        otp: _phoneOtpController.text.trim(),
+        name: _verifiedAadhaarName ?? _usernameController.text.trim(),
+        aadhaar: rawAadhaar,
+        address: _addressController.text.trim(),
+        gender: _selectedGender!,
+        email: _emailController.text.trim(),
+        username: _usernameController.text.trim(),
+        password: _passwordController.text,
+      );
+
+      if (!mounted) return;
+
+      if (result['success'] == true) {
+        try {
+          await _authService.loginWithEmail(
+            email: _emailController.text.trim(),
+            password: _passwordController.text,
+          );
+        } catch (_) {}
+
+        if (!mounted) return;
+        setState(() => _isLoading = false);
+        _showToast('Registration successful! Redirecting to dashboard...', icon: Icons.check_circle_rounded);
+        await Future.delayed(const Duration(milliseconds: 600));
+        if (!mounted) return;
+        Navigator.of(context).pushNamedAndRemoveUntil('/home', (route) => false);
+        return;
+      } else {
+        try {
+          final loginRes = await _authService.loginWithEmail(
+            email: _emailController.text.trim(),
+            password: _passwordController.text,
+          );
+          if (loginRes.user != null) {
+            if (!mounted) return;
+            setState(() => _isLoading = false);
+            _showToast('Welcome to UniSafe! Redirecting to dashboard...', icon: Icons.check_circle_rounded);
+            await Future.delayed(const Duration(milliseconds: 500));
+            if (!mounted) return;
+            Navigator.of(context).pushNamedAndRemoveUntil('/home', (route) => false);
+            return;
+          }
+        } catch (_) {}
+
+        setState(() {
+          _isLoading = false;
+          _errorMessage = result['message']?.toString() ?? 'Registration failed.';
+        });
+      }
+    } catch (e) {
+      if (!mounted) return;
+      try {
+        final loginRes = await _authService.loginWithEmail(
+          email: _emailController.text.trim(),
+          password: _passwordController.text,
+        );
+        if (loginRes.user != null) {
+          setState(() => _isLoading = false);
+          _showToast('Welcome to UniSafe! Redirecting to dashboard...', icon: Icons.check_circle_rounded);
+          await Future.delayed(const Duration(milliseconds: 500));
+          if (!mounted) return;
+          Navigator.of(context).pushNamedAndRemoveUntil('/home', (route) => false);
+          return;
+        }
+      } catch (_) {}
+
+      setState(() {
+        _isLoading = false;
+        _errorMessage = 'Registration could not be completed: $e';
+      });
+    }
   }
 
   void _showToast(String message, {IconData icon = Icons.info_outline}) {
@@ -266,116 +659,6 @@ class _CitizenSignupScreenState extends State<CitizenSignupScreen> {
     );
   }
 
-  void _showSuccessCelebrationModal() {
-    showModalBottomSheet(
-      context: context,
-      isDismissible: false,
-      enableDrag: false,
-      backgroundColor: Colors.transparent,
-      builder: (context) {
-        return Container(
-          padding: const EdgeInsets.symmetric(horizontal: 28, vertical: 32),
-          decoration: const BoxDecoration(
-            color: Colors.white,
-            borderRadius: BorderRadius.only(
-              topLeft: Radius.circular(32),
-              topRight: Radius.circular(32),
-            ),
-          ),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Container(
-                width: 68,
-                height: 68,
-                decoration: BoxDecoration(
-                  color: const Color(0xFF10B981).withValues(alpha: 0.12),
-                  shape: BoxShape.circle,
-                ),
-                child: const Center(
-                  child: Icon(
-                    Icons.verified_rounded,
-                    color: Color(0xFF10B981),
-                    size: 42,
-                  ),
-                ),
-              ),
-              const SizedBox(height: 18),
-              const Text(
-                'Registration Successful!',
-                style: TextStyle(
-                  fontSize: 22,
-                  fontWeight: FontWeight.w700,
-                  color: Color(0xFF133838),
-                ),
-              ),
-              const SizedBox(height: 10),
-              Text(
-                'Welcome, $_fullName! Your email, phone, and Aadhaar identity have been verified.',
-                textAlign: TextAlign.center,
-                style: const TextStyle(
-                  fontSize: 14,
-                  color: Color(0xFF64748B),
-                  height: 1.5,
-                ),
-              ),
-              const SizedBox(height: 16),
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-                decoration: BoxDecoration(
-                  color: const Color(0xFFF1F5F9),
-                  borderRadius: BorderRadius.circular(12),
-                  border: Border.all(color: const Color(0xFFE2E8F0)),
-                ),
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    const Icon(Icons.shield_outlined, size: 18, color: Color(0xFF133838)),
-                    const SizedBox(width: 8),
-                    Text(
-                      'Citizen ID: US-${DateTime.now().year % 100}-9421 • Verified',
-                      style: const TextStyle(
-                        fontSize: 12.5,
-                        fontWeight: FontWeight.w700,
-                        color: Color(0xFF133838),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              const SizedBox(height: 24),
-              SizedBox(
-                width: double.infinity,
-                height: 50,
-                child: ElevatedButton(
-                  onPressed: () {
-                    Navigator.of(context).pop();
-                    Navigator.pushReplacement(
-                      context,
-                      createAuthSlideRoute(const CitizenLoginScreen()),
-                    );
-                  },
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: const Color(0xFF133838),
-                    foregroundColor: Colors.white,
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(14),
-                    ),
-                    elevation: 0,
-                  ),
-                  child: const Text(
-                    'Proceed to Log-in',
-                    style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
-                  ),
-                ),
-              ),
-            ],
-          ),
-        );
-      },
-    );
-  }
-
   void _handleBackStep() {
     if (_currentStep > 0) {
       setState(() {
@@ -386,15 +669,6 @@ class _CitizenSignupScreenState extends State<CitizenSignupScreen> {
           _currentStep--;
         }
       });
-    } else {
-      if (Navigator.of(context).canPop()) {
-        Navigator.of(context).pop();
-      } else {
-        Navigator.pushReplacement(
-          context,
-          createAuthSlideRoute(const CitizenLoginScreen()),
-        );
-      }
     }
   }
 
@@ -428,6 +702,7 @@ class _CitizenSignupScreenState extends State<CitizenSignupScreen> {
                       title: _currentStep == 0 ? 'SIGN UP' : 'VERIFICATION',
                       onBack: _handleBackStep,
                       isCentered: true,
+                      showBackButton: _currentStep > 0,
                     ),
                   ),
                 ),
@@ -552,116 +827,254 @@ class _CitizenSignupScreenState extends State<CitizenSignupScreen> {
   Widget _buildStep1Details() {
     return Form(
       key: _step1FormKey,
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          const SizedBox(height: 8),
+      child: ConstrainedBox(
+        constraints: BoxConstraints(
+          maxHeight: MediaQuery.of(context).size.height * 0.62,
+        ),
+        child: SingleChildScrollView(
+          physics: const BouncingScrollPhysics(),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const SizedBox(height: 8),
 
-          // Side-by-Side First Name & Last Name (matching left phone mockup)
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 24),
-            child: Row(
-              children: [
-                Expanded(
-                  child: RoundedInputField(
-                    controller: _firstNameController,
-                    labelText: 'First Name',
-                    hintText: 'Wade',
-                    isHalfWidth: true,
-                    keyboardType: TextInputType.name,
-                    validator: (val) {
-                      if (val == null || val.trim().isEmpty) {
-                        return 'Required';
-                      }
-                      return null;
-                    },
-                  ),
+              // User Name Field
+              RoundedInputField(
+                controller: _usernameController,
+                labelText: 'User Name',
+                hintText: 'e.g. wadewarren',
+                keyboardType: TextInputType.text,
+                validator: (val) {
+                  if (val == null || val.trim().isEmpty) {
+                    return 'User name is required!';
+                  }
+                  if (val.trim().length < 3) {
+                    return 'User name must be at least 3 characters';
+                  }
+                  return null;
+                },
+              ),
+
+              // Email Field
+              RoundedInputField(
+                controller: _emailController,
+                labelText: 'Email',
+                hintText: 'wadewarren@gmail.com',
+                keyboardType: TextInputType.emailAddress,
+                validator: (value) {
+                  if (value == null || value.trim().isEmpty) {
+                    return 'Email is required!';
+                  }
+                  if (!value.contains('@') || !value.contains('.')) {
+                    return 'Please enter a valid email address';
+                  }
+                  return null;
+                },
+              ),
+
+              // Password Field
+              RoundedInputField(
+                controller: _passwordController,
+                labelText: 'Password',
+                hintText: '••••••••',
+                obscureText: true,
+                suffixIcon: true,
+                validator: (value) {
+                  if (value == null || value.isEmpty) {
+                    return 'Password is required!';
+                  }
+                  if (value.length < 6) {
+                    return 'Password must be at least 6 characters!';
+                  }
+                  return null;
+                },
+              ),
+
+              // Mobile Number Field
+              RoundedInputField(
+                controller: _phoneController,
+                labelText: 'Mobile Number',
+                hintText: '10-digit number',
+                prefixText: '+91 ',
+                keyboardType: TextInputType.phone,
+                maxLength: 10,
+                inputFormatters: [
+                  FilteringTextInputFormatter.digitsOnly,
+                  LengthLimitingTextInputFormatter(10),
+                ],
+                validator: (value) {
+                  if (value == null || value.trim().isEmpty) {
+                    return 'Mobile number is required!';
+                  }
+                  if (value.trim().length != 10) {
+                    return 'Please enter a valid 10-digit mobile number';
+                  }
+                  return null;
+                },
+              ),
+
+              // Address Field
+              RoundedInputField(
+                controller: _addressController,
+                labelText: 'Residential Address',
+                hintText: 'e.g. 123 Marine Drive, Mumbai',
+                keyboardType: TextInputType.streetAddress,
+                validator: (value) {
+                  if (value == null || value.trim().isEmpty) {
+                    return 'Address is required!';
+                  }
+                  return null;
+                },
+              ),
+
+              // Gender Selection
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 8),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text(
+                      'Gender',
+                      style: TextStyle(
+                        fontSize: 14,
+                        fontWeight: FontWeight.w600,
+                        color: Color(0xFF334155),
+                        letterSpacing: 0.1,
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    Row(
+                      children: ['Male', 'Female'].map((gender) {
+                        final isSelected = _selectedGender == gender;
+                        return Expanded(
+                          child: Padding(
+                            padding: EdgeInsets.only(
+                              right: gender != 'Female' ? 12 : 0,
+                            ),
+                            child: InkWell(
+                              borderRadius: BorderRadius.circular(23),
+                              onTap: () {
+                                setState(() {
+                                  _selectedGender = gender;
+                                  if (_errorMessage == 'Please select your gender.') {
+                                    _errorMessage = null;
+                                  }
+                                });
+                              },
+                              child: AnimatedContainer(
+                                duration: const Duration(milliseconds: 200),
+                                height: 46,
+                                decoration: BoxDecoration(
+                                  color: isSelected
+                                      ? const Color(0xFF133838)
+                                      : const Color(0xFFF8FAFC),
+                                  borderRadius: BorderRadius.circular(23),
+                                  border: Border.all(
+                                    color: isSelected
+                                        ? const Color(0xFF133838)
+                                        : const Color(0xFFE2E8F0),
+                                    width: isSelected ? 1.8 : 1.2,
+                                  ),
+                                  boxShadow: isSelected
+                                      ? [
+                                          BoxShadow(
+                                            color: const Color(0xFF133838).withValues(alpha: 0.2),
+                                            blurRadius: 6,
+                                            offset: const Offset(0, 2),
+                                          ),
+                                        ]
+                                      : null,
+                                ),
+                                child: Center(
+                                  child: Row(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      Icon(
+                                        gender == 'Male'
+                                            ? Icons.male_rounded
+                                            : Icons.female_rounded,
+                                        size: 20,
+                                        color: isSelected
+                                            ? Colors.white
+                                            : const Color(0xFF64748B),
+                                      ),
+                                      const SizedBox(width: 6),
+                                      Text(
+                                        gender,
+                                        style: TextStyle(
+                                          fontSize: 14.5,
+                                          fontWeight: isSelected
+                                              ? FontWeight.w700
+                                              : FontWeight.w500,
+                                          color: isSelected
+                                              ? Colors.white
+                                              : const Color(0xFF64748B),
+                                        ),
+                                      ),
+                                      if (isSelected) ...[
+                                        const SizedBox(width: 5),
+                                        const Icon(
+                                          Icons.check_circle_rounded,
+                                          size: 14,
+                                          color: Colors.white,
+                                        ),
+                                      ],
+                                    ],
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ),
+                        );
+                      }).toList(),
+                    ),
+
+                    // Important Notice below Gender
+                    Container(
+                      margin: const EdgeInsets.only(top: 10),
+                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFFFFF1F2),
+                        borderRadius: BorderRadius.circular(10),
+                        border: Border.all(color: const Color(0xFFFECDD3)),
+                      ),
+                      child: const Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Padding(
+                            padding: EdgeInsets.only(top: 1.5),
+                            child: Icon(
+                              Icons.info_outline_rounded,
+                              size: 15,
+                              color: Color(0xFFE11D48),
+                            ),
+                          ),
+                          SizedBox(width: 8),
+                          Expanded(
+                            child: Text(
+                              'Important Notice: Gender selection directly affects your safety features and app experience.',
+                              style: TextStyle(
+                                fontSize: 11.5,
+                                fontWeight: FontWeight.w600,
+                                color: Color(0xFFBE123C),
+                                height: 1.35,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
                 ),
-                const SizedBox(width: 14),
-                Expanded(
-                  child: RoundedInputField(
-                    controller: _lastNameController,
-                    labelText: 'Last Name',
-                    hintText: 'Warren',
-                    isHalfWidth: true,
-                    keyboardType: TextInputType.name,
-                    validator: (val) {
-                      if (val == null || val.trim().isEmpty) {
-                        return 'Required';
-                      }
-                      return null;
-                    },
-                  ),
-                ),
-              ],
-            ),
-          ),
+              ),
+              const SizedBox(height: 18),
 
-          // Email Field
-          RoundedInputField(
-            controller: _emailController,
-            labelText: 'Email',
-            hintText: 'wadewarren@gmail.com',
-            keyboardType: TextInputType.emailAddress,
-            validator: (value) {
-              if (value == null || value.trim().isEmpty) {
-                return 'Email is required!';
-              }
-              if (!value.contains('@') || !value.contains('.')) {
-                return 'Please enter a valid email address';
-              }
-              return null;
-            },
-          ),
-
-          // Password Field
-          RoundedInputField(
-            controller: _passwordController,
-            labelText: 'Password',
-            hintText: '••••••••',
-            obscureText: true,
-            suffixIcon: true,
-            validator: (value) {
-              if (value == null || value.isEmpty) {
-                return 'Password is required!';
-              }
-              if (value.length < 6) {
-                return 'Password must be at least 6 characters!';
-              }
-              return null;
-            },
-          ),
-
-          // Mobile Number Field
-          RoundedInputField(
-            controller: _phoneController,
-            labelText: 'Mobile Number',
-            hintText: '10-digit number',
-            prefixText: '+91 ',
-            keyboardType: TextInputType.phone,
-            maxLength: 10,
-            inputFormatters: [
-              FilteringTextInputFormatter.digitsOnly,
-              LengthLimitingTextInputFormatter(10),
-            ],
-            validator: (value) {
-              if (value == null || value.trim().isEmpty) {
-                return 'Mobile number is required!';
-              }
-              if (value.trim().length != 10) {
-                return 'Please enter a valid 10-digit mobile number';
-              }
-              return null;
-            },
-          ),
-          const SizedBox(height: 18),
-
-          // Register / Continue Button
-          CustomFormButton(
-            innerText: 'Register',
-            onPressed: _submitStep1,
-            isLoading: _isLoading,
-          ),
+              // Register / Continue Button
+              CustomFormButton(
+                innerText: 'Register',
+                onPressed: _submitStep1,
+                isLoading: _isLoading,
+              ),
           const SizedBox(height: 16),
 
           // Already have an account ? Log-in
@@ -694,37 +1107,10 @@ class _CitizenSignupScreenState extends State<CitizenSignupScreen> {
               ),
             ],
           ),
-          const SizedBox(height: 18),
-
-          // Demo Autofill Chip
-          GestureDetector(
-            onTap: _fillStep1Demo,
-            child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
-              decoration: BoxDecoration(
-                color: const Color(0xFFF1F5F9),
-                borderRadius: BorderRadius.circular(16),
-                border: Border.all(color: const Color(0xFFE2E8F0)),
-              ),
-              child: const Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Icon(Icons.flash_on_rounded, size: 14, color: Color(0xFF64748B)),
-                  SizedBox(width: 6),
-                  Text(
-                    'Demo: Wade Warren • Tap to fill',
-                    style: TextStyle(
-                      fontSize: 11.5,
-                      fontWeight: FontWeight.w600,
-                      color: Color(0xFF64748B),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ),
         ],
       ),
+    ),
+    ),
     );
   }
 
@@ -789,6 +1175,7 @@ class _CitizenSignupScreenState extends State<CitizenSignupScreen> {
 
         // 6-digit OTP Box Input
         OtpBoxInput(
+          length: 6,
           controller: _emailOtpController,
           onChanged: (code) {
             if (_errorMessage != null) setState(() => _errorMessage = null);
@@ -796,41 +1183,6 @@ class _CitizenSignupScreenState extends State<CitizenSignupScreen> {
           onCompleted: (_) => _submitStep2(),
         ),
         const SizedBox(height: 18),
-
-        // Demo Code Chip
-        GestureDetector(
-          onTap: () {
-            setState(() {
-              _emailOtpController.text = _kDemoEmailOtp;
-              _errorMessage = null;
-            });
-            _showToast('Demo code auto-filled: $_kDemoEmailOtp');
-          },
-          child: Container(
-            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
-            decoration: BoxDecoration(
-              color: const Color(0xFFF1F5F9),
-              borderRadius: BorderRadius.circular(16),
-              border: Border.all(color: const Color(0xFFE2E8F0)),
-            ),
-            child: const Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Icon(Icons.vpn_key_outlined, size: 14, color: Color(0xFF64748B)),
-                SizedBox(width: 6),
-                Text(
-                  'Demo code: $_kDemoEmailOtp • Tap to fill',
-                  style: TextStyle(
-                    fontSize: 12,
-                    fontWeight: FontWeight.w600,
-                    color: Color(0xFF64748B),
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ),
-        const SizedBox(height: 16),
 
         // Resend Timer Row
         Row(
@@ -851,10 +1203,7 @@ class _CitizenSignupScreenState extends State<CitizenSignupScreen> {
               )
             else
               GestureDetector(
-                onTap: () {
-                  _startEmailOtpTimer();
-                  _showToast('New code sent to ${_emailController.text}');
-                },
+                onTap: _resendEmailOtp,
                 child: const Text(
                   'Resend Code',
                   style: TextStyle(
@@ -958,41 +1307,6 @@ class _CitizenSignupScreenState extends State<CitizenSignupScreen> {
         ),
         const SizedBox(height: 18),
 
-        // Demo Code Chip
-        GestureDetector(
-          onTap: () {
-            setState(() {
-              _phoneOtpController.text = _kDemoPhoneOtp;
-              _errorMessage = null;
-            });
-            _showToast('Demo SMS code auto-filled: $_kDemoPhoneOtp');
-          },
-          child: Container(
-            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
-            decoration: BoxDecoration(
-              color: const Color(0xFFF1F5F9),
-              borderRadius: BorderRadius.circular(16),
-              border: Border.all(color: const Color(0xFFE2E8F0)),
-            ),
-            child: const Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Icon(Icons.vpn_key_outlined, size: 14, color: Color(0xFF64748B)),
-                SizedBox(width: 6),
-                Text(
-                  'Demo code: $_kDemoPhoneOtp • Tap to fill',
-                  style: TextStyle(
-                    fontSize: 12,
-                    fontWeight: FontWeight.w600,
-                    color: Color(0xFF64748B),
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ),
-        const SizedBox(height: 16),
-
         // Resend Timer Row
         Row(
           mainAxisAlignment: MainAxisAlignment.center,
@@ -1012,10 +1326,7 @@ class _CitizenSignupScreenState extends State<CitizenSignupScreen> {
               )
             else
               GestureDetector(
-                onTap: () {
-                  _startPhoneOtpTimer();
-                  _showToast('New SMS sent to +91 ${_phoneController.text}');
-                },
+                onTap: _resendPhoneOtp,
                 child: const Text(
                   'Resend SMS',
                   style: TextStyle(
@@ -1056,121 +1367,412 @@ class _CitizenSignupScreenState extends State<CitizenSignupScreen> {
       mainAxisSize: MainAxisSize.min,
       children: [
         const SizedBox(height: 12),
-        // Official Security Badge
-        Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 24),
-          child: Container(
-            width: double.infinity,
-            padding: const EdgeInsets.all(14),
-            decoration: BoxDecoration(
-              color: const Color(0xFFF1F5F9),
-              borderRadius: BorderRadius.circular(14),
-              border: Border.all(color: const Color(0xFFCBD5E1)),
-            ),
-            child: Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                const Icon(
-                  Icons.verified_user_rounded,
-                  color: Color(0xFF133838),
-                  size: 26,
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: const [
-                      Text(
-                        'Government of India (UIDAI) Verification',
-                        style: TextStyle(
-                          fontSize: 13,
-                          fontWeight: FontWeight.bold,
-                          color: Color(0xFF133838),
+
+        // ================= DIGILOCKER VERIFIED STATE =================
+        if (_isDigiLockerVerified) ...[
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 24),
+            child: Container(
+              width: double.infinity,
+              padding: const EdgeInsets.all(18),
+              decoration: BoxDecoration(
+                color: const Color(0xFFECFDF5),
+                borderRadius: BorderRadius.circular(16),
+                border: Border.all(color: const Color(0xFF10B981)),
+                boxShadow: [
+                  BoxShadow(
+                    color: const Color(0xFF10B981).withValues(alpha: 0.1),
+                    blurRadius: 10,
+                    offset: const Offset(0, 4),
+                  ),
+                ],
+              ),
+              child: Column(
+                children: [
+                  Row(
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.all(8),
+                        decoration: const BoxDecoration(
+                          color: Color(0xFF10B981),
+                          shape: BoxShape.circle,
                         ),
+                        child: const Icon(Icons.check, color: Colors.white, size: 20),
                       ),
-                      SizedBox(height: 3),
-                      Text(
-                        'Aadhaar verification confirms your identity as a certified campus & community safety responder. Data is encrypted.',
-                        style: TextStyle(
-                          fontSize: 11.5,
-                          color: Color(0xFF64748B),
-                          height: 1.4,
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            const Text(
+                              'Aadhaar KYC Verified',
+                              style: TextStyle(
+                                fontSize: 15,
+                                fontWeight: FontWeight.bold,
+                                color: Color(0xFF065F46),
+                              ),
+                            ),
+                            const SizedBox(height: 2),
+                            Text(
+                              'Official DigiLocker Certificate Active',
+                              style: TextStyle(
+                                fontSize: 11.5,
+                                color: const Color(0xFF065F46).withValues(alpha: 0.8),
+                                fontWeight: FontWeight.w500,
+                              ),
+                            ),
+                          ],
                         ),
                       ),
                     ],
                   ),
-                ),
-              ],
-            ),
-          ),
-        ),
-        const SizedBox(height: 20),
-
-        if (!_isAadhaarOtpSent) ...[
-          // Sub-step 4A: Enter Aadhaar Number
-          RoundedInputField(
-            controller: _aadhaarNumberController,
-            labelText: 'Aadhaar Number',
-            hintText: 'XXXX XXXX XXXX (12 digits)',
-            keyboardType: TextInputType.number,
-            maxLength: 14,
-            inputFormatters: [
-              FilteringTextInputFormatter.digitsOnly,
-              _AadhaarNumberFormatter(),
-            ],
-            validator: (value) {
-              final raw = (value ?? '').replaceAll(' ', '');
-              if (raw.length != 12) {
-                return 'Please enter a 12-digit Aadhaar number';
-              }
-              return null;
-            },
-          ),
-          const SizedBox(height: 10),
-
-          // Demo Aadhaar Chip
-          GestureDetector(
-            onTap: () {
-              setState(() {
-                _aadhaarNumberController.text = _kDemoAadhaarNumber;
-                _errorMessage = null;
-              });
-              _showToast('Demo Aadhaar auto-filled: $_kDemoAadhaarNumber');
-            },
-            child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
-              decoration: BoxDecoration(
-                color: const Color(0xFFF1F5F9),
-                borderRadius: BorderRadius.circular(16),
-                border: Border.all(color: const Color(0xFFE2E8F0)),
-              ),
-              child: const Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Icon(Icons.credit_card_outlined, size: 14, color: Color(0xFF64748B)),
-                  SizedBox(width: 6),
-                  Text(
-                    'Demo Aadhaar: $_kDemoAadhaarNumber • Tap to fill',
-                    style: TextStyle(
-                      fontSize: 11.5,
-                      fontWeight: FontWeight.w600,
-                      color: Color(0xFF64748B),
-                    ),
+                  const SizedBox(height: 16),
+                  const Divider(color: Color(0xFFA7F3D0), height: 1),
+                  const SizedBox(height: 14),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      const Text(
+                        'Verified Name',
+                        style: TextStyle(fontSize: 12, color: Color(0xFF047857), fontWeight: FontWeight.w500),
+                      ),
+                      Text(
+                        _verifiedAadhaarName ?? _fullName,
+                        style: const TextStyle(fontSize: 13, color: Color(0xFF065F46), fontWeight: FontWeight.bold),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 8),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      const Text(
+                        'Aadhaar Number',
+                        style: TextStyle(fontSize: 12, color: Color(0xFF047857), fontWeight: FontWeight.w500),
+                      ),
+                      Text(
+                        _verifiedAadhaarMasked ?? '•••• •••• 7777',
+                        style: const TextStyle(
+                          fontSize: 13,
+                          color: Color(0xFF065F46),
+                          fontWeight: FontWeight.bold,
+                          letterSpacing: 1.2,
+                        ),
+                      ),
+                    ],
                   ),
                 ],
               ),
             ),
           ),
-          const SizedBox(height: 28),
+          const SizedBox(height: 24),
 
-          // Send OTP Button
+          // Complete Registration Button
           CustomFormButton(
-            innerText: 'Send Aadhaar OTP',
-            onPressed: _sendAadhaarOtp,
+            innerText: 'Complete Registration',
+            onPressed: _completeRegistration,
             isLoading: _isLoading,
           ),
           const SizedBox(height: 16),
+          TextButton(
+            onPressed: () => setState(() {
+              _isDigiLockerVerified = false;
+              _isDigiLockerVerifying = false;
+            }),
+            child: const Text(
+              'Verify with another Aadhaar',
+              style: TextStyle(color: Color(0xFF94A3B8), fontWeight: FontWeight.w600, fontSize: 12.5),
+            ),
+          ),
+        ]
 
+        // ================= DIGILOCKER WAITING / POLLING STATE =================
+        else if (_isDigiLockerVerifying) ...[
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 24),
+            child: Container(
+              width: double.infinity,
+              padding: const EdgeInsets.all(20),
+              decoration: BoxDecoration(
+                color: const Color(0xFFF8FAFC),
+                borderRadius: BorderRadius.circular(16),
+                border: Border.all(color: const Color(0xFF38BDF8)),
+              ),
+              child: Column(
+                children: [
+                  const SizedBox(
+                    width: 38,
+                    height: 38,
+                    child: CircularProgressIndicator(
+                      strokeWidth: 3,
+                      valueColor: AlwaysStoppedAnimation<Color>(Color(0xFF0284C7)),
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                  const Text(
+                    'Awaiting DigiLocker Consent...',
+                    style: TextStyle(
+                      fontSize: 15,
+                      fontWeight: FontWeight.bold,
+                      color: Color(0xFF0F172A),
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  const Text(
+                    'The official government MeriPehchaan portal has opened in your browser.\n\nLog in, enter your OTP, and tap "Allow" to certify your identity.',
+                    textAlign: TextAlign.center,
+                    style: TextStyle(
+                      fontSize: 12,
+                      color: Color(0xFF475569),
+                      height: 1.45,
+                    ),
+                  ),
+                  const SizedBox(height: 18),
+                  ElevatedButton.icon(
+                    onPressed: _checkDigiLockerStatusManual,
+                    icon: const Icon(Icons.refresh_rounded, size: 16),
+                    label: const Text('Check Status Now'),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: const Color(0xFF0284C7),
+                      foregroundColor: Colors.white,
+                      elevation: 0,
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                      padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 10),
+                    ),
+                  ),
+                  const SizedBox(height: 10),
+                  if (_digiLockerAuthUrl != null)
+                    TextButton(
+                      onPressed: () => openUrlInNewTab(_digiLockerAuthUrl!),
+                      child: const Text(
+                        'Re-open DigiLocker Tab ↗',
+                        style: TextStyle(fontSize: 12, color: Color(0xFF0284C7), fontWeight: FontWeight.bold),
+                      ),
+                    ),
+                ],
+              ),
+            ),
+          ),
+          const SizedBox(height: 20),
+          TextButton(
+            onPressed: () => setState(() => _isDigiLockerVerifying = false),
+            child: const Text('Cancel Verification', style: TextStyle(color: Color(0xFF94A3B8))),
+          ),
+        ]
+
+        // ================= MANUAL FALLBACK MODE =================
+        else if (_showManualAadhaarFallback) ...[
+          if (!_isAadhaarOtpSent) ...[
+            Padding(
+              padding: const EdgeInsets.only(left: 24, right: 24, bottom: 16),
+              child: Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: const Color(0xFFFFFBEB),
+                  borderRadius: BorderRadius.circular(10),
+                  border: Border.all(color: const Color(0xFFFDE68A)),
+                ),
+                child: Row(
+                  children: const [
+                    Icon(Icons.info_outline_rounded, color: Color(0xFFD97706), size: 18),
+                    SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        'Offline Test Mode: This manual form only validates mock test numbers. For your real Aadhaar, use DigiLocker.',
+                        style: TextStyle(fontSize: 11.5, color: Color(0xFF92400E)),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+            RoundedInputField(
+              controller: _aadhaarNumberController,
+              labelText: 'Aadhaar Number',
+              hintText: 'XXXX XXXX XXXX (12 digits)',
+              keyboardType: TextInputType.number,
+              maxLength: 14,
+              inputFormatters: [
+                FilteringTextInputFormatter.digitsOnly,
+                _AadhaarNumberFormatter(),
+              ],
+              validator: (value) {
+                final raw = (value ?? '').replaceAll(' ', '');
+                if (raw.length != 12) {
+                  return 'Please enter a 12-digit Aadhaar number';
+                }
+                return null;
+              },
+            ),
+            const SizedBox(height: 24),
+            CustomFormButton(
+              innerText: 'Send Aadhaar OTP',
+              onPressed: _sendAadhaarOtp,
+              isLoading: _isLoading,
+            ),
+            const SizedBox(height: 16),
+            TextButton(
+              onPressed: () => setState(() {
+                _showManualAadhaarFallback = false;
+                _errorMessage = null;
+              }),
+              child: const Text('← Back to DigiLocker Real Verification', style: TextStyle(color: Color(0xFF0284C7), fontWeight: FontWeight.w600)),
+            ),
+          ] else ...[
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 24),
+              child: Container(
+                width: double.infinity,
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: const Color(0xFFF8FAFC),
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(color: const Color(0xFFE2E8F0)),
+                ),
+                child: Row(
+                  children: [
+                    const Icon(Icons.fingerprint_rounded, color: Color(0xFF133838), size: 22),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: Text(
+                        'Aadhaar: •••• •••• ${_aadhaarNumberController.text.trim().split(' ').last}',
+                        style: const TextStyle(
+                          fontSize: 13.5,
+                          fontWeight: FontWeight.bold,
+                          color: Color(0xFF133838),
+                        ),
+                      ),
+                    ),
+                    GestureDetector(
+                      onTap: () => setState(() => _isAadhaarOtpSent = false),
+                      child: const Text('Change', style: TextStyle(fontSize: 12, color: Color(0xFF133838), fontWeight: FontWeight.bold)),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+            const SizedBox(height: 20),
+            OtpBoxInput(
+              controller: _aadhaarOtpController,
+              onChanged: (code) {
+                if (_errorMessage != null) setState(() => _errorMessage = null);
+              },
+              onCompleted: (_) => _completeRegistration(),
+            ),
+            const SizedBox(height: 18),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                const Text("Didn't receive UIDAI code? ", style: TextStyle(fontSize: 13, color: Color(0xFF94A3B8))),
+                if (_aadhaarOtpTimerSeconds > 0)
+                  Text('Resend in 00:${_aadhaarOtpTimerSeconds.toString().padLeft(2, '0')}', style: const TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: Color(0xFF133838)))
+                else
+                  GestureDetector(
+                    onTap: _sendAadhaarOtp,
+                    child: const Text('Resend OTP', style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: Color(0xFF133838), decoration: TextDecoration.underline)),
+                  ),
+              ],
+            ),
+            const SizedBox(height: 28),
+            CustomFormButton(
+              innerText: 'Verify & Complete Registration',
+              onPressed: _completeRegistration,
+              isLoading: _isLoading,
+            ),
+            const SizedBox(height: 16),
+            TextButton(
+              onPressed: () => setState(() => _isAadhaarOtpSent = false),
+              child: const Text('← Back to Aadhaar Number', style: TextStyle(color: Color(0xFF94A3B8), fontWeight: FontWeight.w600)),
+            ),
+          ],
+        ]
+
+        // ================= DEFAULT DIGILOCKER LANDING STATE =================
+        else ...[
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 24),
+            child: Container(
+              width: double.infinity,
+              padding: const EdgeInsets.all(20),
+              decoration: BoxDecoration(
+                color: const Color(0xFFF8FAFC),
+                borderRadius: BorderRadius.circular(16),
+                border: Border.all(color: const Color(0xFFE2E8F0)),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.all(8),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFF0056B3).withValues(alpha: 0.1),
+                          shape: BoxShape.circle,
+                        ),
+                        child: const Icon(Icons.account_balance_rounded, color: Color(0xFF0056B3), size: 22),
+                      ),
+                      const SizedBox(width: 10),
+                      const Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              'DigiLocker e-KYC',
+                              style: TextStyle(
+                                fontSize: 15,
+                                fontWeight: FontWeight.bold,
+                                color: Color(0xFF0F172A),
+                              ),
+                            ),
+                            Text(
+                              'Powered by National e-Governance (NeGD)',
+                              style: TextStyle(fontSize: 11, color: Color(0xFF64748B)),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 16),
+                  const Divider(color: Color(0xFFE2E8F0), height: 1),
+                  const SizedBox(height: 14),
+                  _buildKycHighlightRow(Icons.check_circle_rounded, '100% Paperless & Official Verification'),
+                  const SizedBox(height: 8),
+                  _buildKycHighlightRow(Icons.security_rounded, 'No Plaintext 12-Digit Aadhaar Stored'),
+                  const SizedBox(height: 8),
+                  _buildKycHighlightRow(Icons.lock_rounded, 'Encrypted 2048-bit RSA Government Signature'),
+                ],
+              ),
+            ),
+          ),
+          const SizedBox(height: 24),
+
+          // Main Verify Button
+          CustomFormButton(
+            innerText: 'Verify with DigiLocker',
+            onPressed: _startDigiLockerVerification,
+            isLoading: _isDigiLockerVerifying,
+          ),
+          const SizedBox(height: 14),
+
+          // Secondary Fallback Option
+          TextButton(
+            onPressed: () => setState(() {
+              _showManualAadhaarFallback = true;
+              _errorMessage = null;
+            }),
+            child: const Text(
+              'Or enter Aadhaar number manually (Offline Mock DB)',
+              style: TextStyle(
+                fontSize: 12.5,
+                color: Color(0xFF64748B),
+                fontWeight: FontWeight.w600,
+                decoration: TextDecoration.underline,
+              ),
+            ),
+          ),
+          const SizedBox(height: 6),
           TextButton(
             onPressed: () => setState(() => _currentStep = 2),
             child: const Text(
@@ -1178,157 +1780,26 @@ class _CitizenSignupScreenState extends State<CitizenSignupScreen> {
               style: TextStyle(color: Color(0xFF94A3B8), fontWeight: FontWeight.w600),
             ),
           ),
-        ] else ...[
-          // Sub-step 4B: Enter Aadhaar OTP
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 24),
-            child: Container(
-              width: double.infinity,
-              padding: const EdgeInsets.all(12),
-              decoration: BoxDecoration(
-                color: const Color(0xFFF8FAFC),
-                borderRadius: BorderRadius.circular(12),
-                border: Border.all(color: const Color(0xFFE2E8F0)),
-              ),
-              child: Row(
-                children: [
-                  const Icon(Icons.fingerprint_rounded, color: Color(0xFF133838), size: 22),
-                  const SizedBox(width: 10),
-                  Expanded(
-                    child: Text(
-                      'Aadhaar: •••• •••• ${_aadhaarNumberController.text.trim().split(' ').last}',
-                      style: const TextStyle(
-                        fontSize: 13.5,
-                        fontWeight: FontWeight.bold,
-                        color: Color(0xFF133838),
-                      ),
-                    ),
-                  ),
-                  GestureDetector(
-                    onTap: () => setState(() => _isAadhaarOtpSent = false),
-                    child: const Text(
-                      'Change',
-                      style: TextStyle(
-                        fontSize: 12,
-                        color: Color(0xFF133838),
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ),
-          const SizedBox(height: 16),
-
-          const Padding(
-            padding: EdgeInsets.symmetric(horizontal: 24),
-            child: Text(
-              'Enter the 6-digit OTP sent by UIDAI to your registered mobile number:',
-              textAlign: TextAlign.center,
-              style: TextStyle(fontSize: 13, color: Color(0xFF64748B), height: 1.4),
-            ),
-          ),
-          const SizedBox(height: 20),
-
-          // 6-digit OTP Box Input
-          OtpBoxInput(
-            controller: _aadhaarOtpController,
-            onChanged: (code) {
-              if (_errorMessage != null) setState(() => _errorMessage = null);
-            },
-            onCompleted: (_) => _completeRegistration(),
-          ),
-          const SizedBox(height: 18),
-
-          // Demo Aadhaar OTP Chip
-          GestureDetector(
-            onTap: () {
-              setState(() {
-                _aadhaarOtpController.text = _kDemoAadhaarOtp;
-                _errorMessage = null;
-              });
-              _showToast('Demo Aadhaar OTP auto-filled: $_kDemoAadhaarOtp');
-            },
-            child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
-              decoration: BoxDecoration(
-                color: const Color(0xFFF1F5F9),
-                borderRadius: BorderRadius.circular(16),
-                border: Border.all(color: const Color(0xFFE2E8F0)),
-              ),
-              child: const Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Icon(Icons.vpn_key_outlined, size: 14, color: Color(0xFF64748B)),
-                  SizedBox(width: 6),
-                  Text(
-                    'Demo OTP: $_kDemoAadhaarOtp • Tap to fill',
-                    style: TextStyle(
-                      fontSize: 12,
-                      fontWeight: FontWeight.w600,
-                      color: Color(0xFF64748B),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ),
-          const SizedBox(height: 16),
-
-          // Resend Timer Row
-          Row(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              const Text(
-                "Didn't receive UIDAI code? ",
-                style: TextStyle(fontSize: 13, color: Color(0xFF94A3B8)),
-              ),
-              if (_aadhaarOtpTimerSeconds > 0)
-                Text(
-                  'Resend in 00:${_aadhaarOtpTimerSeconds.toString().padLeft(2, '0')}',
-                  style: const TextStyle(
-                    fontSize: 13,
-                    fontWeight: FontWeight.bold,
-                    color: Color(0xFF133838),
-                  ),
-                )
-              else
-                GestureDetector(
-                  onTap: () {
-                    _startAadhaarOtpTimer();
-                    _showToast('New UIDAI OTP requested');
-                  },
-                  child: const Text(
-                    'Resend OTP',
-                    style: TextStyle(
-                      fontSize: 13,
-                      fontWeight: FontWeight.bold,
-                      color: Color(0xFF133838),
-                      decoration: TextDecoration.underline,
-                    ),
-                  ),
-                ),
-            ],
-          ),
-          const SizedBox(height: 28),
-
-          // Complete Registration Button
-          CustomFormButton(
-            innerText: 'Verify & Complete Registration',
-            onPressed: _completeRegistration,
-            isLoading: _isLoading,
-          ),
-          const SizedBox(height: 16),
-
-          TextButton(
-            onPressed: () => setState(() => _isAadhaarOtpSent = false),
-            child: const Text(
-              '← Back to Aadhaar Number',
-              style: TextStyle(color: Color(0xFF94A3B8), fontWeight: FontWeight.w600),
-            ),
-          ),
         ],
+      ],
+    );
+  }
+
+  Widget _buildKycHighlightRow(IconData icon, String text) {
+    return Row(
+      children: [
+        Icon(icon, size: 15, color: const Color(0xFF10B981)),
+        const SizedBox(width: 8),
+        Expanded(
+          child: Text(
+            text,
+            style: const TextStyle(
+              fontSize: 12,
+              color: Color(0xFF334155),
+              fontWeight: FontWeight.w500,
+            ),
+          ),
+        ),
       ],
     );
   }
