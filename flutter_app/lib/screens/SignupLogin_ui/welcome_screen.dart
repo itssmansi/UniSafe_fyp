@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../../theme/unisafe_theme.dart';
 import 'widgets/auth_header.dart';
 import 'widgets/auth_background.dart';
 import 'widgets/auth_slide_route.dart';
@@ -22,7 +23,7 @@ class _WelcomeSelectionScreenState extends State<WelcomeSelectionScreen>
     super.initState();
     _entranceController = AnimationController(
       vsync: this,
-      duration: const Duration(milliseconds: 550),
+      duration: const Duration(milliseconds: 400),
     );
     _entranceAnimation = CurvedAnimation(
       parent: _entranceController,
@@ -54,7 +55,7 @@ class _WelcomeSelectionScreenState extends State<WelcomeSelectionScreen>
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFF133838), // Dark Forest Teal
+      backgroundColor: UniSafeColors.canvas,
       body: Stack(
         children: [
           // Full-screen continuous green doodle background
@@ -65,10 +66,12 @@ class _WelcomeSelectionScreenState extends State<WelcomeSelectionScreen>
               children: [
                 // Teal Top Area with centered UNISAFE
             const Expanded(
-              child: AuthHeader(
-                title: 'UNISAFE',
-                isCentered: true,
-                showBackButton: false,
+              child: RepaintBoundary(
+                child: AuthHeader(
+                  title: 'UNISAFE',
+                  isCentered: true,
+                  showBackButton: false,
+                ),
               ),
             ),
 
@@ -91,24 +94,28 @@ class _WelcomeSelectionScreenState extends State<WelcomeSelectionScreen>
                     : 0.0;
                 final double secDy = -secVal * 50.0; // Moves upward gently as route opens
                 final double secOpacity = (1.0 - secVal * 1.5).clamp(0.0, 1.0);
+                final double opacityVal = (entranceVal * secOpacity).clamp(0.0, 1.0);
 
                 return Transform.translate(
                   offset: Offset(0, entranceDy + secDy),
-                  child: Opacity(
-                    opacity: (entranceVal * secOpacity).clamp(0.0, 1.0),
-                    child: child,
-                  ),
+                  child: opacityVal >= 0.999
+                      ? child
+                      : Opacity(
+                          opacity: opacityVal,
+                          child: child,
+                        ),
                 );
               },
-              child: Container(
-                width: double.infinity,
-                decoration: const BoxDecoration(
-                  color: Colors.white,
-                  borderRadius: BorderRadius.only(
-                    topLeft: Radius.circular(32),
-                    topRight: Radius.circular(32),
+              child: RepaintBoundary(
+                child: Container(
+                  width: double.infinity,
+                  decoration: const BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.only(
+                      topLeft: Radius.circular(32),
+                      topRight: Radius.circular(32),
+                    ),
                   ),
-                ),
                 child: SafeArea(
                   top: false,
                   child: Center(
@@ -124,17 +131,13 @@ class _WelcomeSelectionScreenState extends State<WelcomeSelectionScreen>
                               width: double.infinity,
                               height: 54,
                               decoration: BoxDecoration(
-                                gradient: const LinearGradient(
-                                  colors: [Color(0xFF133838), Color(0xFF1C4D4D)],
-                                  begin: Alignment.topLeft,
-                                  end: Alignment.bottomRight,
-                                ),
+                                color: const Color(0xFF1C2026).withValues(alpha: 0.94),
                                 borderRadius: BorderRadius.circular(27),
                                 boxShadow: [
                                   BoxShadow(
-                                    color: const Color(0xFF133838).withValues(alpha: 0.28),
-                                    blurRadius: 12,
-                                    offset: const Offset(0, 5),
+                                    color: const Color(0xFF1C2026).withValues(alpha: 0.22),
+                                    blurRadius: 10,
+                                    offset: const Offset(0, 4),
                                   ),
                                 ],
                               ),
@@ -175,7 +178,7 @@ class _WelcomeSelectionScreenState extends State<WelcomeSelectionScreen>
                                 color: const Color(0xFFF8FAFC),
                                 borderRadius: BorderRadius.circular(27),
                                 border: Border.all(
-                                  color: const Color(0xFF133838),
+                                  color: const Color(0xFF1C2026).withValues(alpha: 0.94),
                                   width: 1.6,
                                 ),
                               ),
@@ -189,14 +192,14 @@ class _WelcomeSelectionScreenState extends State<WelcomeSelectionScreen>
                                     child: Row(
                                       mainAxisAlignment: MainAxisAlignment.center,
                                       children: [
-                                        Icon(Icons.person_add_outlined, color: Color(0xFF133838), size: 21),
+                                        Icon(Icons.person_add_outlined, color: Color(0xFF1C2026), size: 21),
                                         SizedBox(width: 10),
                                         Text(
                                           'Create Account',
                                           style: TextStyle(
                                             fontSize: 17.5,
                                             fontWeight: FontWeight.w700,
-                                            color: Color(0xFF133838),
+                                            color: Color(0xFF1C2026),
                                             letterSpacing: 0.3,
                                           ),
                                         ),
@@ -214,6 +217,7 @@ class _WelcomeSelectionScreenState extends State<WelcomeSelectionScreen>
                 ),
               ),
             ),
+          ),
               ],
             ),
           ),

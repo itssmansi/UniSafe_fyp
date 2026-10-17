@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../../services/auth_service.dart';
+import '../../theme/unisafe_theme.dart';
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
@@ -116,8 +117,10 @@ class _LoginScreenState extends State<LoginScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      backgroundColor: UniSafeColors.canvas,
       appBar: AppBar(
-        title: const Text('UniSafe Login'),
+        title: const Text('Welcome back', style: TextStyle(fontWeight: FontWeight.w800)),
+        backgroundColor: UniSafeColors.canvas,
       ),
       body: SafeArea(
         child: SingleChildScrollView(
@@ -130,10 +133,7 @@ class _LoginScreenState extends State<LoginScreen> {
               children: [
                 const SizedBox(height: 50),
 
-                const Icon(
-                  Icons.shield,
-                  size: 75,
-                ),
+                Container(width: 76, height: 76, decoration: BoxDecoration(color: UniSafeColors.mint, borderRadius: BorderRadius.circular(22)), child: const Icon(Icons.shield_outlined, color: UniSafeColors.navy, size: 38)),
 
                 const SizedBox(height: 25),
 
@@ -171,7 +171,7 @@ class _LoginScreenState extends State<LoginScreen> {
                     labelText: 'Email or Phone',
                     hintText:
                         'Enter email or 10-digit phone',
-                    border: OutlineInputBorder(),
+                    border: const OutlineInputBorder(borderRadius: BorderRadius.all(Radius.circular(14))),
                     prefixIcon: Icon(Icons.person),
                   ),
                   validator: (value) {
@@ -213,7 +213,7 @@ class _LoginScreenState extends State<LoginScreen> {
                   obscureText: obscurePassword,
                   decoration: InputDecoration(
                     labelText: 'Password',
-                    border: const OutlineInputBorder(),
+                    border: const OutlineInputBorder(borderRadius: BorderRadius.all(Radius.circular(14))),
                     prefixIcon:
                         const Icon(Icons.lock),
                     suffixIcon: IconButton(

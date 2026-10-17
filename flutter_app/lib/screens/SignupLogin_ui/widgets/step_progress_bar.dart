@@ -31,7 +31,7 @@ class StepProgressBar extends StatelessWidget {
                     margin: const EdgeInsets.symmetric(horizontal: 4),
                     decoration: BoxDecoration(
                       color: isCompleted
-                          ? const Color(0xFF133838)
+                          ? const Color(0xFF0B3B68)
                           : const Color(0xFFE2E8F0),
                       borderRadius: BorderRadius.circular(2),
                     ),
@@ -52,7 +52,7 @@ class StepProgressBar extends StatelessWidget {
                   textColor = Colors.white;
                   content = const Icon(Icons.check, size: 14, color: Colors.white);
                 } else if (isCurrent) {
-                  bgColor = const Color(0xFF133838);
+                  bgColor = const Color(0xFF0B3B68);
                   textColor = Colors.white;
                   content = Text(
                     '${stepIndex + 1}',
@@ -84,7 +84,7 @@ class StepProgressBar extends StatelessWidget {
                     shape: BoxShape.circle,
                     border: Border.all(
                       color: isCurrent
-                          ? const Color(0xFF133838)
+                          ? const Color(0xFF0B3B68)
                           : isCompleted
                               ? const Color(0xFF10B981)
                               : const Color(0xFFCBD5E1),
@@ -93,7 +93,7 @@ class StepProgressBar extends StatelessWidget {
                     boxShadow: isCurrent
                         ? [
                             BoxShadow(
-                              color: const Color(0xFF133838).withValues(alpha: 0.2),
+                              color: const Color(0xFF0B3B68).withValues(alpha: 0.2),
                               blurRadius: 6,
                               offset: const Offset(0, 2),
                             ),
@@ -125,7 +125,7 @@ class StepProgressBar extends StatelessWidget {
                 style: const TextStyle(
                   fontSize: 12,
                   fontWeight: FontWeight.w700,
-                  color: Color(0xFF133838),
+                  color: Color(0xFF0B3B68),
                 ),
               ),
             ],

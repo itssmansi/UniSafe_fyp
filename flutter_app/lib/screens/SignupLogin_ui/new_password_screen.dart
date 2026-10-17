@@ -97,7 +97,7 @@ class _NewPasswordScreenState extends State<NewPasswordScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFF133838), // Dark Forest Teal
+      backgroundColor: const Color(0xFF0B3B68), // Dark Forest Teal
       body: Stack(
         children: [
           // Full-screen continuous green doodle background
@@ -181,7 +181,7 @@ class _NewPasswordScreenState extends State<NewPasswordScreen> {
                                   style: TextStyle(
                                     fontSize: 18,
                                     fontWeight: FontWeight.w700,
-                                    color: Color(0xFF133838),
+                                    color: Color(0xFF0B3B68),
                                   ),
                                 ),
                                 const SizedBox(height: 6),
@@ -281,7 +281,7 @@ class _NewPasswordScreenState extends State<NewPasswordScreen> {
                                     'Cancel and back to login',
                                     style: TextStyle(
                                       fontSize: 13,
-                                      color: Color(0xFF133838),
+                                      color: Color(0xFF0B3B68),
                                       fontWeight: FontWeight.w600,
                                     ),
                                   ),

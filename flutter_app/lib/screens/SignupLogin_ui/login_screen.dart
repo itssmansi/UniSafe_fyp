@@ -2,6 +2,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../services/auth_service.dart';
+import '../../theme/unisafe_theme.dart';
 import 'widgets/auth_header.dart';
 import 'widgets/auth_background.dart';
 import 'widgets/rounded_input_field.dart';
@@ -119,7 +120,7 @@ class _CitizenLoginScreenState extends State<CitizenLoginScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFF133838), // Deep Forest Teal Header Canvas
+      backgroundColor: UniSafeColors.canvas,
       body: Stack(
         children: [
           // Full-screen continuous green doodle background
@@ -137,15 +138,19 @@ class _CitizenLoginScreenState extends State<CitizenLoginScreen> {
                   final double opacity = anim != null
                       ? Curves.easeOutCubic.transform(anim.value)
                       : 1.0;
-                  return Opacity(
-                    opacity: opacity.clamp(0.0, 1.0),
-                    child: child,
-                  );
+                  return opacity >= 0.999
+                      ? child!
+                      : Opacity(
+                          opacity: opacity.clamp(0.0, 1.0),
+                          child: child,
+                        );
                 },
-                child: const AuthHeader(
-                  title: 'LOGIN',
-                  isCentered: true,
-                  showBackButton: false,
+                child: const RepaintBoundary(
+                  child: AuthHeader(
+                    title: 'LOGIN',
+                    isCentered: true,
+                    showBackButton: false,
+                  ),
                 ),
               ),
             ),
@@ -172,23 +177,40 @@ class _CitizenLoginScreenState extends State<CitizenLoginScreen> {
                       : 0.0;
                   final double secDy = -secT * 50.0;
                   final double secOpacity = (1.0 - secT * 1.5).clamp(0.0, 1.0);
+                  final double totalOpacity = (enterOpacity * secOpacity).clamp(0.0, 1.0);
 
                   return Transform.translate(
                     offset: Offset(0, enterDy + secDy),
-                    child: Opacity(
-                      opacity: (enterOpacity * secOpacity).clamp(0.0, 1.0),
-                      child: child,
-                    ),
+                    child: totalOpacity >= 0.999
+                        ? child
+                        : Opacity(
+                            opacity: totalOpacity,
+                            child: child,
+                          ),
                   );
                 },
-                child: Container(
+                child: RepaintBoundary(
+                  child: Container(
                   width: double.infinity,
-                  decoration: const BoxDecoration(
+                  decoration: BoxDecoration(
                     color: Colors.white,
-                    borderRadius: BorderRadius.only(
+                    borderRadius: const BorderRadius.only(
                       topLeft: Radius.circular(32),
                       topRight: Radius.circular(32),
                     ),
+                    border: Border(
+                      top: BorderSide(
+                        color: UniSafeColors.line.withValues(alpha: 0.8),
+                        width: 1,
+                      ),
+                    ),
+                    boxShadow: [
+                      BoxShadow(
+                        color: UniSafeColors.ink.withValues(alpha: 0.05),
+                        blurRadius: 16,
+                        offset: const Offset(0, -4),
+                      ),
+                    ],
                   ),
                   child: Align(
                   alignment: Alignment.topCenter,
@@ -299,12 +321,12 @@ class _CitizenLoginScreenState extends State<CitizenLoginScreen> {
                                             onChanged: (val) {
                                               setState(() => _rememberMe = val ?? false);
                                             },
-                                            activeColor: const Color(0xFF133838),
+                                            activeColor: UniSafeColors.navy,
                                             shape: RoundedRectangleBorder(
                                               borderRadius: BorderRadius.circular(5),
                                             ),
                                             side: const BorderSide(
-                                              color: Color(0xFFCBD5E1),
+                                              color: UniSafeColors.line,
                                               width: 1.4,
                                             ),
                                           ),
@@ -314,7 +336,7 @@ class _CitizenLoginScreenState extends State<CitizenLoginScreen> {
                                           'Remember Me',
                                           style: TextStyle(
                                             fontSize: 13,
-                                            color: Color(0xFF64748B),
+                                            color: UniSafeColors.mutedInk,
                                             fontWeight: FontWeight.w500,
                                           ),
                                         ),
@@ -335,7 +357,7 @@ class _CitizenLoginScreenState extends State<CitizenLoginScreen> {
                                     child: const Text(
                                       'Forgot Password?',
                                       style: TextStyle(
-                                        color: Color(0xFF133838),
+                                        color: UniSafeColors.blue,
                                         fontSize: 13,
                                         fontWeight: FontWeight.w700,
                                       ),
@@ -362,7 +384,7 @@ class _CitizenLoginScreenState extends State<CitizenLoginScreen> {
                                   "Don't have an account ? ",
                                   style: TextStyle(
                                     fontSize: 13,
-                                    color: Color(0xFF94A3B8),
+                                    color: UniSafeColors.mutedInk,
                                     fontWeight: FontWeight.w500,
                                   ),
                                 ),
@@ -379,7 +401,7 @@ class _CitizenLoginScreenState extends State<CitizenLoginScreen> {
                                     'Sign-up',
                                     style: TextStyle(
                                       fontSize: 14,
-                                      color: Color(0xFF133838),
+                                      color: UniSafeColors.blue,
                                       fontWeight: FontWeight.w700,
                                     ),
                                   ),
@@ -394,6 +416,7 @@ class _CitizenLoginScreenState extends State<CitizenLoginScreen> {
                 ),
               ),
             ),
+          ),
               ],
             ),
           ),
@@ -402,4 +425,3 @@ class _CitizenLoginScreenState extends State<CitizenLoginScreen> {
     );
   }
 }
-

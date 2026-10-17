@@ -129,7 +129,7 @@ class _OtpBoxInputState extends State<OtpBoxInput> {
             borderRadius: BorderRadius.circular(10),
             border: Border.all(
               color: isFocused
-                  ? const Color(0xFF133838)
+                  ? const Color(0xFF0B3B68)
                   : hasValue
                       ? const Color(0xFF64748B)
                       : const Color(0xFFCBD5E1),
@@ -138,7 +138,7 @@ class _OtpBoxInputState extends State<OtpBoxInput> {
             boxShadow: isFocused
                 ? [
                     BoxShadow(
-                      color: const Color(0xFF133838).withValues(alpha: 0.15),
+                      color: const Color(0xFF0B3B68).withValues(alpha: 0.15),
                       blurRadius: 8,
                       offset: const Offset(0, 2),
                     ),
@@ -164,7 +164,7 @@ class _OtpBoxInputState extends State<OtpBoxInput> {
                 style: TextStyle(
                   fontSize: fontSize,
                   fontWeight: FontWeight.w700,
-                  color: const Color(0xFF133838),
+                  color: const Color(0xFF0B3B68),
                 ),
                 inputFormatters: [
                   LengthLimitingTextInputFormatter(widget.length),

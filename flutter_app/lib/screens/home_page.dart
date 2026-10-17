@@ -15,7 +15,9 @@ import 'interactive_map/street_view_modal.dart';
 import 'kanban_board_ui/kanban_board_screen.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../config/supabase_config.dart';
+import '../services/account_preferences.dart';
 import '../services/device_service.dart';
+import '../theme/unisafe_theme.dart';
 
 class HomePage extends ConsumerStatefulWidget {
   const HomePage({super.key});
@@ -40,6 +42,9 @@ class _HomePageState extends ConsumerState<HomePage> {
     _checkAuthAndLoadProfile();
     _determineUserLocation();
     _loadMyDeviceReportIds();
+    AccountPreferences.instance.load().then((_) {
+      if (mounted) setState(() {});
+    });
   }
 
   Future<void> _loadMyDeviceReportIds() async {
@@ -207,7 +212,7 @@ class _HomePageState extends ConsumerState<HomePage> {
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
-        backgroundColor: Colors.white,
+        backgroundColor: UniSafeColors.canvas,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
         title: const Text('Sign Out', style: TextStyle(fontWeight: FontWeight.w700, fontSize: 18)),
         content: const Text('Are you sure you want to sign out of UniSafe?'),
@@ -255,6 +260,30 @@ class _HomePageState extends ConsumerState<HomePage> {
     return 'Normal';
   }
 
+  /// Reports submitted by the signed-in citizen, matched on auth user id,
+  /// citizen id or the ids persisted on this device.
+  List<ReportModel> _ownedReports(List<ReportModel> reports) {
+    final citizenId = _citizenProfile?['id']?.toString();
+    final authUserId = _currentUser?.id ?? SupabaseConfig.client.auth.currentUser?.id;
+
+    return reports.where((r) {
+      final bool isMyAuthUser = authUserId != null &&
+          r.authUserId != null &&
+          r.authUserId == authUserId;
+      final bool isMyCitizen = citizenId != null &&
+          r.citizenId != null &&
+          r.citizenId!.isNotEmpty &&
+          r.citizenId == citizenId;
+      final bool isMyDevice = _myDeviceReportIds.contains(r.id);
+      return isMyAuthUser || isMyCitizen || isMyDevice;
+    }).toList();
+  }
+
+  bool _isResolvedReport(ReportModel report) {
+    final s = report.status.toLowerCase().trim();
+    return s == 'resolved' || s == 'done' || s == 'closed';
+  }
+
   @override
   Widget build(BuildContext context) {
     return PopScope(
@@ -264,13 +293,21 @@ class _HomePageState extends ConsumerState<HomePage> {
         body: Stack(
           children: [
             // Active Tab Content
-            IndexedStack(
-              index: _currentIndex,
-              children: [
-                _buildHomeTab(),
-                _buildInboxTab(),
-                _buildAccountTab(),
-              ],
+            AnimatedSwitcher(
+              duration: const Duration(milliseconds: 360),
+              switchInCurve: Curves.easeOutCubic,
+              switchOutCurve: Curves.easeInCubic,
+              transitionBuilder: (child, animation) => FadeTransition(
+                opacity: animation,
+                child: SlideTransition(
+                  position: Tween<Offset>(begin: const Offset(0.018, 0), end: Offset.zero).animate(animation),
+                  child: child,
+                ),
+              ),
+              child: KeyedSubtree(
+                key: ValueKey(_currentIndex),
+                child: [_buildHomeTab(), _buildInboxTab(), _buildAccountTab()][_currentIndex],
+              ),
             ),
 
             // Linear-Style Floating Bottom Navigation Dock
@@ -309,22 +346,22 @@ class _HomePageState extends ConsumerState<HomePage> {
   // ==========================================
   Widget _buildHomeTab() {
     return Scaffold(
-      backgroundColor: const Color(0xFFF9FAFB),
+      backgroundColor: UniSafeColors.canvas,
       body: SafeArea(
         bottom: false,
         child: ListView(
           padding: const EdgeInsets.fromLTRB(20, 16, 20, 130),
           children: [
             // 1. Native Header (Greeting)
-            _buildHeader(),
+            EntranceReveal(child: _buildHeader()),
             const SizedBox(height: 18),
 
             // 2. Civic & Safety Bento Grid
-            _buildCivicActions(),
+            EntranceReveal(child: _buildCivicActions()),
             const SizedBox(height: 26),
 
             // 3. Neighborhood Safety Feed (Realistic, Beautiful Civic Activity Stream)
-            _buildNeighborhoodFeed(),
+            EntranceReveal(child: _buildNeighborhoodFeed()),
           ],
         ),
       ),
@@ -380,7 +417,7 @@ class _HomePageState extends ConsumerState<HomePage> {
                   width: 6,
                   height: 6,
                   decoration: const BoxDecoration(
-                    color: Color(0xFF2563EB),
+                    color: UniSafeColors.teal,
                     shape: BoxShape.circle,
                   ),
                 ),
@@ -422,9 +459,9 @@ class _HomePageState extends ConsumerState<HomePage> {
             Expanded(
               child: _buildBentoActionCard(
                 icon: LucideIcons.map,
-                accentColor: const Color(0xFF2563EB),
-                iconBg: const Color(0xFFEFF6FF),
-                iconBorder: const Color(0xFFBFDBFE),
+                accentColor: UniSafeColors.navy,
+                iconBg: const Color(0xFFEAF3FA),
+                iconBorder: const Color(0xFFC8DFEF),
                 badgeText: 'LIVE GPS',
                 title: 'Interactive Map',
                 subtitle: 'Report hazards & safe transit navigation',
@@ -432,7 +469,7 @@ class _HomePageState extends ConsumerState<HomePage> {
                 watermarkIcon: LucideIcons.map,
                 onTap: () {
                   Navigator.of(context).push(
-                    MaterialPageRoute(builder: (context) => const InteractiveMapScreen()),
+                    UniSafePageRoute(builder: (context) => const InteractiveMapScreen()),
                   );
                 },
               ),
@@ -441,9 +478,9 @@ class _HomePageState extends ConsumerState<HomePage> {
             Expanded(
               child: _buildBentoActionCard(
                 icon: LucideIcons.users,
-                accentColor: const Color(0xFFD97706),
-                iconBg: const Color(0xFFFEF3C7),
-                iconBorder: const Color(0xFFFDE68A),
+                accentColor: UniSafeColors.amber,
+                iconBg: const Color(0xFFFFF5E6),
+                iconBorder: const Color(0xFFF6D6A7),
                 badgeText: '1 ACTIVE',
                 title: 'Missing Persons',
                 subtitle: 'AI face search & local police bulletin',
@@ -483,9 +520,9 @@ class _HomePageState extends ConsumerState<HomePage> {
             Expanded(
               child: _buildBentoActionCard(
                 icon: LucideIcons.kanban,
-                accentColor: const Color(0xFF7C3AED),
-                iconBg: const Color(0xFFF5F3FF),
-                iconBorder: const Color(0xFFDDD6FE),
+                accentColor: UniSafeColors.blue,
+                iconBg: const Color(0xFFEAF3FA),
+                iconBorder: const Color(0xFFC8DFEF),
                 badgeText: 'TRIAGE',
                 title: 'Kanban Board',
                 subtitle: 'Civic issue triage & resolution pipeline',
@@ -493,7 +530,7 @@ class _HomePageState extends ConsumerState<HomePage> {
                 watermarkIcon: LucideIcons.kanban,
                 onTap: () {
                   Navigator.of(context).push(
-                    MaterialPageRoute(builder: (context) => const KanbanBoardScreen()),
+                    UniSafePageRoute(builder: (context) => const KanbanBoardScreen()),
                   );
                 },
               ),
@@ -502,9 +539,9 @@ class _HomePageState extends ConsumerState<HomePage> {
             Expanded(
               child: _buildBentoActionCard(
                 icon: LucideIcons.flame,
-                accentColor: const Color(0xFF059669),
-                iconBg: const Color(0xFFECFDF5),
-                iconBorder: const Color(0xFFA7F3D0),
+                accentColor: UniSafeColors.teal,
+                iconBg: UniSafeColors.mint,
+                iconBorder: const Color(0xFFB9E3DB),
                 badgeText: '94% SAFE',
                 title: 'Safety Heatmaps',
                 subtitle: 'Lighting & crime risk density analysis',
@@ -512,7 +549,7 @@ class _HomePageState extends ConsumerState<HomePage> {
                 watermarkIcon: LucideIcons.flame,
                 onTap: () {
                   Navigator.of(context).push(
-                    MaterialPageRoute(builder: (context) => const MapScreen()),
+                    UniSafePageRoute(builder: (context) => const MapScreen()),
                   );
                 },
               ),
@@ -1422,26 +1459,10 @@ class _HomePageState extends ConsumerState<HomePage> {
   // ==========================================
   Widget _buildInboxTab() {
     final liveReports = ref.watch(interactiveReportProvider);
-    final currentCitizenId = _citizenProfile?['id']?.toString();
-    final currentAuthUserId = _currentUser?.id ?? SupabaseConfig.client.auth.currentUser?.id;
-    debugPrint('[InboxTab] liveReports: ${liveReports.length}, currentAuthUserId: $currentAuthUserId, currentCitizenId: $currentCitizenId, myDeviceReportIds: $_myDeviceReportIds');
 
     // Filter strictly to reports submitted by this user (by auth user ID, citizen ID, or device-persisted ID)
     final allReports = <Map<String, dynamic>>[];
-    for (final r in liveReports) {
-      final bool isMyAuthUser = currentAuthUserId != null &&
-          r.authUserId != null &&
-          r.authUserId == currentAuthUserId;
-      final bool isMyCitizen = currentCitizenId != null &&
-          r.citizenId != null &&
-          r.citizenId!.isNotEmpty &&
-          r.citizenId == currentCitizenId;
-      final bool isMyDevice = _myDeviceReportIds.contains(r.id);
-
-      if (!isMyAuthUser && !isMyCitizen && !isMyDevice) {
-        continue;
-      }
-
+    for (final r in _ownedReports(liveReports)) {
       final statusDisplay = _formatReportStatus(r.status);
       final isUnread = r.status.toLowerCase() == 'pending' || r.status.toLowerCase() == 'triage';
 
@@ -1454,6 +1475,7 @@ class _HomePageState extends ConsumerState<HomePage> {
         'rawStatus': r.status,
         'author': 'submitted by you',
         'time': _formatReportTime(r.createdAt),
+        'createdAt': r.createdAt,
         'unread': isUnread,
         'priority': _formatReportPriority(r.upvoteCount),
         'description': r.description,
@@ -1472,6 +1494,14 @@ class _HomePageState extends ConsumerState<HomePage> {
       if (_selectedInboxFilter == 'Unread') return r['unread'] == true;
       return (r['status'] as String).toLowerCase() == _selectedInboxFilter.toLowerCase();
     }).toList();
+
+    int countFor(String filter) {
+      if (filter == 'All') return allReports.length;
+      if (filter == 'Unread') return allReports.where((r) => r['unread'] == true).length;
+      return allReports
+          .where((r) => (r['status'] as String).toLowerCase() == filter.toLowerCase())
+          .length;
+    }
 
     return Scaffold(
       backgroundColor: Colors.white,
@@ -1519,13 +1549,13 @@ class _HomePageState extends ConsumerState<HomePage> {
             ),
             child: Row(
               children: [
-                _buildInboxFilterChip('All'),
+                _buildInboxFilterChip('All', countFor('All')),
                 const SizedBox(width: 8),
-                _buildInboxFilterChip('Unread'),
+                _buildInboxFilterChip('Unread', countFor('Unread')),
                 const SizedBox(width: 8),
-                _buildInboxFilterChip('In Progress'),
+                _buildInboxFilterChip('In Progress', countFor('In Progress')),
                 const SizedBox(width: 8),
-                _buildInboxFilterChip('Done'),
+                _buildInboxFilterChip('Done', countFor('Done')),
               ],
             ),
           ),
@@ -1556,7 +1586,7 @@ class _HomePageState extends ConsumerState<HomePage> {
                       ),
                       const SizedBox(height: 18),
                       const Text(
-                        'No Reports Yet',
+                        'No reports yet',
                         style: TextStyle(
                           color: Color(0xFF18181B),
                           fontSize: 18,
@@ -1566,7 +1596,7 @@ class _HomePageState extends ConsumerState<HomePage> {
                       ),
                       const SizedBox(height: 8),
                       const Text(
-                        'You haven\'t reported any issues yet. Submissions you make on campus will appear here so you can track real-time resolution status and community upvotes.',
+                        'Reports you file from the map land here, with their live status and resolution progress.',
                         textAlign: TextAlign.center,
                         style: TextStyle(
                           color: Color(0xFF71717A),
@@ -1607,52 +1637,155 @@ class _HomePageState extends ConsumerState<HomePage> {
               )
             : filtered.isEmpty
                 ? Center(
-                    child: Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        Icon(LucideIcons.fileSearch, size: 40, color: Colors.grey.shade400),
-                        const SizedBox(height: 12),
-                        Text(
-                          'No reports matching "$_selectedInboxFilter"',
-                          style: const TextStyle(
-                            color: Color(0xFF71717A),
-                            fontSize: 14,
-                            fontWeight: FontWeight.w500,
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 32),
+                      child: Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Container(
+                            width: 64,
+                            height: 64,
+                            decoration: BoxDecoration(
+                              color: const Color(0xFFF4F4F5),
+                              shape: BoxShape.circle,
+                            ),
+                            child: const Icon(
+                              LucideIcons.inbox,
+                              size: 26,
+                              color: Color(0xFFA1A1AA),
+                            ),
                           ),
-                        ),
-                      ],
+                          const SizedBox(height: 16),
+                          Text(
+                            'Nothing in $_selectedInboxFilter',
+                            style: const TextStyle(
+                              color: Color(0xFF18181B),
+                              fontSize: 16,
+                              fontWeight: FontWeight.w700,
+                              letterSpacing: -0.2,
+                            ),
+                          ),
+                          const SizedBox(height: 6),
+                          Text(
+                            'You have ${allReports.length} report${allReports.length == 1 ? '' : 's'} in total.',
+                            textAlign: TextAlign.center,
+                            style: const TextStyle(
+                              color: Color(0xFFA1A1AA),
+                              fontSize: 13,
+                              height: 1.45,
+                            ),
+                          ),
+                          const SizedBox(height: 18),
+                          TextButton(
+                            onPressed: () => setState(() => _selectedInboxFilter = 'All'),
+                            child: const Text(
+                              'Show all reports',
+                              style: TextStyle(
+                                color: Color(0xFF18181B),
+                                fontSize: 13.5,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
                     ),
                   )
-                : ListView.separated(
-                    padding: const EdgeInsets.fromLTRB(20, 10, 20, 110),
-                    itemCount: filtered.length,
-                    separatorBuilder: (context, index) => const Divider(height: 1, color: Color(0xFFF4F4F5)),
-                    itemBuilder: (context, index) {
-                      final item = filtered[index];
-                      return _buildLinearInboxItem(item);
-                    },
-                  ),
+                : _buildInboxTimeline(filtered),
       ),
     );
   }
 
-  Widget _buildInboxFilterChip(String label) {
+  String _inboxDayLabel(DateTime? createdAt) {
+    if (createdAt == null) return 'Earlier';
+    final now = DateTime.now();
+    final day = DateTime(createdAt.year, createdAt.month, createdAt.day);
+    final today = DateTime(now.year, now.month, now.day);
+    final diff = today.difference(day).inDays;
+    if (diff <= 0) return 'Today';
+    if (diff == 1) return 'Yesterday';
+    if (diff < 7) return 'This week';
+    if (diff < 30) return 'This month';
+    const months = [
+      'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
+      'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec',
+    ];
+    if (createdAt.year == now.year) return '${months[createdAt.month - 1]} ${createdAt.day}';
+    return '${months[createdAt.month - 1]} ${createdAt.day}, ${createdAt.year}';
+  }
+
+  Widget _buildInboxTimeline(List<Map<String, dynamic>> reports) {
+    final entries = <Widget>[];
+    String? lastLabel;
+
+    for (final item in reports) {
+      final label = _inboxDayLabel(item['createdAt'] as DateTime?);
+      if (label != lastLabel) {
+        if (entries.isNotEmpty) entries.add(const SizedBox(height: 18));
+        entries.add(
+          Padding(
+            padding: const EdgeInsets.fromLTRB(4, 4, 4, 10),
+            child: Row(
+              children: [
+                Text(
+                  label,
+                  style: const TextStyle(
+                    color: Color(0xFFA1A1AA),
+                    fontSize: 11,
+                    fontWeight: FontWeight.w700,
+                    letterSpacing: 0.9,
+                  ),
+                ),
+                const SizedBox(width: 10),
+                const Expanded(child: Divider(height: 1, thickness: 1, color: Color(0xFFF1F1F3))),
+              ],
+            ),
+          ),
+        );
+        lastLabel = label;
+      }
+      entries.add(_buildLinearInboxItem(item));
+    }
+
+    return ListView(
+      padding: const EdgeInsets.fromLTRB(20, 12, 20, 110),
+      children: entries,
+    );
+  }
+
+  Widget _buildInboxFilterChip(String label, int count) {
     final isSelected = _selectedInboxFilter == label;
     return GestureDetector(
       onTap: () => setState(() => _selectedInboxFilter = label),
       child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+        padding: const EdgeInsets.symmetric(horizontal: 11, vertical: 6),
         decoration: BoxDecoration(
           color: isSelected ? const Color(0xFF18181B) : const Color(0xFFF4F4F5),
-          borderRadius: BorderRadius.circular(8),
+          borderRadius: BorderRadius.circular(999),
         ),
-        child: Text(
-          label,
-          style: TextStyle(
-            color: isSelected ? Colors.white : const Color(0xFF71717A),
-            fontSize: 12.5,
-            fontWeight: isSelected ? FontWeight.w700 : FontWeight.w500,
-          ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(
+              label,
+              style: TextStyle(
+                color: isSelected ? Colors.white : const Color(0xFF71717A),
+                fontSize: 12.5,
+                fontWeight: isSelected ? FontWeight.w700 : FontWeight.w500,
+              ),
+            ),
+            if (count > 0) ...[
+              const SizedBox(width: 6),
+              Text(
+                '$count',
+                style: TextStyle(
+                  color: isSelected ? const Color(0xFFA1A1AA) : const Color(0xFFA1A1AA),
+                  fontSize: 12,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+            ],
+          ],
         ),
       ),
     );
@@ -1661,105 +1794,162 @@ class _HomePageState extends ConsumerState<HomePage> {
   Widget _buildLinearInboxItem(Map<String, dynamic> item) {
     final bool isUnread = item['unread'] as bool;
     final String status = item['status'] as String;
-
-    Color statusDotColor;
-    if (status.contains('Done')) {
-      statusDotColor = const Color(0xFF10B981);
-    } else if (status.contains('In Progress')) {
-      statusDotColor = const Color(0xFFF59E0B);
-    } else {
-      statusDotColor = const Color(0xFF3B82F6);
-    }
+    final String priority = item['priority'] as String;
+    final categoryStyle =
+        kCategoryStyles[item['category']] ?? kCategoryStyles[IssueCategory.infrastructure]!;
 
     final bool hasImage = item['imageBytes'] != null ||
         (item['imagePath'] != null && (item['imagePath'] as String).isNotEmpty);
 
-    return InkWell(
-      onTap: () => _showLinearIssueModal(item),
-      child: Padding(
-        padding: const EdgeInsets.symmetric(vertical: 12),
-        child: Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            // Status Indicator Circle
-            Padding(
-              padding: const EdgeInsets.only(top: 4),
-              child: Container(
-                width: 7,
-                height: 7,
-                decoration: BoxDecoration(
-                  color: isUnread ? statusDotColor : Colors.transparent,
-                  border: isUnread ? null : Border.all(color: const Color(0xFFA1A1AA), width: 1.2),
-                  shape: BoxShape.circle,
+    Color accent;
+    if (status.contains('Done')) {
+      accent = const Color(0xFF10B981);
+    } else if (status.contains('In Progress')) {
+      accent = const Color(0xFFF59E0B);
+    } else {
+      accent = const Color(0xFF3B82F6);
+    }
+
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: () => _showLinearIssueModal(item),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(vertical: 14),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        Container(
+                          width: 6,
+                          height: 6,
+                          decoration: BoxDecoration(
+                            color: isUnread ? accent : Colors.transparent,
+                            shape: BoxShape.circle,
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: Text(
+                            item['title'] as String,
+                            maxLines: 2,
+                            overflow: TextOverflow.ellipsis,
+                            style: TextStyle(
+                              color: const Color(0xFF18181B),
+                              fontSize: 14.5,
+                              height: 1.3,
+                              fontWeight: isUnread ? FontWeight.w700 : FontWeight.w500,
+                              letterSpacing: -0.2,
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 10),
+                        _buildInboxStatusPill(status, accent),
+                      ],
+                    ),
+                    const SizedBox(height: 9),
+                    Padding(
+                      padding: const EdgeInsets.only(left: 14),
+                      child: Row(
+                        children: [
+                          Icon(
+                            categoryStyle.icon,
+                            size: 13,
+                            color: const Color(0xFFA1A1AA),
+                          ),
+                          const SizedBox(width: 5),
+                          Flexible(
+                            child: Text(
+                              categoryStyle.label,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: const TextStyle(
+                                color: Color(0xFFA1A1AA),
+                                fontSize: 12.5,
+                                fontWeight: FontWeight.w500,
+                              ),
+                            ),
+                          ),
+                          Text(
+                            '  ·  ${item['time']}',
+                            style: const TextStyle(
+                              color: Color(0xFFA1A1AA),
+                              fontSize: 12.5,
+                            ),
+                          ),
+                          if (priority != 'Normal') ...[
+                            const SizedBox(width: 8),
+                            _buildInboxPriorityPill(priority),
+                          ],
+                        ],
+                      ),
+                    ),
+                  ],
                 ),
               ),
-            ),
-            const SizedBox(width: 12),
-
-            // Content
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    item['title'] as String,
-                    style: TextStyle(
-                      color: const Color(0xFF18181B),
-                      fontSize: 14.5,
-                      fontWeight: isUnread ? FontWeight.w700 : FontWeight.w500,
-                      letterSpacing: -0.2,
-                    ),
+              if (hasImage) ...[
+                const SizedBox(width: 12),
+                ClipRRect(
+                  borderRadius: BorderRadius.circular(10),
+                  child: SizedBox(
+                    width: 46,
+                    height: 46,
+                    child: item['imageBytes'] != null
+                        ? Image.memory(item['imageBytes'] as Uint8List, fit: BoxFit.cover)
+                        : (item['imagePath'] as String).startsWith('data:image')
+                            ? Image.memory(base64Decode((item['imagePath'] as String).split(',').last), fit: BoxFit.cover)
+                            : ((item['imagePath'] as String).startsWith('http')
+                                ? Image.network(item['imagePath'] as String, fit: BoxFit.cover)
+                                : _buildImagePlaceholder(categoryStyle)),
                   ),
-                  const SizedBox(height: 3),
-                  Text(
-                    '${item['author']} • ${item['time']}',
-                    style: const TextStyle(
-                      color: Color(0xFF71717A),
-                      fontSize: 12.5,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-
-            // Optional Image Thumbnail
-            if (hasImage) ...[
-              const SizedBox(width: 8),
-              ClipRRect(
-                borderRadius: BorderRadius.circular(6),
-                child: SizedBox(
-                  width: 38,
-                  height: 38,
-                  child: item['imageBytes'] != null
-                      ? Image.memory(item['imageBytes'] as Uint8List, fit: BoxFit.cover)
-                      : (item['imagePath'] as String).startsWith('data:image')
-                          ? Image.memory(base64Decode((item['imagePath'] as String).split(',').last), fit: BoxFit.cover)
-                          : ((item['imagePath'] as String).startsWith('http')
-                              ? Image.network(item['imagePath'] as String, fit: BoxFit.cover)
-                              : const Icon(LucideIcons.image, size: 20, color: Color(0xFFA1A1AA))),
                 ),
-              ),
+              ],
             ],
+          ),
+        ),
+      ),
+    );
+  }
 
-            const SizedBox(width: 8),
+  Widget _buildInboxStatusPill(String status, Color accent) {
+    return Container(
+      padding: const EdgeInsets.fromLTRB(8, 4, 9, 4),
+      decoration: BoxDecoration(
+        color: accent.withValues(alpha: 0.10),
+        borderRadius: BorderRadius.circular(999),
+      ),
+      child: Text(
+        status,
+        style: TextStyle(
+          color: accent,
+          fontSize: 11,
+          fontWeight: FontWeight.w700,
+          letterSpacing: 0.1,
+        ),
+      ),
+    );
+  }
 
-            // Priority Indicator Tag
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-              decoration: BoxDecoration(
-                color: const Color(0xFFF4F4F5),
-                borderRadius: BorderRadius.circular(5),
-              ),
-              child: Text(
-                item['priority'] as String,
-                style: const TextStyle(
-                  color: Color(0xFF71717A),
-                  fontSize: 10,
-                  fontWeight: FontWeight.w700,
-                ),
-              ),
-            ),
-          ],
+  Widget _buildInboxPriorityPill(String priority) {
+    final color = priority == 'Urgent' ? const Color(0xFFDC2626) : const Color(0xFFB45309);
+    return Container(
+      padding: const EdgeInsets.fromLTRB(7, 3, 7, 3),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.10),
+        borderRadius: BorderRadius.circular(999),
+      ),
+      child: Text(
+        priority,
+        style: TextStyle(
+          color: color,
+          fontSize: 10.5,
+          fontWeight: FontWeight.w700,
+          letterSpacing: 0.2,
         ),
       ),
     );
@@ -2009,6 +2199,11 @@ class _HomePageState extends ConsumerState<HomePage> {
   // TAB 2: ACCOUNT (Linear Style White Mode)
   // ==========================================
   Widget _buildAccountTab() {
+    final myReports = _ownedReports(ref.watch(interactiveReportProvider));
+    final resolvedCount = myReports.where(_isResolvedReport).length;
+    final openCount = myReports.length - resolvedCount;
+    final resolutionRate = myReports.isEmpty ? 0.0 : resolvedCount / myReports.length;
+
     return Scaffold(
       backgroundColor: Colors.white,
       appBar: AppBar(
@@ -2026,13 +2221,6 @@ class _HomePageState extends ConsumerState<HomePage> {
             letterSpacing: -0.4,
           ),
         ),
-        actions: [
-          IconButton(
-            onPressed: () {},
-            icon: const Icon(LucideIcons.moreHorizontal, color: Color(0xFF71717A), size: 19),
-          ),
-          const SizedBox(width: 8),
-        ],
         bottom: PreferredSize(
           preferredSize: const Size.fromHeight(1),
           child: Container(color: const Color(0xFFF4F4F5), height: 1),
@@ -2041,200 +2229,696 @@ class _HomePageState extends ConsumerState<HomePage> {
       body: SafeArea(
         bottom: false,
         child: ListView(
-          padding: const EdgeInsets.fromLTRB(20, 20, 20, 110),
+          padding: const EdgeInsets.fromLTRB(20, 18, 20, 130),
           children: [
-            // Linear Profile Header Card
-            Container(
-              padding: const EdgeInsets.all(18),
-              decoration: BoxDecoration(
-                color: const Color(0xFFFAFAFA),
-                borderRadius: BorderRadius.circular(16),
-                border: Border.all(color: const Color(0xFFE4E4E7), width: 1),
+            _buildAccountIdentityCard(),
+            const SizedBox(height: 26),
+            _buildAccountSectionLabel('YOUR SAFETY RECORD'),
+            const SizedBox(height: 10),
+            _buildAccountImpactCard(
+              filed: myReports.length,
+              resolved: resolvedCount,
+              open: openCount,
+              resolutionRate: resolutionRate,
+            ),
+            const SizedBox(height: 26),
+            _buildAccountSectionLabel('PREFERENCES'),
+            const SizedBox(height: 10),
+            _buildAccountGroup([
+              _buildAccountToggleRow(
+                icon: LucideIcons.bell,
+                title: 'Push notifications',
+                subtitle: 'Alerts when a report you filed changes status',
+                value: AccountPreferences.instance.pushNotificationsEnabled,
+                onChanged: (value) {
+                  HapticFeedback.selectionClick();
+                  AccountPreferences.instance.setPushNotifications(value);
+                  setState(() {});
+                },
               ),
-              child: Row(
-                children: [
-                  Container(
-                    width: 52,
-                    height: 52,
-                    decoration: BoxDecoration(
-                      shape: BoxShape.circle,
-                      color: const Color(0xFF18181B),
-                      border: Border.all(color: const Color(0xFFE4E4E7), width: 1.5),
+            ]),
+            const SizedBox(height: 26),
+            _buildAccountSectionLabel('SAFETY NETWORK'),
+            const SizedBox(height: 10),
+            _buildAccountGroup([
+              _buildAccountNavRow(
+                icon: LucideIcons.phoneCall,
+                title: 'Emergency contacts',
+                subtitle: 'Guardians notified when you raise an SOS',
+                onTap: () => _showAccountInfoSheet(
+                  icon: LucideIcons.phoneCall,
+                  title: 'Emergency contacts',
+                  lines: const [
+                    'No guardians are linked to this account yet.',
+                    'Once a guardian is added, they receive your live location and the report attached to your SOS until you mark yourself safe.',
+                  ],
+                ),
+              ),
+            ]),
+            const SizedBox(height: 26),
+            _buildAccountSectionLabel('LEGAL'),
+            const SizedBox(height: 10),
+            _buildAccountGroup([
+              _buildAccountNavRow(
+                icon: LucideIcons.shieldCheck,
+                title: 'Terms & privacy',
+                subtitle: 'What UniSafe stores, and why',
+                onTap: () => _showAccountInfoSheet(
+                  icon: LucideIcons.shieldCheck,
+                  title: 'Terms & privacy',
+                  lines: const [
+                    'UniSafe stores the name and the email or phone number you signed up with, plus the reports you file.',
+                    'Your location is read while the map is open so you and your reports can be placed on it.',
+                    'Photos you attach stay on this device until you submit the report.',
+                  ],
+                  footnote:
+                      'These notes summarise how the app handles your data. The full policy is issued by your campus safety office.',
+                ),
+              ),
+            ]),
+            const SizedBox(height: 26),
+            _buildAccountSignOut(),
+            const SizedBox(height: 16),
+            const Text(
+              'UniSafe · v1.0.0',
+              textAlign: TextAlign.center,
+              style: TextStyle(
+                color: Color(0xFFA1A1AA),
+                fontSize: 11.5,
+                fontWeight: FontWeight.w600,
+                letterSpacing: 0.3,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  String? get _memberSinceLabel {
+    final raw = _citizenProfile?['created_at']?.toString();
+    if (raw == null || raw.isEmpty) return null;
+    final parsed = DateTime.tryParse(raw);
+    if (parsed == null) return null;
+    const months = [
+      'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
+      'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec',
+    ];
+    return 'Member since ${months[parsed.month - 1]} ${parsed.year}';
+  }
+
+  Widget _buildAccountSectionLabel(String text) {
+    return Text(
+      text,
+      style: const TextStyle(
+        color: Color(0xFFA1A1AA),
+        fontSize: 11,
+        fontWeight: FontWeight.w700,
+        letterSpacing: 0.9,
+      ),
+    );
+  }
+
+  Widget _buildAccountIdentityCard() {
+    final verified = _isVerified;
+    final memberSince = _memberSinceLabel;
+
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(18),
+      decoration: BoxDecoration(
+        color: const Color(0xFFFAFAFA),
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(color: const Color(0xFFE4E4E7), width: 1),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.center,
+            children: [
+              _buildAccountAvatar(verified),
+              const SizedBox(width: 16),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      _displayName,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                        color: Color(0xFF18181B),
+                        fontSize: 17,
+                        fontWeight: FontWeight.w800,
+                        letterSpacing: -0.3,
+                      ),
                     ),
-                    child: Center(
-                      child: Text(
-                        _avatarInitials,
-                        style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.w800),
+                    const SizedBox(height: 3),
+                    Text(
+                      _displayEmailOrPhone,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                        color: Color(0xFF71717A),
+                        fontSize: 12.5,
+                      ),
+                    ),
+                    const SizedBox(height: 10),
+                    _buildAccountStatusPill(verified),
+                  ],
+                ),
+              ),
+            ],
+          ),
+          if (memberSince != null) ...[
+            const SizedBox(height: 16),
+            Container(height: 1, color: const Color(0xFFECECEE)),
+            const SizedBox(height: 12),
+            Text(
+              memberSince,
+              style: const TextStyle(
+                color: Color(0xFFA1A1AA),
+                fontSize: 11.5,
+                fontWeight: FontWeight.w600,
+                letterSpacing: 0.2,
+              ),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
+  Widget _buildAccountAvatar(bool verified) {
+    return SizedBox(
+      width: 60,
+      height: 60,
+      child: Stack(
+        clipBehavior: Clip.none,
+        children: [
+          Container(
+            width: 60,
+            height: 60,
+            alignment: Alignment.center,
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              color: const Color(0xFF18181B),
+              border: Border.all(color: Colors.white, width: 2),
+              boxShadow: const [
+                BoxShadow(color: Color(0x14000000), blurRadius: 14, offset: Offset(0, 6)),
+              ],
+            ),
+            child: Text(
+              _avatarInitials,
+              style: const TextStyle(
+                color: Colors.white,
+                fontSize: 20,
+                fontWeight: FontWeight.w800,
+                letterSpacing: -0.4,
+              ),
+            ),
+          ),
+          if (verified)
+            Positioned(
+              right: -1,
+              bottom: -1,
+              child: Container(
+                width: 22,
+                height: 22,
+                alignment: Alignment.center,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  color: const Color(0xFF10B981),
+                  border: Border.all(color: Colors.white, width: 2),
+                ),
+                child: const Icon(
+                  LucideIcons.check,
+                  size: 11,
+                  color: Colors.white,
+                ),
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildAccountStatusPill(bool verified) {
+    return Container(
+      padding: const EdgeInsets.fromLTRB(8, 4, 10, 4),
+      decoration: BoxDecoration(
+        color: verified ? const Color(0xFFECFDF5) : const Color(0xFFF4F4F5),
+        borderRadius: BorderRadius.circular(999),
+        border: Border.all(
+          color: verified ? const Color(0xFFA7F3D0) : const Color(0xFFE4E4E7),
+          width: 1,
+        ),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(
+            verified ? LucideIcons.badgeCheck : LucideIcons.userRound,
+            size: 12,
+            color: verified ? const Color(0xFF059669) : const Color(0xFF71717A),
+          ),
+          const SizedBox(width: 5),
+          Text(
+            verified ? 'VERIFIED CITIZEN' : 'REGISTERED CITIZEN',
+            style: TextStyle(
+              color: verified ? const Color(0xFF059669) : const Color(0xFF71717A),
+              fontSize: 10,
+              fontWeight: FontWeight.w800,
+              letterSpacing: 0.5,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildAccountImpactCard({
+    required int filed,
+    required int resolved,
+    required int open,
+    required double resolutionRate,
+  }) {
+    final hasReports = filed > 0;
+
+    return Container(
+      width: double.infinity,
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(color: const Color(0xFFE4E4E7), width: 1),
+      ),
+      clipBehavior: Clip.antiAlias,
+      child: Column(
+        children: [
+          Padding(
+            padding: const EdgeInsets.symmetric(vertical: 18),
+            child: Row(
+              children: [
+                _buildAccountStat('$filed', 'Filed'),
+                _buildAccountStatRule(),
+                _buildAccountStat('$resolved', 'Resolved'),
+                _buildAccountStatRule(),
+                _buildAccountStat('$open', 'Open'),
+              ],
+            ),
+          ),
+          const Divider(height: 1, thickness: 1, color: Color(0xFFF4F4F5)),
+          if (hasReports)
+            Padding(
+              padding: const EdgeInsets.fromLTRB(18, 16, 18, 18),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      const Expanded(
+                        child: Text(
+                          'Resolution rate',
+                          style: TextStyle(
+                            color: Color(0xFF71717A),
+                            fontSize: 12.5,
+                            fontWeight: FontWeight.w500,
+                          ),
+                        ),
+                      ),
+                      Text(
+                        '${(resolutionRate * 100).round()}%',
+                        style: const TextStyle(
+                          color: Color(0xFF059669),
+                          fontSize: 12.5,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 10),
+                  ClipRRect(
+                    borderRadius: BorderRadius.circular(999),
+                    child: SizedBox(
+                      height: 6,
+                      child: Stack(
+                        children: [
+                          Container(color: const Color(0xFFF1F1F3)),
+                          FractionallySizedBox(
+                            widthFactor: resolutionRate.clamp(0.0, 1.0),
+                            child: Container(color: const Color(0xFF10B981)),
+                          ),
+                        ],
                       ),
                     ),
                   ),
-                  const SizedBox(width: 14),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          _displayName,
-                          style: const TextStyle(
+                ],
+              ),
+            )
+          else
+            Padding(
+              padding: const EdgeInsets.fromLTRB(18, 16, 18, 18),
+              child: Align(
+                alignment: Alignment.centerLeft,
+                child: Text(
+                  'Nothing filed yet. Reports you submit are tracked here.',
+                  style: const TextStyle(
+                    color: Color(0xFFA1A1AA),
+                    fontSize: 12.5,
+                    height: 1.45,
+                  ),
+                ),
+              ),
+            ),
+          if (hasReports) ...[
+            const Divider(height: 1, thickness: 1, color: Color(0xFFF4F4F5)),
+            Material(
+              color: Colors.transparent,
+              child: InkWell(
+                onTap: () => setState(() => _currentIndex = 1),
+                child: const Padding(
+                  padding: EdgeInsets.fromLTRB(18, 14, 16, 14),
+                  child: Row(
+                    children: [
+                      Expanded(
+                        child: Text(
+                          'View all in Inbox',
+                          style: TextStyle(
                             color: Color(0xFF18181B),
-                            fontSize: 16.5,
-                            fontWeight: FontWeight.w700,
-                            letterSpacing: -0.2,
+                            fontSize: 13.5,
+                            fontWeight: FontWeight.w600,
                           ),
                         ),
-                        const SizedBox(height: 2),
-                        Text(
-                          _displayEmailOrPhone,
-                          style: const TextStyle(color: Color(0xFF71717A), fontSize: 13),
+                      ),
+                      Icon(
+                        LucideIcons.chevronRight,
+                        size: 15,
+                        color: Color(0xFFA1A1AA),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
+  Widget _buildAccountStat(String value, String label) {
+    return Expanded(
+      child: Column(
+        children: [
+          Text(
+            value,
+            style: const TextStyle(
+              color: Color(0xFF18181B),
+              fontSize: 24,
+              fontWeight: FontWeight.w800,
+              letterSpacing: -0.8,
+              height: 1.05,
+            ),
+          ),
+          const SizedBox(height: 6),
+          Text(
+            label,
+            style: const TextStyle(
+              color: Color(0xFFA1A1AA),
+              fontSize: 11.5,
+              fontWeight: FontWeight.w600,
+              letterSpacing: 0.1,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildAccountStatRule() {
+    return Container(width: 1, height: 28, color: const Color(0xFFEFEFF1));
+  }
+
+  Widget _buildAccountGroup(List<Widget> children) {
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: const Color(0xFFE4E4E7), width: 1),
+      ),
+      child: Material(
+        color: Colors.transparent,
+        borderRadius: BorderRadius.circular(15),
+        clipBehavior: Clip.antiAlias,
+        child: Column(children: children),
+      ),
+    );
+  }
+
+  Widget _buildAccountIconTile(IconData icon) {
+    return Container(
+      width: 34,
+      height: 34,
+      alignment: Alignment.center,
+      decoration: BoxDecoration(
+        color: const Color(0xFFF4F4F5),
+        borderRadius: BorderRadius.circular(10),
+      ),
+      child: Icon(icon, size: 16.5, color: const Color(0xFF3F3F46)),
+    );
+  }
+
+  Widget _buildAccountToggleRow({
+    required IconData icon,
+    required String title,
+    required String subtitle,
+    required bool value,
+    required ValueChanged<bool> onChanged,
+  }) {
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: () => onChanged(!value),
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(14, 14, 12, 14),
+          child: Row(
+            children: [
+              _buildAccountIconTile(icon),
+              const SizedBox(width: 14),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      title,
+                      style: const TextStyle(
+                        color: Color(0xFF18181B),
+                        fontSize: 14.5,
+                        fontWeight: FontWeight.w600,
+                        letterSpacing: -0.1,
+                      ),
+                    ),
+                    const SizedBox(height: 3),
+                    Text(
+                      subtitle,
+                      style: const TextStyle(
+                        color: Color(0xFFA1A1AA),
+                        fontSize: 12.5,
+                        height: 1.35,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(width: 10),
+              _buildAccountSwitch(value, onChanged),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildAccountNavRow({
+    required IconData icon,
+    required String title,
+    required String subtitle,
+    required VoidCallback onTap,
+  }) {
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: onTap,
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(14, 14, 14, 14),
+          child: Row(
+            children: [
+              _buildAccountIconTile(icon),
+              const SizedBox(width: 14),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      title,
+                      style: const TextStyle(
+                        color: Color(0xFF18181B),
+                        fontSize: 14.5,
+                        fontWeight: FontWeight.w600,
+                        letterSpacing: -0.1,
+                      ),
+                    ),
+                    const SizedBox(height: 3),
+                    Text(
+                      subtitle,
+                      style: const TextStyle(
+                        color: Color(0xFFA1A1AA),
+                        fontSize: 12.5,
+                        height: 1.35,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(width: 10),
+              const Icon(
+                LucideIcons.chevronRight,
+                size: 16,
+                color: Color(0xFFA1A1AA),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildAccountSwitch(bool value, ValueChanged<bool> onChanged) {
+    return Switch(
+      value: value,
+      onChanged: onChanged,
+      activeThumbColor: Colors.white,
+      activeTrackColor: const Color(0xFF18181B),
+      inactiveThumbColor: Colors.white,
+      inactiveTrackColor: const Color(0xFFE4E4E7),
+      trackOutlineColor: WidgetStateProperty.resolveWith((states) {
+        return states.contains(WidgetState.selected)
+            ? const Color(0xFF18181B)
+            : const Color(0xFFD4D4D8);
+      }),
+      trackOutlineWidth: const WidgetStatePropertyAll(1.0),
+    );
+  }
+
+  Widget _buildAccountSignOut() {
+    return SizedBox(
+      width: double.infinity,
+      height: 48,
+      child: OutlinedButton.icon(
+        onPressed: _handleSignOut,
+        style: OutlinedButton.styleFrom(
+          foregroundColor: const Color(0xFFDC2626),
+          backgroundColor: Colors.white,
+          side: const BorderSide(color: Color(0xFFE4E4E7), width: 1),
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+        ),
+        icon: const Icon(LucideIcons.logOut, size: 15),
+        label: const Text(
+          'Sign out',
+          style: TextStyle(fontSize: 14.5, fontWeight: FontWeight.w600),
+        ),
+      ),
+    );
+  }
+
+  void _showAccountInfoSheet({
+    required IconData icon,
+    required String title,
+    required List<String> lines,
+    String? footnote,
+  }) {
+    showModalBottomSheet<void>(
+      context: context,
+      backgroundColor: Colors.white,
+      isScrollControlled: true,
+      showDragHandle: true,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
+      ),
+      builder: (sheetContext) => SafeArea(
+        child: SingleChildScrollView(
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(22, 4, 22, 22),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    _buildAccountIconTile(icon),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Text(
+                        title,
+                        style: const TextStyle(
+                          color: Color(0xFF18181B),
+                          fontSize: 17,
+                          fontWeight: FontWeight.w800,
+                          letterSpacing: -0.3,
                         ),
-                        const SizedBox(height: 5),
-                        Row(
-                          children: [
-                            const Icon(LucideIcons.circleCheck, color: Color(0xFF10B981), size: 13),
-                            const SizedBox(width: 4),
-                            Text(
-                              _isVerified ? 'Verified Citizen' : 'Registered Citizen',
-                              style: const TextStyle(color: Color(0xFF10B981), fontSize: 11.5, fontWeight: FontWeight.w600),
-                            ),
-                          ],
-                        ),
-                      ],
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 18),
+                ...lines.map(
+                  (line) => Padding(
+                    padding: const EdgeInsets.only(bottom: 12),
+                    child: Text(
+                      line,
+                      style: const TextStyle(
+                        color: Color(0xFF3F3F46),
+                        fontSize: 13.5,
+                        height: 1.5,
+                      ),
                     ),
                   ),
-                ],
-              ),
-            ),
-            const SizedBox(height: 24),
-
-            // Linear Status Chips Row
-            const Text(
-              'SAFETY TELEMETRY',
-              style: TextStyle(
-                color: Color(0xFF71717A),
-                fontSize: 11.5,
-                fontWeight: FontWeight.w700,
-                letterSpacing: 0.8,
-              ),
-            ),
-            const SizedBox(height: 10),
-
-            Row(
-              children: [
-                _buildLinearMetricChip('4', 'Issues Filed'),
-                const SizedBox(width: 8),
-                _buildLinearMetricChip('2', 'Resolved'),
-                const SizedBox(width: 8),
-                _buildLinearMetricChip('98%', 'Trust Rating'),
+                ),
+                if (footnote != null)
+                  Padding(
+                    padding: const EdgeInsets.only(top: 2),
+                    child: Text(
+                      footnote,
+                      style: const TextStyle(
+                        color: Color(0xFFA1A1AA),
+                        fontSize: 12,
+                        height: 1.45,
+                      ),
+                    ),
+                  ),
+                const SizedBox(height: 22),
+                SizedBox(
+                  width: double.infinity,
+                  height: 46,
+                  child: FilledButton(
+                    onPressed: () => Navigator.of(sheetContext).pop(),
+                    style: FilledButton.styleFrom(
+                      backgroundColor: const Color(0xFF18181B),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                    ),
+                    child: const Text(
+                      'Close',
+                      style: TextStyle(fontSize: 14.5, fontWeight: FontWeight.w600),
+                    ),
+                  ),
+                ),
               ],
             ),
-            const SizedBox(height: 28),
-
-            // Settings Group
-            const Text(
-              'SETTINGS & PREFERENCES',
-              style: TextStyle(
-                color: Color(0xFF71717A),
-                fontSize: 11.5,
-                fontWeight: FontWeight.w700,
-                letterSpacing: 0.8,
-              ),
-            ),
-            const SizedBox(height: 10),
-
-            Container(
-              decoration: BoxDecoration(
-                color: Colors.white,
-                borderRadius: BorderRadius.circular(14),
-                border: Border.all(color: const Color(0xFFE4E4E7), width: 1),
-              ),
-              child: Column(
-                children: [
-                  _buildLinearSettingTile(LucideIcons.bell, 'Push Notifications', true),
-                  const Divider(height: 1, color: Color(0xFFF4F4F5)),
-                  _buildLinearSettingTile(LucideIcons.eyeOff, 'Anonymous Reporting', false),
-                  const Divider(height: 1, color: Color(0xFFF4F4F5)),
-                  _buildLinearSettingAction(LucideIcons.phone, 'Emergency Contacts', '2 guardians'),
-                  const Divider(height: 1, color: Color(0xFFF4F4F5)),
-                  _buildLinearSettingAction(LucideIcons.fileText, 'Terms & Privacy Policy', null),
-                ],
-              ),
-            ),
-            const SizedBox(height: 28),
-
-            // Sign Out
-            SizedBox(
-              width: double.infinity,
-              height: 46,
-              child: OutlinedButton.icon(
-                onPressed: _handleSignOut,
-                style: OutlinedButton.styleFrom(
-                  foregroundColor: const Color(0xFFDC2626),
-                  side: const BorderSide(color: Color(0xFFFECACA), width: 1),
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-                  backgroundColor: const Color(0xFFFEF2F2),
-                ),
-                icon: const Icon(LucideIcons.logOut, size: 16),
-                label: const Text('Sign Out', style: TextStyle(fontSize: 14, fontWeight: FontWeight.w700)),
-              ),
-            ),
-          ],
+          ),
         ),
-      ),
-    );
-  }
-
-  Widget _buildLinearMetricChip(String value, String label) {
-    return Expanded(
-      child: Container(
-        padding: const EdgeInsets.symmetric(vertical: 12),
-        decoration: BoxDecoration(
-          color: const Color(0xFFFAFAFA),
-          borderRadius: BorderRadius.circular(12),
-          border: Border.all(color: const Color(0xFFE4E4E7), width: 1),
-        ),
-        child: Column(
-          children: [
-            Text(
-              value,
-              style: const TextStyle(color: Color(0xFF18181B), fontSize: 16, fontWeight: FontWeight.w800),
-            ),
-            const SizedBox(height: 2),
-            Text(
-              label,
-              style: const TextStyle(color: Color(0xFF71717A), fontSize: 11),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildLinearSettingTile(IconData icon, String title, bool value) {
-    return ListTile(
-      dense: true,
-      leading: Icon(icon, color: const Color(0xFF71717A), size: 18),
-      title: Text(title, style: const TextStyle(color: Color(0xFF18181B), fontSize: 14, fontWeight: FontWeight.w600)),
-      trailing: Switch(
-        value: value,
-        activeThumbColor: const Color(0xFF18181B),
-        onChanged: (_) {},
-      ),
-    );
-  }
-
-  Widget _buildLinearSettingAction(IconData icon, String title, String? trailingText) {
-    return ListTile(
-      dense: true,
-      leading: Icon(icon, color: const Color(0xFF71717A), size: 18),
-      title: Text(title, style: const TextStyle(color: Color(0xFF18181B), fontSize: 14, fontWeight: FontWeight.w600)),
-      trailing: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          if (trailingText != null)
-            Text(trailingText, style: const TextStyle(color: Color(0xFFA1A1AA), fontSize: 12)),
-          const SizedBox(width: 4),
-          const Icon(LucideIcons.chevronRight, color: Color(0xFFA1A1AA), size: 15),
-        ],
       ),
     );
   }

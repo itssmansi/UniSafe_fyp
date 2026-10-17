@@ -48,7 +48,7 @@ class AuthTabBar extends StatelessWidget {
                       fontSize: 14.5,
                       fontWeight: selectedIndex == 0 ? FontWeight.w700 : FontWeight.w600,
                       color: selectedIndex == 0
-                          ? const Color(0xFF133838)
+                          ? const Color(0xFF0B3B68)
                           : const Color(0xFF94A3B8),
                     ),
                   ),
@@ -83,7 +83,7 @@ class AuthTabBar extends StatelessWidget {
                       fontSize: 14.5,
                       fontWeight: selectedIndex == 1 ? FontWeight.w700 : FontWeight.w600,
                       color: selectedIndex == 1
-                          ? const Color(0xFF133838)
+                          ? const Color(0xFF0B3B68)
                           : const Color(0xFF94A3B8),
                     ),
                   ),

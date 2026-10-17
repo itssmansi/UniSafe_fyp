@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
-import 'doodle_pattern_data.dart';
+import '../../../theme/unisafe_theme.dart';
 
 class AuthHeader extends StatelessWidget {
   final String title;
@@ -33,17 +33,24 @@ class AuthHeader extends StatelessWidget {
                 width: 38,
                 height: 38,
                 decoration: BoxDecoration(
-                  color: Colors.white.withValues(alpha: 0.12),
+                  color: UniSafeColors.surface,
                   borderRadius: BorderRadius.circular(10),
                   border: Border.all(
-                    color: Colors.white.withValues(alpha: 0.20),
+                    color: UniSafeColors.line,
                     width: 1,
                   ),
+                  boxShadow: [
+                    BoxShadow(
+                      color: UniSafeColors.ink.withValues(alpha: 0.05),
+                      blurRadius: 4,
+                      offset: const Offset(0, 2),
+                    ),
+                  ],
                 ),
                 child: const Center(
                   child: Icon(
                     Icons.arrow_back_ios_new_rounded,
-                    color: Colors.white,
+                    color: UniSafeColors.ink,
                     size: 16,
                   ),
                 ),
@@ -54,7 +61,7 @@ class AuthHeader extends StatelessWidget {
 
     final Widget titleWidget = Container(
       width: double.infinity,
-      height: 110,
+      height: isCentered ? 140 : 120,
       padding: const EdgeInsets.symmetric(horizontal: 20),
       alignment: Alignment.center,
       child: FittedBox(
@@ -63,9 +70,10 @@ class AuthHeader extends StatelessWidget {
           title.toUpperCase(),
           textAlign: TextAlign.center,
           style: GoogleFonts.sixCaps(
-            fontSize: 100,
-            color: Colors.white,
-            letterSpacing: 4.0,
+            textStyle: const TextStyle(fontFamily: 'SixCaps'),
+            fontSize: 135,
+            color: UniSafeColors.ink,
+            letterSpacing: 4.5,
             height: 0.95,
           ),
         ),
@@ -74,13 +82,15 @@ class AuthHeader extends StatelessWidget {
 
     final Widget patternOverlay = Positioned.fill(
       child: Image.asset(
-        'assets/images/preview_white_lines.png',
+        'assets/images/pattern_black_transparent.png',
         fit: BoxFit.cover,
         repeat: ImageRepeat.repeat,
-        errorBuilder: (context, error, stackTrace) => Image.memory(
-          kPreviewWhiteLinesBytes,
+        opacity: const AlwaysStoppedAnimation(0.12),
+        errorBuilder: (context, error, stackTrace) => Image.asset(
+          'assets/assets/images/pattern_black_transparent.png',
           fit: BoxFit.cover,
           repeat: ImageRepeat.repeat,
+          opacity: const AlwaysStoppedAnimation(0.12),
         ),
       ),
     );

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../services/auth_service.dart';
+import '../../theme/unisafe_theme.dart';
 import 'otp_screen.dart';
 
 class SignupScreen extends StatefulWidget {
@@ -183,8 +184,10 @@ class _SignupScreenState extends State<SignupScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      backgroundColor: UniSafeColors.canvas,
       appBar: AppBar(
-        title: const Text('Create Account'),
+        title: const Text('Create account', style: TextStyle(fontWeight: FontWeight.w800)),
+        backgroundColor: UniSafeColors.canvas,
       ),
       body: SafeArea(
         child: SingleChildScrollView(
@@ -225,7 +228,7 @@ class _SignupScreenState extends State<SignupScreen> {
                   textCapitalization: TextCapitalization.words,
                   decoration: const InputDecoration(
                     labelText: 'Full Name',
-                    border: OutlineInputBorder(),
+                    border: const OutlineInputBorder(borderRadius: BorderRadius.all(Radius.circular(14))),
                     prefixIcon: Icon(Icons.person),
                   ),
                   validator: (value) {
@@ -249,7 +252,7 @@ class _SignupScreenState extends State<SignupScreen> {
                   maxLength: 12,
                   decoration: const InputDecoration(
                     labelText: 'Aadhaar Number',
-                    border: OutlineInputBorder(),
+                    border: const OutlineInputBorder(borderRadius: BorderRadius.all(Radius.circular(14))),
                     prefixIcon: Icon(Icons.badge),
                     counterText: '',
                   ),
@@ -281,7 +284,7 @@ class _SignupScreenState extends State<SignupScreen> {
                       TextCapitalization.sentences,
                   decoration: const InputDecoration(
                     labelText: 'Address',
-                    border: OutlineInputBorder(),
+                    border: const OutlineInputBorder(borderRadius: BorderRadius.all(Radius.circular(14))),
                     prefixIcon: Icon(Icons.location_on),
                     alignLabelWithHint: true,
                   ),
@@ -304,7 +307,7 @@ class _SignupScreenState extends State<SignupScreen> {
                   value: selectedGender,
                   decoration: const InputDecoration(
                     labelText: 'Gender',
-                    border: OutlineInputBorder(),
+                    border: const OutlineInputBorder(borderRadius: BorderRadius.all(Radius.circular(14))),
                     prefixIcon: Icon(Icons.people),
                   ),
                   items: const [
@@ -347,7 +350,7 @@ class _SignupScreenState extends State<SignupScreen> {
                   maxLength: 10,
                   decoration: const InputDecoration(
                     labelText: 'Phone Number',
-                    border: OutlineInputBorder(),
+                    border: const OutlineInputBorder(borderRadius: BorderRadius.all(Radius.circular(14))),
                     prefixIcon: Icon(Icons.phone),
                     counterText: '',
                   ),
@@ -377,7 +380,7 @@ class _SignupScreenState extends State<SignupScreen> {
                   keyboardType: TextInputType.emailAddress,
                   decoration: const InputDecoration(
                     labelText: 'Email',
-                    border: OutlineInputBorder(),
+                    border: const OutlineInputBorder(borderRadius: BorderRadius.all(Radius.circular(14))),
                     prefixIcon: Icon(Icons.email),
                   ),
                   validator: (value) {
@@ -409,7 +412,7 @@ class _SignupScreenState extends State<SignupScreen> {
                   controller: usernameController,
                   decoration: const InputDecoration(
                     labelText: 'Username',
-                    border: OutlineInputBorder(),
+                    border: const OutlineInputBorder(borderRadius: BorderRadius.all(Radius.circular(14))),
                     prefixIcon: Icon(Icons.account_circle),
                   ),
                   validator: (value) {
@@ -438,7 +441,7 @@ class _SignupScreenState extends State<SignupScreen> {
                   obscureText: obscurePassword,
                   decoration: InputDecoration(
                     labelText: 'Create Password',
-                    border: const OutlineInputBorder(),
+                    border: const OutlineInputBorder(borderRadius: BorderRadius.all(Radius.circular(14))),
                     prefixIcon: const Icon(Icons.lock),
                     suffixIcon: IconButton(
                       icon: Icon(

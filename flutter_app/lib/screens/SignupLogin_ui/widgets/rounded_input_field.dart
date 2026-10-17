@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import '../../../theme/unisafe_theme.dart';
 
 class RoundedInputField extends StatefulWidget {
   final String labelText;
@@ -57,7 +58,7 @@ class _RoundedInputFieldState extends State<RoundedInputField> {
             style: const TextStyle(
               fontSize: 14,
               fontWeight: FontWeight.w600,
-              color: Color(0xFF334155),
+              color: UniSafeColors.ink,
               letterSpacing: 0.1,
             ),
           ),
@@ -78,7 +79,7 @@ class _RoundedInputFieldState extends State<RoundedInputField> {
             style: const TextStyle(
               fontSize: 15,
               fontWeight: FontWeight.w500,
-              color: Color(0xFF1E293B),
+              color: UniSafeColors.ink,
             ),
             decoration: InputDecoration(
               isDense: false,
@@ -94,7 +95,7 @@ class _RoundedInputFieldState extends State<RoundedInputField> {
               prefixStyle: const TextStyle(
                 fontSize: 15,
                 fontWeight: FontWeight.w700,
-                color: Color(0xFF133838),
+                color: UniSafeColors.navy,
               ),
               suffixIcon: widget.suffixIcon
                   ? IconButton(
@@ -114,21 +115,21 @@ class _RoundedInputFieldState extends State<RoundedInputField> {
                       },
                     )
                   : null,
-              contentPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+              contentPadding: const EdgeInsets.symmetric(horizontal: 18, vertical: 16),
               enabledBorder: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(26),
-                borderSide: const BorderSide(color: Color(0xFFE2E8F0), width: 1.2),
+                borderRadius: BorderRadius.circular(14),
+                borderSide: const BorderSide(color: UniSafeColors.line, width: 1.2),
               ),
               focusedBorder: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(26),
-                borderSide: const BorderSide(color: Color(0xFF133838), width: 1.8),
+                borderRadius: BorderRadius.circular(14),
+                borderSide: const BorderSide(color: UniSafeColors.blue, width: 1.8),
               ),
               errorBorder: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(26),
+                borderRadius: BorderRadius.circular(14),
                 borderSide: const BorderSide(color: Color(0xFFEF4444), width: 1.2),
               ),
               focusedErrorBorder: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(26),
+                borderRadius: BorderRadius.circular(14),
                 borderSide: const BorderSide(color: Color(0xFFEF4444), width: 1.8),
               ),
             ),

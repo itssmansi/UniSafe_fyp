@@ -651,7 +651,7 @@ class _CitizenSignupScreenState extends State<CitizenSignupScreen> {
             ),
           ],
         ),
-        backgroundColor: const Color(0xFF133838),
+        backgroundColor: const Color(0xFF0B3B68),
         duration: const Duration(milliseconds: 1600),
         behavior: SnackBarBehavior.floating,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
@@ -675,7 +675,7 @@ class _CitizenSignupScreenState extends State<CitizenSignupScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFF133838), // Dark Forest Teal canvas
+      backgroundColor: const Color(0xFF0B3B68), // Dark Forest Teal canvas
       body: Stack(
         children: [
           // Full-screen continuous green doodle background
@@ -966,19 +966,19 @@ class _CitizenSignupScreenState extends State<CitizenSignupScreen> {
                                 height: 46,
                                 decoration: BoxDecoration(
                                   color: isSelected
-                                      ? const Color(0xFF133838)
+                                      ? const Color(0xFF0B3B68)
                                       : const Color(0xFFF8FAFC),
                                   borderRadius: BorderRadius.circular(23),
                                   border: Border.all(
                                     color: isSelected
-                                        ? const Color(0xFF133838)
+                                        ? const Color(0xFF0B3B68)
                                         : const Color(0xFFE2E8F0),
                                     width: isSelected ? 1.8 : 1.2,
                                   ),
                                   boxShadow: isSelected
                                       ? [
                                           BoxShadow(
-                                            color: const Color(0xFF133838).withValues(alpha: 0.2),
+                                            color: const Color(0xFF0B3B68).withValues(alpha: 0.2),
                                             blurRadius: 6,
                                             offset: const Offset(0, 2),
                                           ),
@@ -1100,7 +1100,7 @@ class _CitizenSignupScreenState extends State<CitizenSignupScreen> {
                   'Log-in',
                   style: TextStyle(
                     fontSize: 14,
-                    color: Color(0xFF133838),
+                    color: Color(0xFF0B3B68),
                     fontWeight: FontWeight.w700,
                   ),
                 ),
@@ -1137,10 +1137,10 @@ class _CitizenSignupScreenState extends State<CitizenSignupScreen> {
                   width: 38,
                   height: 38,
                   decoration: BoxDecoration(
-                    color: const Color(0xFF133838).withValues(alpha: 0.08),
+                    color: const Color(0xFF0B3B68).withValues(alpha: 0.08),
                     borderRadius: BorderRadius.circular(10),
                   ),
-                  child: const Icon(Icons.mark_email_read_outlined, color: Color(0xFF133838), size: 20),
+                  child: const Icon(Icons.mark_email_read_outlined, color: Color(0xFF0B3B68), size: 20),
                 ),
                 const SizedBox(width: 12),
                 Expanded(
@@ -1157,7 +1157,7 @@ class _CitizenSignupScreenState extends State<CitizenSignupScreen> {
                         style: const TextStyle(
                           fontSize: 14,
                           fontWeight: FontWeight.bold,
-                          color: Color(0xFF133838),
+                          color: Color(0xFF0B3B68),
                         ),
                       ),
                     ],
@@ -1165,7 +1165,7 @@ class _CitizenSignupScreenState extends State<CitizenSignupScreen> {
                 ),
                 TextButton(
                   onPressed: () => setState(() => _currentStep = 0),
-                  child: const Text('Edit', style: TextStyle(color: Color(0xFF133838), fontWeight: FontWeight.bold)),
+                  child: const Text('Edit', style: TextStyle(color: Color(0xFF0B3B68), fontWeight: FontWeight.bold)),
                 ),
               ],
             ),
@@ -1198,7 +1198,7 @@ class _CitizenSignupScreenState extends State<CitizenSignupScreen> {
                 style: const TextStyle(
                   fontSize: 13,
                   fontWeight: FontWeight.bold,
-                  color: Color(0xFF133838),
+                  color: Color(0xFF0B3B68),
                 ),
               )
             else
@@ -1209,7 +1209,7 @@ class _CitizenSignupScreenState extends State<CitizenSignupScreen> {
                   style: TextStyle(
                     fontSize: 13,
                     fontWeight: FontWeight.bold,
-                    color: Color(0xFF133838),
+                    color: Color(0xFF0B3B68),
                     decoration: TextDecoration.underline,
                   ),
                 ),
@@ -1261,10 +1261,10 @@ class _CitizenSignupScreenState extends State<CitizenSignupScreen> {
                   width: 38,
                   height: 38,
                   decoration: BoxDecoration(
-                    color: const Color(0xFF133838).withValues(alpha: 0.08),
+                    color: const Color(0xFF0B3B68).withValues(alpha: 0.08),
                     borderRadius: BorderRadius.circular(10),
                   ),
-                  child: const Icon(Icons.sms_outlined, color: Color(0xFF133838), size: 20),
+                  child: const Icon(Icons.sms_outlined, color: Color(0xFF0B3B68), size: 20),
                 ),
                 const SizedBox(width: 12),
                 Expanded(
@@ -1281,7 +1281,7 @@ class _CitizenSignupScreenState extends State<CitizenSignupScreen> {
                         style: const TextStyle(
                           fontSize: 14,
                           fontWeight: FontWeight.bold,
-                          color: Color(0xFF133838),
+                          color: Color(0xFF0B3B68),
                         ),
                       ),
                     ],
@@ -1289,7 +1289,7 @@ class _CitizenSignupScreenState extends State<CitizenSignupScreen> {
                 ),
                 TextButton(
                   onPressed: () => setState(() => _currentStep = 0),
-                  child: const Text('Edit', style: TextStyle(color: Color(0xFF133838), fontWeight: FontWeight.bold)),
+                  child: const Text('Edit', style: TextStyle(color: Color(0xFF0B3B68), fontWeight: FontWeight.bold)),
                 ),
               ],
             ),
@@ -1321,7 +1321,7 @@ class _CitizenSignupScreenState extends State<CitizenSignupScreen> {
                 style: const TextStyle(
                   fontSize: 13,
                   fontWeight: FontWeight.bold,
-                  color: Color(0xFF133838),
+                  color: Color(0xFF0B3B68),
                 ),
               )
             else
@@ -1332,7 +1332,7 @@ class _CitizenSignupScreenState extends State<CitizenSignupScreen> {
                   style: TextStyle(
                     fontSize: 13,
                     fontWeight: FontWeight.bold,
-                    color: Color(0xFF133838),
+                    color: Color(0xFF0B3B68),
                     decoration: TextDecoration.underline,
                   ),
                 ),
@@ -1631,7 +1631,7 @@ class _CitizenSignupScreenState extends State<CitizenSignupScreen> {
                 ),
                 child: Row(
                   children: [
-                    const Icon(Icons.fingerprint_rounded, color: Color(0xFF133838), size: 22),
+                    const Icon(Icons.fingerprint_rounded, color: Color(0xFF0B3B68), size: 22),
                     const SizedBox(width: 10),
                     Expanded(
                       child: Text(
@@ -1639,13 +1639,13 @@ class _CitizenSignupScreenState extends State<CitizenSignupScreen> {
                         style: const TextStyle(
                           fontSize: 13.5,
                           fontWeight: FontWeight.bold,
-                          color: Color(0xFF133838),
+                          color: Color(0xFF0B3B68),
                         ),
                       ),
                     ),
                     GestureDetector(
                       onTap: () => setState(() => _isAadhaarOtpSent = false),
-                      child: const Text('Change', style: TextStyle(fontSize: 12, color: Color(0xFF133838), fontWeight: FontWeight.bold)),
+                      child: const Text('Change', style: TextStyle(fontSize: 12, color: Color(0xFF0B3B68), fontWeight: FontWeight.bold)),
                     ),
                   ],
                 ),
@@ -1665,11 +1665,11 @@ class _CitizenSignupScreenState extends State<CitizenSignupScreen> {
               children: [
                 const Text("Didn't receive UIDAI code? ", style: TextStyle(fontSize: 13, color: Color(0xFF94A3B8))),
                 if (_aadhaarOtpTimerSeconds > 0)
-                  Text('Resend in 00:${_aadhaarOtpTimerSeconds.toString().padLeft(2, '0')}', style: const TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: Color(0xFF133838)))
+                  Text('Resend in 00:${_aadhaarOtpTimerSeconds.toString().padLeft(2, '0')}', style: const TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: Color(0xFF0B3B68)))
                 else
                   GestureDetector(
                     onTap: _sendAadhaarOtp,
-                    child: const Text('Resend OTP', style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: Color(0xFF133838), decoration: TextDecoration.underline)),
+                    child: const Text('Resend OTP', style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: Color(0xFF0B3B68), decoration: TextDecoration.underline)),
                   ),
               ],
             ),

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../services/auth_service.dart';
+import '../../theme/unisafe_theme.dart';
 
 class OtpScreen extends StatefulWidget {
   final String phone;
@@ -176,8 +177,10 @@ class _OtpScreenState extends State<OtpScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      backgroundColor: UniSafeColors.canvas,
       appBar: AppBar(
-        title: const Text('Verify Phone'),
+        title: const Text('Verify your number', style: TextStyle(fontWeight: FontWeight.w800)),
+        backgroundColor: UniSafeColors.canvas,
       ),
       body: SafeArea(
         child: SingleChildScrollView(
@@ -189,10 +192,7 @@ class _OtpScreenState extends State<OtpScreen> {
               children: [
                 const SizedBox(height: 40),
 
-                const Icon(
-                  Icons.sms,
-                  size: 70,
-                ),
+                Container(width: 74, height: 74, decoration: BoxDecoration(color: UniSafeColors.mint, borderRadius: BorderRadius.circular(22)), child: const Icon(Icons.sms_outlined, color: UniSafeColors.navy, size: 34)),
 
                 const SizedBox(height: 24),
 
@@ -230,7 +230,7 @@ class _OtpScreenState extends State<OtpScreen> {
                   ),
                   decoration: const InputDecoration(
                     labelText: 'Enter OTP',
-                    border: OutlineInputBorder(),
+                    border: const OutlineInputBorder(borderRadius: BorderRadius.all(Radius.circular(14))),
                     counterText: '',
                   ),
                   validator: (value) {

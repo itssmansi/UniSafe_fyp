@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../config/supabase_config.dart';
+import '../../theme/unisafe_theme.dart';
 import 'widgets/auth_header.dart';
 import 'widgets/auth_background.dart';
 import 'widgets/auth_slide_route.dart';
@@ -67,7 +68,7 @@ class _ForgetPasswordScreenState extends State<ForgetPasswordScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFF133838), // Dark Forest Teal
+      backgroundColor: UniSafeColors.canvas,
       body: Stack(
         children: [
           // Full-screen continuous green doodle background
@@ -89,10 +90,10 @@ class _ForgetPasswordScreenState extends State<ForgetPasswordScreen> {
                         child: child,
                       );
                     },
-                    child: AuthHeader(
+                    child: const AuthHeader(
                       title: 'RESET PASSWORD',
-                      onBack: () => Navigator.of(context).pop(),
                       isCentered: true,
+                      showBackButton: false,
                     ),
                   ),
                 ),
@@ -205,8 +206,8 @@ class _ForgetPasswordScreenState extends State<ForgetPasswordScreen> {
                                     'Back to login',
                                     style: TextStyle(
                                       fontSize: 13,
-                                      color: Color(0xFF133838),
-                                      fontWeight: FontWeight.w600,
+                                      color: UniSafeColors.blue,
+                                      fontWeight: FontWeight.w700,
                                     ),
                                   ),
                                 ),

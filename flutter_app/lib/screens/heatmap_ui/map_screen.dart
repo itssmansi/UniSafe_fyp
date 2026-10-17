@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:ui';
 import 'package:flutter/material.dart';
+import '../../theme/unisafe_theme.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:latlong2/latlong.dart' hide Path;
 import 'package:lucide_icons_flutter/lucide_icons.dart';
@@ -387,7 +388,7 @@ class _MapScreenState extends ConsumerState<MapScreen> {
                   builder: (context, markers) {
                     return Container(
                       decoration: BoxDecoration(
-                        color: Colors.black87,
+                        color: UniSafeColors.ink,
                         shape: BoxShape.circle,
                         border: Border.all(color: Colors.white, width: 2),
                         boxShadow: const [BoxShadow(color: Colors.black26, blurRadius: 4)],

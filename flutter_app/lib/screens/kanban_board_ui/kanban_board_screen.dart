@@ -1,5 +1,11 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../../config/supabase_config.dart';
+import '../../services/device_service.dart';
+import '../../theme/unisafe_theme.dart';
 import '../home_page.dart';
+import '../interactive_map/report_model.dart';
+import '../interactive_map/report_provider.dart';
 
 enum KanbanStatus {
   planned,
@@ -31,6 +37,7 @@ class CivicReport {
   final String department;
   final String description;
   final KanbanStatus status;
+  final ReportModel model;
 
   const CivicReport({
     required this.id,
@@ -43,17 +50,18 @@ class CivicReport {
     required this.department,
     required this.description,
     required this.status,
+    required this.model,
   });
 }
 
-class KanbanBoardScreen extends StatefulWidget {
+class KanbanBoardScreen extends ConsumerStatefulWidget {
   const KanbanBoardScreen({super.key});
 
   @override
-  State<KanbanBoardScreen> createState() => _KanbanBoardScreenState();
+  ConsumerState<KanbanBoardScreen> createState() => _KanbanBoardScreenState();
 }
 
-class _KanbanBoardScreenState extends State<KanbanBoardScreen> {
+class _KanbanBoardScreenState extends ConsumerState<KanbanBoardScreen> {
   final List<KanbanColumnData> columns = const [
     KanbanColumnData(
       status: KanbanStatus.planned,
@@ -77,8 +85,147 @@ class _KanbanBoardScreenState extends State<KanbanBoardScreen> {
     ),
   ];
 
-  late final List<CivicReport> _reports;
   final Set<String> _verifiedReportIds = {};
+  Map<String, dynamic>? _citizenProfile;
+  Set<String> _myDeviceReportIds = {};
+
+  @override
+  void initState() {
+    super.initState();
+    _loadCitizenProfile();
+    _loadMyDeviceReportIds();
+  }
+
+  Future<void> _loadCitizenProfile() async {
+    final user = SupabaseConfig.client.auth.currentUser;
+    if (user != null) {
+      try {
+        var query = SupabaseConfig.client.from('citizens').select();
+        if (user.email != null && user.email!.isNotEmpty) {
+          query = query.or('auth_user_id.eq.${user.id},email.eq.${user.email}');
+        } else if (user.phone != null && user.phone!.isNotEmpty) {
+          query = query.or('auth_user_id.eq.${user.id},phone.eq.${user.phone}');
+        } else {
+          query = query.eq('auth_user_id', user.id);
+        }
+        final data = await query.maybeSingle();
+        if (mounted) {
+          setState(() {
+            _citizenProfile = data;
+          });
+        }
+      } catch (e) {
+        debugPrint('[Kanban] Error loading citizen profile: $e');
+      }
+    }
+  }
+
+  Future<void> _loadMyDeviceReportIds() async {
+    try {
+      final ids = await DeviceService.getMyReportIds();
+      if (mounted) {
+        setState(() {
+          _myDeviceReportIds = ids.toSet();
+        });
+      }
+    } catch (_) {}
+  }
+
+  static (Color, IconData, String) _getCategoryMeta(IssueCategory cat) {
+    switch (cat) {
+      case IssueCategory.infrastructure:
+        return (const Color(0xFF0284C7), Icons.construction_rounded, 'Infrastructure');
+      case IssueCategory.sanitation:
+        return (const Color(0xFFD97706), Icons.delete_sweep_rounded, 'Sanitation');
+      case IssueCategory.safety:
+        return (const Color(0xFFDC2626), Icons.shield_rounded, 'Safety');
+      case IssueCategory.greenery:
+        return (const Color(0xFF16A34A), Icons.park_rounded, 'Greenery');
+    }
+  }
+
+  static String _formatReportDate(DateTime? dt) {
+    if (dt == null) return 'Recently';
+    const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+    return '${months[dt.month - 1]} ${dt.day}, ${dt.year}';
+  }
+
+  static KanbanStatus _mapReportStatus(String? status) {
+    final s = (status ?? '').toLowerCase().trim();
+    if (s == 'resolved' || s == 'done' || s == 'closed' || s == 'completed') {
+      return KanbanStatus.done;
+    }
+    if (s.contains('review') || s.contains('verif')) {
+      return KanbanStatus.inReview;
+    }
+    if (s.contains('progress') || s.contains('working') || s.contains('assigned')) {
+      return KanbanStatus.inProgress;
+    }
+    return KanbanStatus.planned;
+  }
+
+  CivicReport _reportModelToCivicReport(ReportModel r) {
+    final meta = _getCategoryMeta(r.category);
+    final kanbanStatus = _mapReportStatus(r.status);
+
+    String locationStr;
+    if (r.address != null && r.address!.trim().isNotEmpty) {
+      locationStr = r.address!.trim();
+    } else {
+      locationStr = 'Lat ${r.location.latitude.toStringAsFixed(3)}, Lng ${r.location.longitude.toStringAsFixed(3)}';
+    }
+
+    String department;
+    switch (r.category) {
+      case IssueCategory.infrastructure:
+        department = 'Roads & Traffic Infrastructure Authority';
+        break;
+      case IssueCategory.sanitation:
+        department = 'Solid Waste Management (SWM) Division';
+        break;
+      case IssueCategory.safety:
+        department = 'Public Safety & Emergency Response Unit';
+        break;
+      case IssueCategory.greenery:
+        department = 'Parks & Gardens Ecological Department';
+        break;
+    }
+
+    return CivicReport(
+      id: r.id,
+      title: r.title.isNotEmpty ? r.title : 'Civic Incident',
+      category: meta.$3,
+      categoryColor: meta.$1,
+      categoryIcon: meta.$2,
+      location: locationStr,
+      date: _formatReportDate(r.createdAt),
+      department: department,
+      description: r.description.isNotEmpty ? r.description : 'No additional details provided.',
+      status: kanbanStatus,
+      model: r,
+    );
+  }
+
+  List<ReportModel> _filterOwnedReports(List<ReportModel> allReports) {
+    final citizenId = _citizenProfile?['id']?.toString();
+    final authUserId = SupabaseConfig.client.auth.currentUser?.id;
+
+    return allReports.where((r) {
+      final bool isMyAuthUser = authUserId != null &&
+          r.authUserId != null &&
+          r.authUserId == authUserId;
+      final bool isMyCitizen = citizenId != null &&
+          r.citizenId != null &&
+          r.citizenId!.isNotEmpty &&
+          r.citizenId == citizenId;
+      final bool isMyDevice = _myDeviceReportIds.contains(r.id);
+      return isMyAuthUser || isMyCitizen || isMyDevice;
+    }).toList();
+  }
+
+  List<CivicReport> _getReportsForStatus(KanbanStatus status, List<CivicReport> reports) {
+    return reports.where((report) => report.status == status).toList();
+  }
 
   void _toggleVerify(CivicReport report) {
     final alreadyVerified = _verifiedReportIds.contains(report.id);
@@ -112,7 +259,7 @@ class _KanbanBoardScreenState extends State<KanbanBoardScreen> {
               ),
             ],
           ),
-          backgroundColor: alreadyVerified ? Colors.grey.shade800 : const Color(0xFF2563EB),
+          backgroundColor: alreadyVerified ? UniSafeColors.teal : UniSafeColors.navy,
           duration: const Duration(seconds: 2),
           behavior: SnackBarBehavior.floating,
           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
@@ -121,114 +268,22 @@ class _KanbanBoardScreenState extends State<KanbanBoardScreen> {
     }
   }
 
-  @override
-  void initState() {
-    super.initState();
-    _reports = [
-      // 3 Planned Reports
-      const CivicReport(
-        id: 'rep-1',
-        title: 'Water Logging',
-        category: 'Infrastructure',
-        categoryColor: Color(0xFF0284C7),
-        categoryIcon: Icons.water_drop_rounded,
-        location: 'SV Road Junction, Bandra West',
-        date: 'Oct 12, 2026',
-        department: 'BMC Stormwater Drain Department',
-        description:
-            'Severe water accumulation reported after moderate rain. Standing water up to 1.5 feet obstructing road movement and pedestrian walkways. Scheduled for suction clearing and drain desilting.',
-        status: KanbanStatus.planned,
-      ),
-      const CivicReport(
-        id: 'rep-2',
-        title: 'Waste Dumping in Green Area',
-        category: 'Greenery',
-        categoryColor: Color(0xFF16A34A),
-        categoryIcon: Icons.park_rounded,
-        location: "Jogger's Park Ecological Zone",
-        date: 'Oct 11, 2026',
-        department: 'Parks & Gardens Dept / Solid Waste Mgt',
-        description:
-            'Commercial debris and plastic waste dumped illegally inside the green belt buffer zone. Scheduled for heavy equipment cleanup, green restoration, and installation of warning barricades.',
-        status: KanbanStatus.planned,
-      ),
-      const CivicReport(
-        id: 'rep-3',
-        title: 'Potholes on Main Junction',
-        category: 'Infrastructure',
-        categoryColor: Color(0xFF0284C7),
-        categoryIcon: Icons.add_road_rounded,
-        location: 'Link Road & 14th Cross Junction',
-        date: 'Oct 10, 2026',
-        department: 'Roads & Traffic Infrastructure Authority',
-        description:
-            'Cluster of deep potholes on the westbound lane causing vehicle congestion and skidding hazards for two-wheelers. Rapid cold-mix patch work queued in maintenance cycle.',
-        status: KanbanStatus.planned,
-      ),
-
-      // 1 In Progress Report
-      const CivicReport(
-        id: 'rep-4',
-        title: 'Electrical Hazard & Exposed Wires',
-        category: 'Safety',
-        categoryColor: Color(0xFFDC2626),
-        categoryIcon: Icons.electric_bolt_rounded,
-        location: 'Near Sector 4 Bus Stop',
-        date: 'Oct 9, 2026',
-        department: 'MSEDCL Electricity Board - Quick Response Unit',
-        description:
-            'Damaged junction feeder box with exposed live wires dangling near the public bus waiting shelter. Emergency response team dispatched on site; power isolated and line insulation in progress.',
-        status: KanbanStatus.inProgress,
-      ),
-
-      // 1 In Review Report
-      const CivicReport(
-        id: 'rep-5',
-        title: 'Untimely Garbage Overflowing',
-        category: 'Sanitation',
-        categoryColor: Color(0xFFD97706),
-        categoryIcon: Icons.delete_sweep_rounded,
-        location: 'Community Bin #18, Shivaji Nagar',
-        date: 'Oct 8, 2026',
-        department: 'Solid Waste Management (SWM) Division',
-        description:
-            'Community waste bin overflowing onto the pedestrian pathway creating sanitation and odor concerns. Waste clearing vehicle finished collection; awaiting final sanitary inspector sign-off.',
-        status: KanbanStatus.inReview,
-      ),
-
-      // 1 Done Report
-      const CivicReport(
-        id: 'rep-6',
-        title: 'Nonfunctional Street Lights',
-        category: 'Infrastructure',
-        categoryColor: Color(0xFF0284C7),
-        categoryIcon: Icons.lightbulb_rounded,
-        location: 'Subhash Avenue North, Ward 12',
-        date: 'Oct 5, 2026',
-        department: 'Street Lighting & Electrical Maintenance',
-        description:
-            'Three consecutive LED street light poles were dark for over a week creating an unsafe dark corridor for night commuters. New LED luminaire fixtures installed and fully verified operational.',
-        status: KanbanStatus.done,
-      ),
-    ];
-  }
-
-  List<CivicReport> _getReportsForStatus(KanbanStatus status) {
-    return _reports.where((report) => report.status == status).toList();
-  }
-
   void _handleBackNavigation(BuildContext context) {
     if (Navigator.of(context).canPop()) {
       Navigator.of(context).pop();
     } else {
       Navigator.of(context).pushReplacement(
-        MaterialPageRoute(builder: (context) => const HomePage()),
+        UniSafePageRoute(builder: (context) => const HomePage()),
       );
     }
   }
 
   @override
   Widget build(BuildContext context) {
+    final allRawReports = ref.watch(interactiveReportProvider);
+    final myRawReports = _filterOwnedReports(allRawReports);
+    final List<CivicReport> activeReports = myRawReports.map(_reportModelToCivicReport).toList();
+
     return PopScope(
       canPop: false,
       onPopInvokedWithResult: (didPop, result) {
@@ -236,34 +291,50 @@ class _KanbanBoardScreenState extends State<KanbanBoardScreen> {
         _handleBackNavigation(context);
       },
       child: Scaffold(
-        backgroundColor: const Color(0xFFF9FAFB),
+        backgroundColor: UniSafeColors.canvas,
         appBar: AppBar(
-          title: const Text(
-            'Kanban Board',
-            style: TextStyle(fontWeight: FontWeight.w700, fontSize: 18),
+          title: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text(
+                'Resolution desk',
+                style: TextStyle(fontWeight: FontWeight.w800, fontSize: 19, letterSpacing: -0.35),
+              ),
+              Text(
+                'My submitted civic reports (${activeReports.length})',
+                style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 11, color: UniSafeColors.mutedInk),
+              ),
+            ],
           ),
           leading: IconButton(
             icon: const Icon(Icons.arrow_back),
             onPressed: () => _handleBackNavigation(context),
           ),
-          backgroundColor: Colors.white,
-          elevation: 0.5,
-          scrolledUnderElevation: 1,
+          actions: [
+            IconButton(
+              tooltip: 'Refresh reports',
+              icon: const Icon(Icons.refresh_rounded, size: 22, color: UniSafeColors.ink),
+              onPressed: () {
+                ref.read(interactiveReportProvider.notifier).refreshReports();
+              },
+            ),
+            const SizedBox(width: 8),
+          ],
+          backgroundColor: UniSafeColors.canvas,
         ),
-        body: LayoutBuilder(
-          builder: (context, constraints) {
-            if (constraints.maxWidth < 600) {
-              return _buildMobileGrid();
-            }
-            return _buildDesktopBoard();
-          },
+        body: EntranceReveal(
+          child: LayoutBuilder(
+            builder: (context, constraints) => constraints.maxWidth < 600
+                ? _buildMobileGrid(activeReports)
+                : _buildDesktopBoard(activeReports),
+          ),
         ),
       ),
     );
   }
 
   // --- MOBILE VIEW (2x2 Grid) ---
-  Widget _buildMobileGrid() {
+  Widget _buildMobileGrid(List<CivicReport> reports) {
     return Padding(
       padding: const EdgeInsets.all(8.0),
       child: Column(
@@ -271,9 +342,9 @@ class _KanbanBoardScreenState extends State<KanbanBoardScreen> {
           Expanded(
             child: Row(
               children: [
-                Expanded(child: _buildColumnContainer(columns[0])),
+                Expanded(child: _buildColumnContainer(columns[0], reports)),
                 const SizedBox(width: 8),
-                Expanded(child: _buildColumnContainer(columns[1])),
+                Expanded(child: _buildColumnContainer(columns[1], reports)),
               ],
             ),
           ),
@@ -281,9 +352,9 @@ class _KanbanBoardScreenState extends State<KanbanBoardScreen> {
           Expanded(
             child: Row(
               children: [
-                Expanded(child: _buildColumnContainer(columns[2])),
+                Expanded(child: _buildColumnContainer(columns[2], reports)),
                 const SizedBox(width: 8),
-                Expanded(child: _buildColumnContainer(columns[3])),
+                Expanded(child: _buildColumnContainer(columns[3], reports)),
               ],
             ),
           ),
@@ -293,16 +364,16 @@ class _KanbanBoardScreenState extends State<KanbanBoardScreen> {
   }
 
   // --- TABLET / DESKTOP VIEW (4 Side-by-Side Columns) ---
-  Widget _buildDesktopBoard() {
+  Widget _buildDesktopBoard(List<CivicReport> reports) {
     return Padding(
-      padding: const EdgeInsets.all(16.0),
+      padding: const EdgeInsets.fromLTRB(16, 4, 16, 20),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: columns.map((col) {
           return Expanded(
             child: Padding(
               padding: const EdgeInsets.symmetric(horizontal: 6.0),
-              child: _buildColumnContainer(col),
+              child: _buildColumnContainer(col, reports),
             ),
           );
         }).toList(),
@@ -310,32 +381,51 @@ class _KanbanBoardScreenState extends State<KanbanBoardScreen> {
     );
   }
 
-  // --- COLUMN CONTAINER WIDGET ---
-  Widget _buildColumnContainer(KanbanColumnData col) {
-    final items = _getReportsForStatus(col.status);
+  // --- COLUMN CONTAINER WIDGET (Citizen View-Only, No Drag Target) ---
+  Widget _buildColumnContainer(KanbanColumnData col, List<CivicReport> reports) {
+    final items = _getReportsForStatus(col.status, reports);
 
     return Container(
       decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: Colors.grey.shade200),
+        color: UniSafeColors.surface,
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(color: UniSafeColors.line),
+        boxShadow: [
+          BoxShadow(
+            color: UniSafeColors.ink.withValues(alpha: .035),
+            blurRadius: 16,
+            offset: const Offset(0, 7),
+          )
+        ],
       ),
       child: Column(
         children: [
           _buildHeader(col, items.length),
-          Divider(height: 1, thickness: 1, color: Colors.grey.shade200),
+          const Divider(height: 1, thickness: 1, color: UniSafeColors.line),
           Expanded(
             child: items.isEmpty
                 ? Center(
                     child: Padding(
                       padding: const EdgeInsets.all(12.0),
-                      child: Text(
-                        'No reports',
-                        style: TextStyle(
-                          fontSize: 12,
-                          color: Colors.grey.shade400,
-                          fontWeight: FontWeight.w500,
-                        ),
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(
+                            Icons.assignment_outlined,
+                            size: 26,
+                            color: Colors.grey.shade300,
+                          ),
+                          const SizedBox(height: 6),
+                          Text(
+                            'No reports in ${col.name}',
+                            textAlign: TextAlign.center,
+                            style: TextStyle(
+                              fontSize: 11.5,
+                              color: Colors.grey.shade400,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                        ],
                       ),
                     ),
                   )
@@ -356,10 +446,10 @@ class _KanbanBoardScreenState extends State<KanbanBoardScreen> {
   // --- COLUMN HEADER ---
   Widget _buildHeader(KanbanColumnData col, int count) {
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
+      padding: const EdgeInsets.symmetric(horizontal: 13, vertical: 13),
       decoration: BoxDecoration(
-        color: col.color.withValues(alpha: 0.08),
-        borderRadius: const BorderRadius.vertical(top: Radius.circular(11)),
+        color: col.color.withValues(alpha: 0.09),
+        borderRadius: const BorderRadius.vertical(top: Radius.circular(17)),
       ),
       child: Row(
         children: [
@@ -378,7 +468,7 @@ class _KanbanBoardScreenState extends State<KanbanBoardScreen> {
               style: const TextStyle(
                 fontSize: 13,
                 fontWeight: FontWeight.w700,
-                color: Colors.black87,
+                color: UniSafeColors.ink,
               ),
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
@@ -405,29 +495,33 @@ class _KanbanBoardScreenState extends State<KanbanBoardScreen> {
     );
   }
 
-  // --- CIVIC REPORT CARD ---
+  // --- CIVIC REPORT CARD (View & Inspect Details Only) ---
   Widget _buildReportCard(CivicReport report) {
     final isVerified = _verifiedReportIds.contains(report.id);
+    final hasPhoto = report.model.imageBytes != null ||
+        (report.model.imagePath != null &&
+            report.model.imagePath!.isNotEmpty &&
+            !report.model.imagePath!.startsWith('blob:'));
 
     return Container(
       margin: const EdgeInsets.only(bottom: 6),
       decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(10),
-        border: Border.all(color: Colors.grey.shade200),
+        color: UniSafeColors.surface,
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: UniSafeColors.line),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withValues(alpha: 0.03),
-            blurRadius: 4,
-            offset: const Offset(0, 1.5),
+            color: UniSafeColors.ink.withValues(alpha: 0.06),
+            blurRadius: 10,
+            offset: const Offset(0, 4),
           ),
         ],
       ),
       child: Material(
         color: Colors.transparent,
-        borderRadius: BorderRadius.circular(10),
+        borderRadius: BorderRadius.circular(14),
         child: InkWell(
-          borderRadius: BorderRadius.circular(10),
+          borderRadius: BorderRadius.circular(14),
           onTap: () => _showReportDetails(report),
           child: Padding(
             padding: const EdgeInsets.all(10),
@@ -435,28 +529,35 @@ class _KanbanBoardScreenState extends State<KanbanBoardScreen> {
               crossAxisAlignment: CrossAxisAlignment.start,
               mainAxisSize: MainAxisSize.min,
               children: [
-                // Category Tag Chip
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2.5),
-                  decoration: BoxDecoration(
-                    color: report.categoryColor.withValues(alpha: 0.09),
-                    borderRadius: BorderRadius.circular(6),
-                  ),
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Icon(report.categoryIcon, size: 11, color: report.categoryColor),
-                      const SizedBox(width: 4),
-                      Text(
-                        report.category,
-                        style: TextStyle(
-                          fontSize: 10,
-                          fontWeight: FontWeight.w700,
-                          color: report.categoryColor,
-                        ),
+                // Category Tag Chip & Photo indicator
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2.5),
+                      decoration: BoxDecoration(
+                        color: report.categoryColor.withValues(alpha: 0.09),
+                        borderRadius: BorderRadius.circular(6),
                       ),
-                    ],
-                  ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(report.categoryIcon, size: 11, color: report.categoryColor),
+                          const SizedBox(width: 4),
+                          Text(
+                            report.category,
+                            style: TextStyle(
+                              fontSize: 10,
+                              fontWeight: FontWeight.w700,
+                              color: report.categoryColor,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    if (hasPhoto)
+                      Icon(Icons.photo_camera_rounded, size: 13, color: Colors.grey.shade400),
+                  ],
                 ),
                 const SizedBox(height: 6),
 
@@ -466,7 +567,7 @@ class _KanbanBoardScreenState extends State<KanbanBoardScreen> {
                   style: const TextStyle(
                     fontSize: 12.5,
                     fontWeight: FontWeight.w600,
-                    color: Colors.black87,
+                    color: UniSafeColors.ink,
                     height: 1.25,
                   ),
                   maxLines: 2,
@@ -520,7 +621,7 @@ class _KanbanBoardScreenState extends State<KanbanBoardScreen> {
                 if (report.status == KanbanStatus.inReview) ...[
                   const SizedBox(height: 8),
 
-                  // Blue Verify Button (In Review only, no icon)
+                  // Blue Verify Button (In Review only)
                   SizedBox(
                     width: double.infinity,
                     height: 28,
@@ -528,8 +629,8 @@ class _KanbanBoardScreenState extends State<KanbanBoardScreen> {
                       onPressed: () => _toggleVerify(report),
                       style: ElevatedButton.styleFrom(
                         backgroundColor: isVerified
-                            ? const Color(0xFF10B981)
-                            : const Color(0xFF2563EB),
+                            ? UniSafeColors.teal
+                            : UniSafeColors.navy,
                         foregroundColor: Colors.white,
                         elevation: 0,
                         padding: EdgeInsets.zero,
@@ -559,6 +660,10 @@ class _KanbanBoardScreenState extends State<KanbanBoardScreen> {
   // --- DETAILS BOTTOM SHEET ---
   void _showReportDetails(CivicReport report) {
     final colMeta = columns.firstWhere((col) => col.status == report.status);
+    final hasPhotoBytes = report.model.imageBytes != null;
+    final hasPhotoUrl = report.model.imagePath != null &&
+        report.model.imagePath!.isNotEmpty &&
+        !report.model.imagePath!.startsWith('blob:');
 
     showModalBottomSheet(
       context: context,
@@ -571,80 +676,199 @@ class _KanbanBoardScreenState extends State<KanbanBoardScreen> {
             borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
           ),
           padding: const EdgeInsets.fromLTRB(20, 12, 20, 28),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              // Drag Handle
-              Center(
-                child: Container(
-                  width: 40,
-                  height: 4,
-                  margin: const EdgeInsets.only(bottom: 16),
-                  decoration: BoxDecoration(
-                    color: Colors.grey.shade300,
-                    borderRadius: BorderRadius.circular(10),
+          child: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                // Drag Handle
+                Center(
+                  child: Container(
+                    width: 40,
+                    height: 4,
+                    margin: const EdgeInsets.only(bottom: 16),
+                    decoration: BoxDecoration(
+                      color: Colors.grey.shade300,
+                      borderRadius: BorderRadius.circular(10),
+                    ),
                   ),
                 ),
-              ),
 
-              // Status & Category Badges Row
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  Row(
-                    children: [
-                      // Status Badge
-                      Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                // Status & Category Badges Row
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Row(
+                      children: [
+                        // Status Badge
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                          decoration: BoxDecoration(
+                            color: colMeta.color.withValues(alpha: 0.12),
+                            borderRadius: BorderRadius.circular(8),
+                            border: Border.all(color: colMeta.color.withValues(alpha: 0.3)),
+                          ),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Container(
+                                width: 6,
+                                height: 6,
+                                decoration: BoxDecoration(
+                                  color: colMeta.color,
+                                  shape: BoxShape.circle,
+                                ),
+                              ),
+                              const SizedBox(width: 6),
+                              Text(
+                                colMeta.name,
+                                style: TextStyle(
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.w700,
+                                  color: colMeta.color,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+
+                        // Category Badge
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                          decoration: BoxDecoration(
+                            color: report.categoryColor.withValues(alpha: 0.1),
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Icon(report.categoryIcon, size: 13, color: report.categoryColor),
+                              const SizedBox(width: 5),
+                              Text(
+                                report.category,
+                                style: TextStyle(
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.w700,
+                                  color: report.categoryColor,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
+                    ),
+
+                    // Close Button
+                    InkWell(
+                      onTap: () => Navigator.pop(context),
+                      borderRadius: BorderRadius.circular(20),
+                      child: Container(
+                        padding: const EdgeInsets.all(6),
                         decoration: BoxDecoration(
-                          color: colMeta.color.withValues(alpha: 0.12),
-                          borderRadius: BorderRadius.circular(8),
-                          border: Border.all(color: colMeta.color.withValues(alpha: 0.3)),
+                          color: Colors.grey.shade100,
+                          shape: BoxShape.circle,
                         ),
-                        child: Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Container(
-                              width: 6,
-                              height: 6,
-                              decoration: BoxDecoration(
-                                color: colMeta.color,
-                                shape: BoxShape.circle,
-                              ),
-                            ),
-                            const SizedBox(width: 6),
-                            Text(
-                              colMeta.name,
-                              style: TextStyle(
-                                fontSize: 12,
-                                fontWeight: FontWeight.w700,
-                                color: colMeta.color,
-                              ),
-                            ),
-                          ],
-                        ),
+                        child: Icon(Icons.close, color: Colors.grey.shade600, size: 18),
                       ),
-                      const SizedBox(width: 8),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 16),
 
-                      // Category Badge
+                // Attached Photo Preview (if present)
+                if (hasPhotoBytes) ...[
+                  ClipRRect(
+                    borderRadius: BorderRadius.circular(12),
+                    child: Image.memory(
+                      report.model.imageBytes!,
+                      height: 180,
+                      width: double.infinity,
+                      fit: BoxFit.cover,
+                    ),
+                  ),
+                  const SizedBox(height: 14),
+                ] else if (hasPhotoUrl) ...[
+                  ClipRRect(
+                    borderRadius: BorderRadius.circular(12),
+                    child: Image.network(
+                      report.model.imagePath!,
+                      height: 180,
+                      width: double.infinity,
+                      fit: BoxFit.cover,
+                      errorBuilder: (context, error, stackTrace) => const SizedBox.shrink(),
+                    ),
+                  ),
+                  const SizedBox(height: 14),
+                ],
+
+                // Title
+                Text(
+                  report.title,
+                  style: const TextStyle(
+                    fontSize: 20,
+                    fontWeight: FontWeight.w800,
+                    color: Colors.black87,
+                  ),
+                ),
+                const SizedBox(height: 6),
+
+                // Date Submitted
+                Row(
+                  children: [
+                    Icon(Icons.calendar_today_outlined, size: 13, color: Colors.grey.shade500),
+                    const SizedBox(width: 5),
+                    Text(
+                      'Reported on ${report.date}',
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: Colors.grey.shade600,
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 18),
+
+                // Location Tile
+                Container(
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFF9FAFB),
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(color: Colors.grey.shade200),
+                  ),
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
                       Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                        padding: const EdgeInsets.all(8),
                         decoration: BoxDecoration(
-                          color: report.categoryColor.withValues(alpha: 0.1),
+                          color: Colors.blue.withValues(alpha: 0.1),
                           borderRadius: BorderRadius.circular(8),
                         ),
-                        child: Row(
-                          mainAxisSize: MainAxisSize.min,
+                        child: const Icon(Icons.location_on, color: Colors.blue, size: 18),
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            Icon(report.categoryIcon, size: 13, color: report.categoryColor),
-                            const SizedBox(width: 5),
                             Text(
-                              report.category,
+                              'Incident Location',
                               style: TextStyle(
-                                fontSize: 12,
-                                fontWeight: FontWeight.w700,
-                                color: report.categoryColor,
+                                fontSize: 11,
+                                fontWeight: FontWeight.w600,
+                                color: Colors.grey.shade500,
+                              ),
+                            ),
+                            const SizedBox(height: 2),
+                            Text(
+                              report.location,
+                              style: const TextStyle(
+                                fontSize: 13.5,
+                                fontWeight: FontWeight.w600,
+                                color: Colors.black87,
                               ),
                             ),
                           ],
@@ -652,213 +876,123 @@ class _KanbanBoardScreenState extends State<KanbanBoardScreen> {
                       ),
                     ],
                   ),
+                ),
+                const SizedBox(height: 10),
 
-                  // Close Button
-                  InkWell(
-                    onTap: () => Navigator.pop(context),
-                    borderRadius: BorderRadius.circular(20),
-                    child: Container(
-                      padding: const EdgeInsets.all(6),
-                      decoration: BoxDecoration(
-                        color: Colors.grey.shade100,
-                        shape: BoxShape.circle,
-                      ),
-                      child: Icon(Icons.close, color: Colors.grey.shade600, size: 18),
-                    ),
+                // Assigned Department Tile
+                Container(
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFF9FAFB),
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(color: Colors.grey.shade200),
                   ),
-                ],
-              ),
-              const SizedBox(height: 16),
-
-              // Title
-              Text(
-                report.title,
-                style: const TextStyle(
-                  fontSize: 20,
-                  fontWeight: FontWeight.w800,
-                  color: Colors.black87,
-                ),
-              ),
-              const SizedBox(height: 6),
-
-              // Date Submitted
-              Row(
-                children: [
-                  Icon(Icons.calendar_today_outlined, size: 13, color: Colors.grey.shade500),
-                  const SizedBox(width: 5),
-                  Text(
-                    'Reported on ${report.date}',
-                    style: TextStyle(
-                      fontSize: 12,
-                      color: Colors.grey.shade600,
-                      fontWeight: FontWeight.w500,
-                    ),
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.all(8),
+                        decoration: BoxDecoration(
+                          color: Colors.deepPurple.withValues(alpha: 0.1),
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        child: const Icon(Icons.account_balance_outlined, color: Colors.deepPurple, size: 18),
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              'Assigned Authority / Department',
+                              style: TextStyle(
+                                fontSize: 11,
+                                fontWeight: FontWeight.w600,
+                                color: Colors.grey.shade500,
+                              ),
+                            ),
+                            const SizedBox(height: 2),
+                            Text(
+                              report.department,
+                              style: const TextStyle(
+                                fontSize: 13.5,
+                                fontWeight: FontWeight.w600,
+                                color: Colors.black87,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
                   ),
-                ],
-              ),
-              const SizedBox(height: 18),
+                ),
+                const SizedBox(height: 18),
 
-              // Location Tile
-              Container(
-                padding: const EdgeInsets.all(12),
-                decoration: BoxDecoration(
-                  color: const Color(0xFFF9FAFB),
-                  borderRadius: BorderRadius.circular(12),
-                  border: Border.all(color: Colors.grey.shade200),
-                ),
-                child: Row(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Container(
-                      padding: const EdgeInsets.all(8),
-                      decoration: BoxDecoration(
-                        color: Colors.blue.withValues(alpha: 0.1),
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                      child: const Icon(Icons.location_on, color: Colors.blue, size: 18),
-                    ),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            'Incident Location',
-                            style: TextStyle(
-                              fontSize: 11,
-                              fontWeight: FontWeight.w600,
-                              color: Colors.grey.shade500,
-                            ),
-                          ),
-                          const SizedBox(height: 2),
-                          Text(
-                            report.location,
-                            style: const TextStyle(
-                              fontSize: 13.5,
-                              fontWeight: FontWeight.w600,
-                              color: Colors.black87,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              const SizedBox(height: 10),
-
-              // Assigned Department Tile
-              Container(
-                padding: const EdgeInsets.all(12),
-                decoration: BoxDecoration(
-                  color: const Color(0xFFF9FAFB),
-                  borderRadius: BorderRadius.circular(12),
-                  border: Border.all(color: Colors.grey.shade200),
-                ),
-                child: Row(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Container(
-                      padding: const EdgeInsets.all(8),
-                      decoration: BoxDecoration(
-                        color: Colors.deepPurple.withValues(alpha: 0.1),
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                      child: const Icon(Icons.account_balance_outlined, color: Colors.deepPurple, size: 18),
-                    ),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            'Assigned Authority / Department',
-                            style: TextStyle(
-                              fontSize: 11,
-                              fontWeight: FontWeight.w600,
-                              color: Colors.grey.shade500,
-                            ),
-                          ),
-                          const SizedBox(height: 2),
-                          Text(
-                            report.department,
-                            style: const TextStyle(
-                              fontSize: 13.5,
-                              fontWeight: FontWeight.w600,
-                              color: Colors.black87,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              const SizedBox(height: 18),
-
-              // Description Header
-              const Text(
-                'Report Description',
-                style: TextStyle(
-                  fontSize: 13,
-                  fontWeight: FontWeight.w700,
-                  color: Colors.black87,
-                ),
-              ),
-              const SizedBox(height: 6),
-
-              // Description Box
-              Container(
-                padding: const EdgeInsets.all(14),
-                decoration: BoxDecoration(
-                  color: Colors.grey.shade50,
-                  borderRadius: BorderRadius.circular(12),
-                  border: Border.all(color: Colors.grey.shade200),
-                ),
-                child: Text(
-                  report.description,
+                // Description Header
+                const Text(
+                  'Report Description',
                   style: TextStyle(
-                    fontSize: 13.5,
-                    color: Colors.grey.shade800,
-                    height: 1.45,
+                    fontSize: 13,
+                    fontWeight: FontWeight.w700,
+                    color: Colors.black87,
                   ),
                 ),
-              ),
-              if (report.status == KanbanStatus.inReview) ...[
-                const SizedBox(height: 20),
+                const SizedBox(height: 6),
 
-                // Bottom Sheet Verify Button (In Review only, no icon)
-                StatefulBuilder(
-                  builder: (context, setModalState) {
-                    final isVerified = _verifiedReportIds.contains(report.id);
-                    return SizedBox(
-                      width: double.infinity,
-                      height: 46,
-                      child: ElevatedButton(
-                        onPressed: () {
-                          _toggleVerify(report);
-                          setModalState(() {});
-                        },
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: isVerified
-                              ? const Color(0xFF10B981)
-                              : const Color(0xFF2563EB),
-                          foregroundColor: Colors.white,
-                          elevation: 0,
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(12),
+                // Description Box
+                Container(
+                  padding: const EdgeInsets.all(14),
+                  decoration: BoxDecoration(
+                    color: Colors.grey.shade50,
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(color: Colors.grey.shade200),
+                  ),
+                  child: Text(
+                    report.description,
+                    style: TextStyle(
+                      fontSize: 13.5,
+                      color: Colors.grey.shade800,
+                      height: 1.45,
+                    ),
+                  ),
+                ),
+
+                if (report.status == KanbanStatus.inReview) ...[
+                  const SizedBox(height: 20),
+
+                  // Bottom Sheet Verify Button (In Review only)
+                  StatefulBuilder(
+                    builder: (context, setModalState) {
+                      final isVerified = _verifiedReportIds.contains(report.id);
+                      return SizedBox(
+                        width: double.infinity,
+                        height: 46,
+                        child: ElevatedButton(
+                          onPressed: () {
+                            _toggleVerify(report);
+                            setModalState(() {});
+                          },
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: isVerified
+                                ? const Color(0xFF10B981)
+                                : const Color(0xFF2563EB),
+                            foregroundColor: Colors.white,
+                            elevation: 0,
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                          ),
+                          child: Text(
+                            isVerified ? 'Verified by Citizen' : 'Verify Report',
+                            style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w700),
                           ),
                         ),
-                        child: Text(
-                          isVerified ? 'Verified by Citizen' : 'Verify Report',
-                          style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w700),
-                        ),
-                      ),
-                    );
-                  },
-                ),
+                      );
+                    },
+                  ),
+                ],
               ],
-            ],
+            ),
           ),
         );
       },

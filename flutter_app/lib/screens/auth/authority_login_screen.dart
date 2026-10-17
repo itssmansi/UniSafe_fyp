@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../services/auth_service.dart';
+import '../../theme/unisafe_theme.dart';
 
 class AuthorityLoginScreen extends StatefulWidget {
   const AuthorityLoginScreen({super.key});
@@ -107,8 +108,10 @@ class _AuthorityLoginScreenState
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      backgroundColor: UniSafeColors.canvas,
       appBar: AppBar(
-        title: const Text('Authority Login'),
+        title: const Text('Authority access', style: TextStyle(fontWeight: FontWeight.w800)),
+        backgroundColor: UniSafeColors.canvas,
       ),
       body: SafeArea(
         child: SingleChildScrollView(
@@ -121,10 +124,7 @@ class _AuthorityLoginScreenState
               children: [
                 const SizedBox(height: 35),
 
-                const Icon(
-                  Icons.admin_panel_settings,
-                  size: 80,
-                ),
+                Container(width: 80, height: 80, decoration: BoxDecoration(color: UniSafeColors.mint, borderRadius: BorderRadius.circular(22)), child: const Icon(Icons.admin_panel_settings_outlined, color: UniSafeColors.navy, size: 40)),
 
                 const SizedBox(height: 25),
 
@@ -160,7 +160,7 @@ class _AuthorityLoginScreenState
                       TextCapitalization.words,
                   decoration: const InputDecoration(
                     labelText: 'Name',
-                    border: OutlineInputBorder(),
+                    border: const OutlineInputBorder(borderRadius: BorderRadius.all(Radius.circular(14))),
                     prefixIcon: Icon(Icons.person),
                   ),
                   validator: (value) {
@@ -183,7 +183,7 @@ class _AuthorityLoginScreenState
                   value: selectedDepartment,
                   decoration: const InputDecoration(
                     labelText: 'Department',
-                    border: OutlineInputBorder(),
+                    border: const OutlineInputBorder(borderRadius: BorderRadius.all(Radius.circular(14))),
                     prefixIcon:
                         Icon(Icons.account_balance),
                   ),
@@ -218,7 +218,7 @@ class _AuthorityLoginScreenState
                   value: selectedDesignation,
                   decoration: const InputDecoration(
                     labelText: 'Designation',
-                    border: OutlineInputBorder(),
+                    border: const OutlineInputBorder(borderRadius: BorderRadius.all(Radius.circular(14))),
                     prefixIcon:
                         Icon(Icons.badge),
                   ),
@@ -254,7 +254,7 @@ class _AuthorityLoginScreenState
                   obscureText: obscurePassword,
                   decoration: InputDecoration(
                     labelText: 'Password',
-                    border: const OutlineInputBorder(),
+                    border: const OutlineInputBorder(borderRadius: BorderRadius.all(Radius.circular(14))),
                     prefixIcon:
                         const Icon(Icons.lock),
                     suffixIcon: IconButton(

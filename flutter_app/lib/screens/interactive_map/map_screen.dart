@@ -15,6 +15,7 @@ import 'report_model.dart';
 import 'report_provider.dart';
 import 'street_view_modal.dart';
 import '../home_page.dart';
+import '../../theme/unisafe_theme.dart';
 
 /// Centralized visual identity for each issue category.
 class CategoryStyle {
@@ -555,7 +556,7 @@ class _InteractiveMapScreenState extends ConsumerState<InteractiveMapScreen> {
       Navigator.of(context).pop();
     } else {
       Navigator.of(context).pushReplacement(
-        MaterialPageRoute(builder: (context) => const HomePage()),
+        UniSafePageRoute(builder: (context) => const HomePage()),
       );
     }
   }
@@ -659,7 +660,7 @@ class _InteractiveMapScreenState extends ConsumerState<InteractiveMapScreen> {
                   builder: (context, markers) {
                     return Container(
                       decoration: BoxDecoration(
-                        color: Colors.black87,
+                        color: UniSafeColors.ink,
                         shape: BoxShape.circle,
                         border: Border.all(color: Colors.white, width: 2),
                         boxShadow: const [BoxShadow(color: Colors.black26, blurRadius: 4)],
@@ -4291,6 +4292,7 @@ class _FluidMergeSearchBarState extends State<FluidMergeSearchBar>
                             ),
                             decoration: const InputDecoration(
                               isDense: true,
+                              filled: false,
                               hintText: 'Search location...',
                               hintStyle: TextStyle(
                                 color: Color(0xFF94A3B8),
@@ -4299,6 +4301,11 @@ class _FluidMergeSearchBarState extends State<FluidMergeSearchBar>
                                 letterSpacing: 0.2,
                               ),
                               border: InputBorder.none,
+                              enabledBorder: InputBorder.none,
+                              focusedBorder: InputBorder.none,
+                              disabledBorder: InputBorder.none,
+                              errorBorder: InputBorder.none,
+                              focusedErrorBorder: InputBorder.none,
                               contentPadding: EdgeInsets.symmetric(vertical: 14),
                             ),
                           ),

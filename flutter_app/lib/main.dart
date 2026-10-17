@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:google_fonts/google_fonts.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'config/supabase_config.dart';
 import 'screens/auth/auth_choice_screen.dart';
@@ -13,6 +12,7 @@ import 'screens/SignupLogin_ui/welcome_screen.dart';
 import 'screens/SignupLogin_ui/login_screen.dart';
 import 'screens/SignupLogin_ui/signup_screen.dart';
 import 'screens/SignupLogin_ui/forget_password_screen.dart';
+import 'theme/unisafe_theme.dart';
 
 export 'screens/home_page.dart';
 
@@ -54,17 +54,19 @@ class UniSafeApp extends StatelessWidget {
     return MaterialApp(
       title: 'UniSafe',
       debugShowCheckedModeBanner: false,
-      theme: ThemeData(
-        colorScheme: ColorScheme.fromSeed(seedColor: Colors.blue),
-        useMaterial3: true,
-        textTheme: GoogleFonts.interTextTheme(),
-      ),
+      theme: UniSafeTheme.light(),
+      onGenerateRoute: (settings) {
+        final routes = <String, WidgetBuilder>{
+          '/home': (_) => const HomePage(),
+          '/interactive-map': (_) => const InteractiveMapScreen(),
+          '/heatmap': (_) => const MapScreen(),
+          '/kanban': (_) => const KanbanBoardScreen(),
+        };
+        final builder = routes[settings.name];
+        return builder == null ? null : UniSafePageRoute(builder: builder, settings: settings);
+      },
       home: hasActiveSession ? const HomePage() : const WelcomeSelectionScreen(),
       routes: {
-        '/home': (context) => const HomePage(),
-        '/interactive-map': (context) => const InteractiveMapScreen(),
-        '/heatmap': (context) => const MapScreen(),
-        '/kanban': (context) => const KanbanBoardScreen(),
         '/citizen-auth-splash': (context) => const WelcomeSelectionScreen(),
         '/citizen-auth-welcome': (context) => const WelcomeSelectionScreen(),
         '/citizen-auth-login': (context) => const CitizenLoginScreen(),

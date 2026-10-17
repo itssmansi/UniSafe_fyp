@@ -123,7 +123,7 @@ class _ResetPasswordOtpScreenState extends State<ResetPasswordOtpScreen> {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text('A new 6-digit recovery code was sent to ${widget.email}'),
-          backgroundColor: const Color(0xFF133838),
+          backgroundColor: const Color(0xFF0B3B68),
           behavior: SnackBarBehavior.floating,
           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
         ),
@@ -146,7 +146,7 @@ class _ResetPasswordOtpScreenState extends State<ResetPasswordOtpScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFF133838), // Dark Forest Teal
+      backgroundColor: const Color(0xFF0B3B68), // Dark Forest Teal
       body: Stack(
         children: [
           // Full-screen continuous green doodle background
@@ -228,7 +228,7 @@ class _ResetPasswordOtpScreenState extends State<ResetPasswordOtpScreen> {
                                 style: TextStyle(
                                   fontSize: 18,
                                   fontWeight: FontWeight.w700,
-                                  color: Color(0xFF133838),
+                                  color: Color(0xFF0B3B68),
                                 ),
                               ),
                               const SizedBox(height: 8),
@@ -296,7 +296,7 @@ class _ResetPasswordOtpScreenState extends State<ResetPasswordOtpScreen> {
                                     fontSize: 13,
                                     color: _resendSeconds > 0
                                         ? const Color(0xFF94A3B8)
-                                        : const Color(0xFF133838),
+                                        : const Color(0xFF0B3B68),
                                     fontWeight: FontWeight.w600,
                                   ),
                                 ),

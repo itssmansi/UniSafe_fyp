@@ -19,11 +19,11 @@ class CustomFormButton extends StatelessWidget {
       height: 54,
       margin: const EdgeInsets.symmetric(horizontal: 24),
       decoration: BoxDecoration(
-        color: const Color(0xFF133838),
+        color: const Color(0xFF1C2026).withValues(alpha: 0.94),
         borderRadius: BorderRadius.circular(27),
         boxShadow: [
           BoxShadow(
-            color: const Color(0xFF133838).withValues(alpha: 0.25),
+            color: const Color(0xFF1C2026).withValues(alpha: 0.22),
             blurRadius: 10,
             offset: const Offset(0, 4),
           ),
@@ -48,7 +48,7 @@ class CustomFormButton extends StatelessWidget {
                     innerText,
                     style: const TextStyle(
                       color: Colors.white,
-                      fontSize: 17.5,
+                      fontSize: 17,
                       fontWeight: FontWeight.w700,
                       letterSpacing: 0.3,
                     ),
