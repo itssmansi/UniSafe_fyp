@@ -29,7 +29,7 @@ class StreetViewModal extends StatefulWidget {
     return showModalBottomSheet(
       context: context,
       isScrollControlled: true,
-      enableDrag: true,
+      enableDrag: false,
       isDismissible: true,
       backgroundColor: Colors.transparent,
       barrierColor: Colors.black.withValues(alpha: 0.45),
@@ -112,17 +112,49 @@ class _StreetViewModalState extends State<StreetViewModal> {
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
   <style>
-    * { margin: 0; padding: 0; box-sizing: border-box; }
+    * { margin: 0; padding: 0; box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
     html, body {
       width: 100%;
       height: 100%;
       overflow: hidden;
       background: #0f172a;
       font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      touch-action: none;
+      user-select: none;
+      -webkit-user-select: none;
     }
-    #pano { width: 100%; height: 100%; }
+    #pano {
+      width: 100%;
+      height: 100%;
+      position: absolute;
+      top: 0; left: 0;
+      touch-action: none;
+    }
+    /* Auto-invert Google's negative canvas back to true natural colors */
+    #pano canvas {
+      filter: invert(1) !important;
+      -webkit-filter: invert(1) !important;
+      transition: filter 0.2s ease;
+    }
+    .natural-mode #pano canvas {
+      filter: invert(1) !important;
+      -webkit-filter: invert(1) !important;
+    }
+    .raw-mode #pano canvas {
+      filter: none !important;
+      -webkit-filter: none !important;
+    }
+    /* Hide Google dev-mode warning popup & watermark overlays */
+    .gm-err-container, .gm-err-content,
+    .gm-style-cc,
+    a[href*="billing"], a[href*="degraded"] {
+      display: none !important;
+      opacity: 0 !important;
+      pointer-events: none !important;
+      visibility: hidden !important;
+    }
     #status-banner {
       display: none;
       position: absolute;
@@ -150,16 +182,94 @@ class _StreetViewModalState extends State<StreetViewModal> {
       border-radius: 10px;
       text-decoration: none;
     }
-    /* Suppress Google dev-mode warning popup overlay */
-    .gm-err-container, .gm-err-content {
-      display: none !important;
-      opacity: 0 !important;
-      pointer-events: none !important;
+
+    /* Floating On-Screen 360 Camera Controls */
+    .controls-overlay {
+      position: absolute;
+      bottom: 24px;
+      right: 14px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 6px;
+      z-index: 100;
+      pointer-events: auto;
+    }
+    .ctrl-row {
+      display: flex;
+      gap: 6px;
+    }
+    .ctrl-btn {
+      width: 44px;
+      height: 44px;
+      border-radius: 22px;
+      background: rgba(15, 23, 42, 0.78);
+      border: 1px solid rgba(255, 255, 255, 0.25);
+      color: #ffffff;
+      font-size: 18px;
+      font-weight: bold;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.4);
+      cursor: pointer;
+      user-select: none;
+      -webkit-user-select: none;
+    }
+    .ctrl-btn:active {
+      background: #059669;
+      transform: scale(0.92);
+    }
+    .ctrl-btn-center {
+      font-size: 12px;
+      letter-spacing: -0.5px;
+    }
+    .color-toggle-btn {
+      position: absolute;
+      bottom: 24px;
+      left: 14px;
+      height: 38px;
+      padding: 0 14px;
+      border-radius: 19px;
+      background: rgba(15, 23, 42, 0.78);
+      border: 1px solid rgba(255, 255, 255, 0.25);
+      color: #ffffff;
+      font-size: 12px;
+      font-weight: 700;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.4);
+      cursor: pointer;
+      z-index: 100;
+      user-select: none;
+      -webkit-user-select: none;
+    }
+    .color-toggle-btn:active {
+      background: #059669;
+      transform: scale(0.95);
     }
   </style>
 </head>
-<body>
+<body class="natural-mode">
   <div id="pano"></div>
+
+  <!-- Floating On-Screen 360 Camera Controls (Touch or Tap) -->
+  <div class="controls-overlay">
+    <button class="ctrl-btn" id="btn-up" aria-label="Look Up">▲</button>
+    <div class="ctrl-row">
+      <button class="ctrl-btn" id="btn-left" aria-label="Turn Left">◀</button>
+      <button class="ctrl-btn ctrl-btn-center" id="btn-reset" aria-label="Reset View">RESET</button>
+      <button class="ctrl-btn" id="btn-right" aria-label="Turn Right">▶</button>
+    </div>
+    <button class="ctrl-btn" id="btn-down" aria-label="Look Down">▼</button>
+  </div>
+
+  <!-- Color Inversion Mode Switcher -->
+  <button class="color-toggle-btn" id="btn-toggle-color">
+    <span>🎨</span> <span id="color-mode-text">Colors: Natural</span>
+  </button>
+
   <div id="status-banner">
     <div class="status-title" id="status-title">No 360° Street View Nearby</div>
     <div class="status-desc" id="status-desc">Google does not have street-level camera recordings right at this exact coordinate point.</div>
@@ -167,7 +277,11 @@ class _StreetViewModalState extends State<StreetViewModal> {
       Open in Full Google Maps ↗
     </a>
   </div>
+
   <script>
+    window.streetViewPanorama = null;
+    let isNaturalMode = true;
+
     function initStreetView() {
       const pos = { lat: $lat, lng: $lng };
       const svService = new google.maps.StreetViewService();
@@ -175,25 +289,143 @@ class _StreetViewModalState extends State<StreetViewModal> {
       // Look for closest Street View within 400 meters
       svService.getPanorama({ location: pos, radius: 400, source: google.maps.StreetViewSource.DEFAULT }, function(data, status) {
         if (status === google.maps.StreetViewStatus.OK && data && data.location) {
-          const panorama = new google.maps.StreetViewPanorama(document.getElementById('pano'), {
+          window.streetViewPanorama = new google.maps.StreetViewPanorama(document.getElementById('pano'), {
             pano: data.location.pano,
             pov: { heading: 0, pitch: 0 },
             zoom: 1,
-            addressControl: false,      // Removes Google's clunky top-left black card
-            fullscreenControl: false,   // Removes Google's default fullscreen button
-            panControl: false,          // Removes the giant compass ring
-            zoomControl: false,         // Clean pinch/scroll zoom
-            enableCloseButton: false,   // Uses drag down to close
-            linksControl: true,         // Keeps the clean white navigation arrows on the road
-            showRoadLabels: true,       // Shows clean road labels on the ground
+            addressControl: false,
+            fullscreenControl: false,
+            panControl: false,
+            zoomControl: false,
+            enableCloseButton: false,
+            linksControl: true,         // Road navigation arrows
+            showRoadLabels: true,
             motionTracking: false,
-            motionTrackingControl: false
+            motionTrackingControl: false,
+            clickToGo: true,
+            scrollwheel: true
           });
+          setupDirectTouchRotation();
+          applyColorCorrection();
         } else {
           document.getElementById('status-banner').style.display = 'flex';
         }
       });
     }
+
+    // Direct touch-drag camera rotation (bypasses Google's degraded restrictions)
+    function setupDirectTouchRotation() {
+      const panoEl = document.getElementById('pano');
+      let isTouching = false;
+      let startX = 0, startY = 0;
+      let startHeading = 0, startPitch = 0;
+
+      panoEl.addEventListener('touchstart', function(e) {
+        if (e.touches.length === 1 && window.streetViewPanorama) {
+          isTouching = true;
+          startX = e.touches[0].clientX;
+          startY = e.touches[0].clientY;
+          const pov = window.streetViewPanorama.getPov() || { heading: 0, pitch: 0 };
+          startHeading = pov.heading || 0;
+          startPitch = pov.pitch || 0;
+        }
+      }, { passive: false });
+
+      panoEl.addEventListener('touchmove', function(e) {
+        if (!isTouching || e.touches.length !== 1 || !window.streetViewPanorama) return;
+        const currentX = e.touches[0].clientX;
+        const currentY = e.touches[0].clientY;
+        const deltaX = currentX - startX;
+        const deltaY = currentY - startY;
+
+        // Smooth 360 degree rotation
+        const sensitivity = 0.35;
+        const newHeading = (startHeading - deltaX * sensitivity + 3600) % 360;
+        const newPitch = Math.max(-85, Math.min(85, startPitch + deltaY * sensitivity));
+
+        window.streetViewPanorama.setPov({ heading: newHeading, pitch: newPitch });
+        e.preventDefault();
+      }, { passive: false });
+
+      panoEl.addEventListener('touchend', function() { isTouching = false; });
+      panoEl.addEventListener('touchcancel', function() { isTouching = false; });
+    }
+
+    // Floating On-Screen D-Pad handlers
+    function rotateCam(deltaHeading, deltaPitch) {
+      if (!window.streetViewPanorama) return;
+      const pov = window.streetViewPanorama.getPov() || { heading: 0, pitch: 0 };
+      const newHeading = ((pov.heading || 0) + deltaHeading + 3600) % 360;
+      const newPitch = Math.max(-85, Math.min(85, (pov.pitch || 0) + deltaPitch));
+      window.streetViewPanorama.setPov({ heading: newHeading, pitch: newPitch });
+    }
+
+    document.getElementById('btn-left').addEventListener('click', function(e) {
+      e.stopPropagation();
+      rotateCam(-30, 0);
+    });
+    document.getElementById('btn-right').addEventListener('click', function(e) {
+      e.stopPropagation();
+      rotateCam(30, 0);
+    });
+    document.getElementById('btn-up').addEventListener('click', function(e) {
+      e.stopPropagation();
+      rotateCam(0, 15);
+    });
+    document.getElementById('btn-down').addEventListener('click', function(e) {
+      e.stopPropagation();
+      rotateCam(0, -15);
+    });
+    document.getElementById('btn-reset').addEventListener('click', function(e) {
+      e.stopPropagation();
+      if (window.streetViewPanorama) {
+        window.streetViewPanorama.setPov({ heading: 0, pitch: 0 });
+      }
+    });
+
+    // Toggle between natural positive colors and raw negative
+    document.getElementById('btn-toggle-color').addEventListener('click', function(e) {
+      e.stopPropagation();
+      isNaturalMode = !isNaturalMode;
+      document.body.className = isNaturalMode ? 'natural-mode' : 'raw-mode';
+      document.getElementById('color-mode-text').innerText = isNaturalMode ? 'Colors: Natural' : 'Colors: Inverted';
+      applyColorCorrection();
+    });
+
+    function applyColorCorrection() {
+      const canvases = document.querySelectorAll('#pano canvas');
+      canvases.forEach(function(c) {
+        if (isNaturalMode) {
+          c.style.setProperty('filter', 'invert(1)', 'important');
+          c.style.setProperty('-webkit-filter', 'invert(1)', 'important');
+        } else {
+          c.style.setProperty('filter', 'none', 'important');
+          c.style.setProperty('-webkit-filter', 'none', 'important');
+        }
+      });
+    }
+
+    // Clean watermarks and auto-dismiss warning overlays continuously
+    setInterval(function() {
+      applyColorCorrection();
+
+      // Auto-hide development purposes watermark divs
+      const allDivs = document.querySelectorAll('#pano div');
+      for (let i = 0; i < allDivs.length; i++) {
+        const el = allDivs[i];
+        if (el.children.length === 0 && el.innerText && el.innerText.includes('development purposes')) {
+          el.style.setProperty('display', 'none', 'important');
+          if (el.parentElement) {
+            el.parentElement.style.setProperty('display', 'none', 'important');
+          }
+        }
+      }
+
+      // Auto-click dismiss button if Google creates any alert dialog
+      const btn = document.querySelector('.gm-err-content button, button.dismissButton, .gm-err-container button') ||
+                  Array.from(document.querySelectorAll('button')).find(function(el) { return el.textContent && el.textContent.trim() === 'OK'; });
+      if (btn) btn.click();
+    }, 200);
 
     window.gm_authFailure = function() {
       document.getElementById('status-title').innerText = 'Google Cloud Notice';
@@ -206,17 +438,6 @@ class _StreetViewModalState extends State<StreetViewModal> {
       document.getElementById('status-desc').innerText = 'Could not load Google Maps script. You can still open full 360° directly in Google Maps:';
       document.getElementById('status-banner').style.display = 'flex';
     }
-
-    // Auto-dismiss Google's dev warning dialog if it pops up
-    const dismissInterval = setInterval(function() {
-      const btn = document.querySelector('.gm-err-content button, button.dismissButton, .gm-err-container button') ||
-                  Array.from(document.querySelectorAll('button')).find(function(el) { return el.textContent && el.textContent.trim() === 'OK'; });
-      if (btn) {
-        btn.click();
-        clearInterval(dismissInterval);
-      }
-    }, 200);
-    setTimeout(function() { clearInterval(dismissInterval); }, 10000);
   </script>
   <script async defer src="https://maps.googleapis.com/maps/api/js?key=$apiKey&callback=initStreetView" onerror="handleScriptError()"></script>
 </body>

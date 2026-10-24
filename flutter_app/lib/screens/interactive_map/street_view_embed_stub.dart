@@ -1,3 +1,5 @@
+import 'package:flutter/foundation.dart';
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:webview_flutter/webview_flutter.dart';
@@ -156,7 +158,14 @@ class _MobileStreetViewEmbedState extends State<MobileStreetViewEmbed> {
     return Stack(
       children: [
         Positioned.fill(
-          child: WebViewWidget(controller: _controller),
+          child: WebViewWidget(
+            controller: _controller,
+            gestureRecognizers: <Factory<OneSequenceGestureRecognizer>>{
+              Factory<OneSequenceGestureRecognizer>(
+                () => EagerGestureRecognizer(),
+              ),
+            },
+          ),
         ),
         if (_isLoading)
           Container(
