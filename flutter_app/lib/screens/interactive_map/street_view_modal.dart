@@ -150,6 +150,12 @@ class _StreetViewModalState extends State<StreetViewModal> {
       border-radius: 10px;
       text-decoration: none;
     }
+    /* Suppress Google dev-mode warning popup overlay */
+    .gm-err-container, .gm-err-content {
+      display: none !important;
+      opacity: 0 !important;
+      pointer-events: none !important;
+    }
   </style>
 </head>
 <body>
@@ -200,6 +206,17 @@ class _StreetViewModalState extends State<StreetViewModal> {
       document.getElementById('status-desc').innerText = 'Could not load Google Maps script. You can still open full 360° directly in Google Maps:';
       document.getElementById('status-banner').style.display = 'flex';
     }
+
+    // Auto-dismiss Google's dev warning dialog if it pops up
+    const dismissInterval = setInterval(function() {
+      const btn = document.querySelector('.gm-err-content button, button.dismissButton, .gm-err-container button') ||
+                  Array.from(document.querySelectorAll('button')).find(function(el) { return el.textContent && el.textContent.trim() === 'OK'; });
+      if (btn) {
+        btn.click();
+        clearInterval(dismissInterval);
+      }
+    }, 200);
+    setTimeout(function() { clearInterval(dismissInterval); }, 10000);
   </script>
   <script async defer src="https://maps.googleapis.com/maps/api/js?key=$apiKey&callback=initStreetView" onerror="handleScriptError()"></script>
 </body>
