@@ -194,8 +194,14 @@ class _StreetViewModalState extends State<StreetViewModal> {
       document.getElementById('status-desc').innerText = 'This key requires a billing check on Google Cloud. You can still open full 360° directly in Google Maps for free:';
       document.getElementById('status-banner').style.display = 'flex';
     };
+
+    function handleScriptError() {
+      document.getElementById('status-title').innerText = 'Unable to Load Street View';
+      document.getElementById('status-desc').innerText = 'Could not load Google Maps script. You can still open full 360° directly in Google Maps:';
+      document.getElementById('status-banner').style.display = 'flex';
+    }
   </script>
-  <script async defer src="https://maps.googleapis.com/maps/api/js?key=$apiKey&callback=initStreetView"></script>
+  <script async defer src="https://maps.googleapis.com/maps/api/js?key=$apiKey&callback=initStreetView" onerror="handleScriptError()"></script>
 </body>
 </html>''';
   }
@@ -296,19 +302,39 @@ class _StreetViewModalState extends State<StreetViewModal> {
                                 ),
                               ],
                             ),
-                            IconButton(
-                              icon: const Icon(
-                                LucideIcons.x,
-                                size: 20,
-                                color: Color(0xFF5F6368),
-                              ),
-                              splashRadius: 20,
-                              padding: EdgeInsets.zero,
-                              constraints: const BoxConstraints(
-                                minWidth: 32,
-                                minHeight: 32,
-                              ),
-                              onPressed: () => Navigator.of(context).pop(),
+                            Row(
+                              children: [
+                                IconButton(
+                                  icon: const Icon(
+                                    LucideIcons.externalLink,
+                                    size: 18,
+                                    color: Color(0xFF1A73E8),
+                                  ),
+                                  tooltip: 'Open in Google Maps App',
+                                  splashRadius: 20,
+                                  padding: EdgeInsets.zero,
+                                  constraints: const BoxConstraints(
+                                    minWidth: 32,
+                                    minHeight: 32,
+                                  ),
+                                  onPressed: _openGoogleStreetView,
+                                ),
+                                const SizedBox(width: 4),
+                                IconButton(
+                                  icon: const Icon(
+                                    LucideIcons.x,
+                                    size: 20,
+                                    color: Color(0xFF5F6368),
+                                  ),
+                                  splashRadius: 20,
+                                  padding: EdgeInsets.zero,
+                                  constraints: const BoxConstraints(
+                                    minWidth: 32,
+                                    minHeight: 32,
+                                  ),
+                                  onPressed: () => Navigator.of(context).pop(),
+                                ),
+                              ],
                             ),
                           ],
                         ),
@@ -338,7 +364,12 @@ class _StreetViewModalState extends State<StreetViewModal> {
     final lng = widget.longitude;
     final html = _generateGoogleMapsStreetViewHtml(apiKey, lat, lng);
 
-    return buildInAppStreetViewIframe(html, isHtmlDoc: true);
+    return buildInAppStreetViewIframe(
+      html,
+      isHtmlDoc: true,
+      latitude: lat,
+      longitude: lng,
+    );
   }
 
   /// Fast 1-tap launcher card or API key configurator for in-app embedding
