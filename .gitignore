@@ -1,0 +1,15 @@
+# Node / Web
+web/node_modules/
+web/dist/
+web/.env.local
+
+# Builds
+UniSafe_App.apk
+*.log
+
+# Python
+__pycache__/
+*.pyc
+
+# Supabase
+supabase/.temp/

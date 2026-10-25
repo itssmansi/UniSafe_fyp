@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 
 import 'login_screen.dart';
 import 'signup_screen.dart';
-import 'authority_login_screen.dart';
 
 class AuthChoiceScreen extends StatelessWidget {
   const AuthChoiceScreen({super.key});
@@ -92,35 +91,11 @@ class AuthChoiceScreen extends StatelessWidget {
                     ),
                   ),
                 ),
-SizedBox(
-  height: 55,
-  child: OutlinedButton.icon(
-    onPressed: () {
-      Navigator.push(
-        context,
-        MaterialPageRoute(
-          builder: (_) => const AuthorityLoginScreen(),
-        ),
-      );
-    },
-    icon: const Icon(
-      Icons.admin_panel_settings,
-    ),
-    label: const Text(
-      'Authority Login',
-      style: TextStyle(
-        fontSize: 17,
-        fontWeight: FontWeight.bold,
-      ),
-    ),
-  ),
-),
-
 
                 const SizedBox(height: 30),
 
                 const Text(
-                  'Authentication',
+                  'Citizen Portal',
                   textAlign: TextAlign.center,
                   style: TextStyle(
                     color: Colors.grey,

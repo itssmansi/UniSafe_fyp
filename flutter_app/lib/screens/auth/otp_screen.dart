@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../services/auth_service.dart';
+import '../dashboard/citizen_dashboard_screen.dart';
 
 class OtpScreen extends StatefulWidget {
   final String phone;
@@ -72,17 +73,39 @@ class _OtpScreenState extends State<OtpScreen> {
       if (!mounted) return;
 
       if (result['success'] == true) {
+        // Automatically establish active session with newly verified credentials
+        try {
+          await _authService.loginWithPhone(
+            phone: widget.phone,
+            password: widget.password,
+          );
+        } catch (_) {
+          try {
+            await _authService.loginWithEmail(
+              email: widget.email,
+              password: widget.password,
+            );
+          } catch (_) {
+            // If direct auto-login fails, let the user log in
+          }
+        }
+
+        if (!mounted) return;
+
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
-            content: Text(
-              'OTP verified successfully!',
-            ),
+            content: Text('Account verified successfully! Welcome to UniSafe.'),
+            backgroundColor: Colors.green,
           ),
         );
 
-        // Account creation + dashboard navigation
-        // will be completed after the verify-otp
-        // Edge Function is created.
+        Navigator.pushAndRemoveUntil(
+          context,
+          MaterialPageRoute(
+            builder: (context) => const CitizenDashboardScreen(),
+          ),
+          (route) => false,
+        );
       } else {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
