@@ -134,6 +134,7 @@ class ReportModel {
 
     final map = <String, dynamic>{
       'id': id,
+      'title': title,
       'category': category.name,
       'description': combinedDescription,
       'latitude': location.latitude,

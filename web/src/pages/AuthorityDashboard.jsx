@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { supabase } from '../services/supabase';
 import { getAuthorityProfile, getComplaints, getNotifications, markNotificationRead } from '../services/authorityService';
 import AuthoritySidebar from '../components/authority/AuthoritySidebar';
@@ -140,7 +140,7 @@ export default function AuthorityDashboard() {
                 <h2 className="text-2xl font-bold tracking-tight text-unisafe-midnight-blue">My Assignments</h2>
                 <p className="text-sm text-unisafe-dark-midnight-blue/70">Complaints directly assigned to you.</p>
               </div>
-              <AuthorityComplaintTable complaints={complaints.filter(c => c.assigned_authority_id === authority?.id || !c.assigned_authority_id)} onRowClick={setSelectedComplaint} />
+              <AuthorityComplaintTable complaints={complaints.filter(c => c.assigned_authority_id === authority?.id)} onRowClick={setSelectedComplaint} />
             </div>
           )}
 

@@ -159,7 +159,7 @@ export default function App() {
     try {
       const { data: authRecord } = await supabase
         .from('authorities')
-        .select('id, name, department, designation')
+        .select('*')
         .or(`id.eq.${currentSession.user.id},auth_user_id.eq.${currentSession.user.id}`)
         .maybeSingle();
 

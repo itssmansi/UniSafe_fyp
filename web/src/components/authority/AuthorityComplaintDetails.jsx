@@ -1,12 +1,81 @@
 import React, { useState } from 'react';
 import { updateComplaintStatus } from '../../services/authorityService';
 
+const reverseGeocodeCache = new Map();
+let reverseGeocodeQueue = Promise.resolve();
+let lastReverseGeocodeAt = 0;
+
+function getNearbyAddress(latitude, longitude) {
+  const key = `${latitude.toFixed(6)},${longitude.toFixed(6)}`;
+  if (reverseGeocodeCache.has(key)) return reverseGeocodeCache.get(key);
+
+  const lookup = reverseGeocodeQueue.then(async () => {
+    const waitMs = Math.max(0, 1000 - (Date.now() - lastReverseGeocodeAt));
+    if (waitMs) await new Promise((resolve) => setTimeout(resolve, waitMs));
+    lastReverseGeocodeAt = Date.now();
+
+    const params = new URLSearchParams({
+      format: 'jsonv2',
+      addressdetails: '1',
+      zoom: '18',
+      lat: String(latitude),
+      lon: String(longitude),
+    });
+    const response = await fetch(`https://nominatim.openstreetmap.org/reverse?${params}`, {
+      headers: { 'Accept-Language': 'en' },
+    });
+    if (!response.ok) return '';
+
+    const result = await response.json();
+    const address = result.address || {};
+    const street = [address.house_number, address.road].filter(Boolean).join(' ');
+    const locality = address.neighbourhood || address.suburb || address.quarter || address.village;
+    const city = address.city || address.town || address.municipality || address.city_district;
+    const parts = [street || result.name, locality, city, address.state]
+      .filter((part, index, all) => part && all.indexOf(part) === index);
+    return parts.length ? parts.join(', ') : (result.display_name || '');
+  }).catch(() => '');
+
+  reverseGeocodeCache.set(key, lookup);
+  reverseGeocodeQueue = lookup.then(() => undefined);
+  return lookup.then((value) => {
+    if (!value) reverseGeocodeCache.delete(key);
+    return value;
+  });
+}
+
 export default function AuthorityComplaintDetails({ complaint, authority, onClose, onUpdate }) {
   const [updating, setUpdating] = useState(false);
+  const [nearbyAddress, setNearbyAddress] = useState({ key: '', value: '', loaded: false });
+  const latitude = Number(complaint?.latitude);
+  const longitude = Number(complaint?.longitude);
+  const hasLocation = Boolean(complaint) && complaint.latitude != null && complaint.longitude != null &&
+    Number.isFinite(latitude) && Number.isFinite(longitude) &&
+    latitude >= -90 && latitude <= 90 && longitude >= -180 && longitude <= 180;
+  const locationKey = hasLocation ? `${latitude.toFixed(6)},${longitude.toFixed(6)}` : '';
+  const resolvedNearbyAddress = nearbyAddress.key === locationKey ? nearbyAddress.value : '';
+  const addressLookupLoaded = nearbyAddress.key === locationKey && nearbyAddress.loaded;
+
+  React.useEffect(() => {
+    if (!complaint || !hasLocation || complaint.address) return undefined;
+    let active = true;
+    setNearbyAddress({ key: locationKey, value: '', loaded: false });
+    getNearbyAddress(latitude, longitude).then((value) => {
+      if (active) setNearbyAddress({ key: locationKey, value, loaded: true });
+    });
+    return () => { active = false; };
+  }, [complaint?.id, complaint?.address, hasLocation, latitude, longitude, locationKey]);
 
   if (!complaint) return null;
 
   const isCritical = complaint.upvote_count >= 10 || complaint.category?.toLowerCase().includes('assault') || complaint.category?.toLowerCase().includes('missing');
+  const locationLabel = complaint.address ||
+    (resolvedNearbyAddress ? `Near ${resolvedNearbyAddress}` :
+      hasLocation && !addressLookupLoaded ? 'Looking up nearby address…' :
+        hasLocation ? 'Pinned location' : 'Location unknown');
+  const mapUrl = hasLocation
+    ? `https://www.openstreetmap.org/?mlat=${latitude}&mlon=${longitude}#map=18/${latitude}/${longitude}`
+    : null;
 
   const handleStatusChange = async (newStatus) => {
     if (newStatus === complaint.status) return;
@@ -71,8 +140,23 @@ export default function AuthorityComplaintDetails({ complaint, authority, onClos
             <div className="flex items-start gap-3 bg-unisafe-smoke-white/20 p-4 rounded-xl border border-unisafe-smoke-white/50">
               <svg className="w-5 h-5 text-unisafe-teal shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" /><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" /></svg>
               <div>
-                <p className="text-unisafe-midnight-blue font-medium">{complaint.address || "Location unknown"}</p>
-                <p className="text-xs text-unisafe-dark-midnight-blue/50 mt-1">Lat: {complaint.latitude?.toFixed(4) || 'N/A'}, Lng: {complaint.longitude?.toFixed(4) || 'N/A'}</p>
+                <p className="text-unisafe-midnight-blue font-medium">{locationLabel}</p>
+                <p className="text-xs text-unisafe-dark-midnight-blue/60 mt-1 break-all">
+                  {hasLocation
+                    ? `Lat: ${latitude}, Lng: ${longitude}`
+                    : 'No coordinates were saved for this complaint.'}
+                </p>
+                {complaint.jurisdiction && (
+                  <p className="text-xs text-unisafe-dark-midnight-blue/60 mt-1">
+                    Assigned jurisdiction: {complaint.jurisdiction}
+                  </p>
+                )}
+                {mapUrl && (
+                  <a href={mapUrl} target="_blank" rel="noopener noreferrer"
+                    className="inline-block mt-2 text-xs font-semibold text-blue-600 hover:underline">
+                    Open pinned location in map
+                  </a>
+                )}
               </div>
             </div>
           </div>

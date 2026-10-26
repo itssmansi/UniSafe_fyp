@@ -1,5 +1,6 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:supabase_flutter/supabase_flutter.dart' show FileOptions;
 import '../../config/supabase_config.dart';
 import '../../services/notification_service.dart';
 import 'report_model.dart';
@@ -30,10 +31,7 @@ class InteractiveReportNotifier extends Notifier<List<ReportModel>> {
   }
 
   /// Adds a new report both in state and in the Supabase complaints table with citizen credentials.
-  Future<void> addReport(ReportModel report) async {
-    // 1. Snappy UI: Optimistically add to state immediately
-    state = [report, ...state.where((r) => r.id != report.id)];
-
+  Future<Map<String, dynamic>> addReport(ReportModel report) async {
     try {
       final supabase = SupabaseConfig.client;
       final authUser = supabase.auth.currentUser;
@@ -46,7 +44,7 @@ class InteractiveReportNotifier extends Notifier<List<ReportModel>> {
           final citizenRecord = await supabase
               .from('citizens')
               .select('id, name')
-              .eq('auth_user_id', authUser.id)
+              .or('auth_user_id.eq.${authUser.id},id.eq.${authUser.id}')
               .maybeSingle();
 
           if (citizenRecord != null) {
@@ -56,6 +54,10 @@ class InteractiveReportNotifier extends Notifier<List<ReportModel>> {
         } catch (e) {
           debugPrint('[InteractiveReportNotifier] Could not fetch citizen profile: $e');
         }
+      }
+
+      if (authUser == null || citizenId == null) {
+        throw Exception('Your citizen profile is not linked. Please sign in again.');
       }
 
       // 3. Attach citizen credentials to the report model
@@ -70,28 +72,61 @@ class InteractiveReportNotifier extends Notifier<List<ReportModel>> {
           if (r.id == report.id) enrichedReport else r,
       ];
 
-      // 4. Save to Supabase 'complaints' table
-      final payload = enrichedReport.toSupabase(reporterCitizenId: citizenId);
-      await supabase.from('complaints').insert(payload);
-
-      // 5. Notify citizen of successful complaint submission
-      await NotificationService.notifyComplaintSubmitted(
-        complaintId: enrichedReport.id,
-        title: enrichedReport.title,
-        citizenId: citizenId,
-      );
-
-      // 6. Safety threshold alert if density or recurring reports in safety category
-      final safetyCount = state.where((r) => r.category == IssueCategory.safety).length;
-      if (enrichedReport.category == IssueCategory.safety && safetyCount >= 3) {
-        await NotificationService.notifySafetyThresholdReached(
-          zoneType: 'Safety & Hazard',
-          reportCount: safetyCount,
-          citizenId: citizenId,
+      // Upload photos before submission so the server receives a usable URL.
+      var submissionReport = enrichedReport;
+      if (enrichedReport.imageBytes != null) {
+        final imagePath = '${authUser.id}/${enrichedReport.id}.jpg';
+        final storage = supabase.storage.from('complaint_images');
+        await storage.uploadBinary(
+          imagePath,
+          enrichedReport.imageBytes!,
+          fileOptions: FileOptions(contentType: 'image/jpeg'),
+        );
+        submissionReport = enrichedReport.copyWith(
+          imagePath: storage.getPublicUrl(imagePath),
         );
       }
+
+      // Route and save the complaint atomically through the Edge Function.
+      final payload = submissionReport.toSupabase(reporterCitizenId: citizenId);
+      final functionResponse = await supabase.functions.invoke(
+        'submit-complaint',
+        body: {
+          ...payload,
+          'address': submissionReport.address,
+          'image_url': submissionReport.imagePath,
+        },
+      );
+      final responseData = functionResponse.data;
+      if (responseData is! Map || responseData['complaint'] is! Map) {
+        throw Exception('The server did not confirm that this report was saved.');
+      }
+      final routedComplaint = Map<String, dynamic>.from(responseData['complaint'] as Map);
+
+      // Add the report to the local map only after the server confirms the save.
+      state = [submissionReport, ...state.where((r) => r.id != report.id)];
+
+      try {
+        await NotificationService.notifyComplaintSubmitted(
+          complaintId: enrichedReport.id,
+          title: enrichedReport.title,
+          citizenId: citizenId,
+        );
+        final safetyCount = state.where((r) => r.category == IssueCategory.safety).length;
+        if (enrichedReport.category == IssueCategory.safety && safetyCount >= 3) {
+          await NotificationService.notifySafetyThresholdReached(
+            zoneType: 'Safety & Hazard',
+            reportCount: safetyCount,
+            citizenId: citizenId,
+          );
+        }
+      } catch (notificationError) {
+        debugPrint('[InteractiveReportNotifier] Complaint saved but notification failed: $notificationError');
+      }
+      return routedComplaint;
     } catch (e) {
       debugPrint('[InteractiveReportNotifier] Error saving report to Supabase: $e');
+      rethrow;
     }
   }
 

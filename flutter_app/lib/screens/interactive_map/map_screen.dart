@@ -77,10 +77,10 @@ const Map<IssueCategory, CategoryStyle> kCategoryStyles = {
   ),
 };
 const Map<IssueCategory, List<String>> kSubcategories = {
-  IssueCategory.infrastructure: ['Nonfunctional street lights', 'Potholes', 'Water logging', 'Prolonged road work', 'Drainage', 'Other'],
-  IssueCategory.sanitation: ['Garbage scattered on the road', 'Public washrooms not clean', 'Garbage beach/river', 'Untimely garbage collection/overflowing', 'Other'],
-  IssueCategory.safety: ['Open manholes', 'Non existent footpath', 'Women safety', 'Illegal parking', 'Theft / Robbery', 'Harassment / Eve-Teasing', 'Assault / Violence', 'Poor Street Lighting', 'Fire Hazard', 'Electrical Hazard', 'Exposed Wires', 'Child Safety Concern', 'Stray Animal Threat', 'Other'],
-  IssueCategory.greenery: ['Waste Dumping in Green Area', 'Poor Landscape Maintenance', 'Watering Required for Plants', 'Encroachment on Green Spaces', 'Pest or Insect Infestation', 'Overgrown Vegetation', 'Need Tree Plantation', 'Illegal Tree Cutting', 'Public problems on greenery', 'Other'],
+  IssueCategory.infrastructure: ['Nonfunctional Street Lights', 'Potholes', 'Water Logging', 'Prolonged Road Work', 'Drainage', 'Other'],
+  IssueCategory.sanitation: ['Garbage Scattered on the Road', 'Public Washrooms Not Clean', 'Garbage at Beach/River', 'Untimely Garbage Collection/Overflowing', 'Other'],
+  IssueCategory.safety: ['Open Manholes', 'Non-Existent Footpath', 'Women Safety', 'Illegal Parking', 'Theft / Robbery', 'Harassment / Eve-Teasing', 'Assault / Violence', 'Poor Street Lighting', 'Fire Hazard', 'Electrical Hazard', 'Exposed Wires', 'Child Safety Concern', 'Stray Animal Threat', 'Missing Person', 'Other'],
+  IssueCategory.greenery: ['Waste Dumping in Green Area', 'Poor Landscape Maintenance', 'Watering Required for Plants', 'Encroachment on Green Spaces', 'Pest or Insect Infestation', 'Overgrown Vegetation', 'Need Tree Plantation', 'Illegal Tree Cutting', 'Public Problems on Greenery', 'Other'],
 };
 enum MapStyle {
   streets,
@@ -1210,32 +1210,44 @@ class _InteractiveMapScreenState extends ConsumerState<InteractiveMapScreen> {
             initialCategory: initialCategory ?? _selectedCategory ?? IssueCategory.infrastructure,
             initialImagePath: initialImagePath,
             initialImageBytes: initialImageBytes,
-            onSubmit: (report) {
-              ref.read(interactiveReportProvider.notifier).addReport(report);
-              setState(() {
-                _droppedLocation = null;
-                _selectedCategory = null;
-              });
-              Navigator.pop(context);
-              ScaffoldMessenger.of(context).showSnackBar(
-                SnackBar(
-                  backgroundColor: const Color(0xFF1E293B),
-                  behavior: SnackBarBehavior.floating,
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                  content: Row(
-                    children: [
-                      const Icon(LucideIcons.circleCheck, color: Color(0xFF10B981), size: 20),
-                      const SizedBox(width: 10),
-                      Expanded(
-                        child: Text(
-                          'Report "${report.title}" submitted successfully!',
-                          style: const TextStyle(fontWeight: FontWeight.w600),
-                        ),
-                      ),
-                    ],
+            onSubmit: (report) async {
+              try {
+                final routing = await ref.read(interactiveReportProvider.notifier).addReport(report);
+                final assigned = routing['assignment_status'] == 'assigned';
+                final destination = routing['jurisdiction']?.toString();
+                final message = assigned
+                    ? 'Report submitted and assigned to ${destination ?? 'the responsible ward'}.'
+                    : 'Report saved for manual review (${routing['assignment_reason'] ?? 'ward could not be confirmed'}).';
+                if (!context.mounted) return;
+                setState(() {
+                  _droppedLocation = null;
+                  _selectedCategory = null;
+                });
+                Navigator.pop(context);
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(
+                    backgroundColor: const Color(0xFF1E293B),
+                    behavior: SnackBarBehavior.floating,
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                    content: Row(
+                      children: [
+                        Icon(assigned ? LucideIcons.circleCheck : LucideIcons.circleAlert,
+                            color: assigned ? const Color(0xFF10B981) : const Color(0xFFF59E0B), size: 20),
+                        const SizedBox(width: 10),
+                        Expanded(child: Text(message, style: const TextStyle(fontWeight: FontWeight.w600))),
+                      ],
+                    ),
                   ),
-                ),
-              );
+                );
+              } catch (error) {
+                if (!context.mounted) return;
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(
+                    backgroundColor: Colors.red.shade700,
+                    content: Text('Report was not submitted: $error'),
+                  ),
+                );
+              }
             },
             onCancel: () {
               Navigator.pop(context);
@@ -3998,7 +4010,7 @@ class ReportFormWidget extends StatefulWidget {
   final IssueCategory initialCategory;
   final String? initialImagePath;
   final Uint8List? initialImageBytes;
-  final Function(ReportModel) onSubmit;
+  final Future<void> Function(ReportModel) onSubmit;
   final VoidCallback onCancel;
 
   const ReportFormWidget({
@@ -4018,6 +4030,7 @@ class ReportFormWidget extends StatefulWidget {
 class _ReportFormWidgetState extends State<ReportFormWidget> {
   final _customTitleController = TextEditingController();
   final _descController = TextEditingController();
+  bool _isSubmitting = false;
   late IssueCategory _category;
   String? _selectedSubcategory;
   String? _imagePath;
@@ -4028,7 +4041,9 @@ class _ReportFormWidgetState extends State<ReportFormWidget> {
   bool get _isValid {
     if (_selectedSubcategory == null) return false;
     if (_selectedSubcategory == 'Other' && _customTitleController.text.trim().isEmpty) return false;
-    return _descController.text.trim().isNotEmpty;
+    if (_descController.text.trim().isEmpty) return false;
+    if (_selectedSubcategory == 'Missing Person' && (_imageBytes == null || _imageBytes!.isEmpty)) return false;
+    return true;
   }
 
   @override
@@ -4501,7 +4516,7 @@ class _ReportFormWidgetState extends State<ReportFormWidget> {
               icon: _isProcessingImage
                   ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2))
                   : const Icon(LucideIcons.camera, size: 20, color: Color(0xFF2563EB)),
-              label: const Text('Add Photo (Optional)', style: TextStyle(fontSize: 15, fontWeight: FontWeight.w600, color: Color(0xFF2563EB))),
+              label: Text(_selectedSubcategory == 'Missing Person' ? 'Add Photo (Required)' : 'Add Photo (Optional)', style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w600, color: Color(0xFF2563EB))),
               style: OutlinedButton.styleFrom(
                 padding: const EdgeInsets.symmetric(vertical: 16),
                 shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
@@ -4528,8 +4543,8 @@ class _ReportFormWidgetState extends State<ReportFormWidget> {
               Expanded(
                 flex: 2,
                 child: ElevatedButton(
-                  onPressed: _isValid
-                      ? () {
+                  onPressed: _isValid && !_isSubmitting
+                      ? () async {
                           final report = ReportModel(
                             location: widget.location,
                             category: _category,
@@ -4538,7 +4553,12 @@ class _ReportFormWidgetState extends State<ReportFormWidget> {
                             imagePath: _imagePath,
                             imageBytes: _imageBytes,
                           );
-                          widget.onSubmit(report);
+                          setState(() => _isSubmitting = true);
+                          try {
+                            await widget.onSubmit(report);
+                          } finally {
+                            if (mounted) setState(() => _isSubmitting = false);
+                          }
                         }
                       : null,
                   style: ElevatedButton.styleFrom(
@@ -4550,7 +4570,9 @@ class _ReportFormWidgetState extends State<ReportFormWidget> {
                     elevation: 6,
                     shadowColor: const Color(0xFF2563EB).withOpacity(0.5),
                   ),
-                  child: const Text('Submit Report', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700)),
+                  child: _isSubmitting
+                      ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+                      : const Text('Submit Report', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700)),
                 ),
               ),
             ],
