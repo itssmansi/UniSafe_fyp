@@ -281,28 +281,35 @@ class _StreetViewModalState extends State<StreetViewModal> {
                         ),
                         const SizedBox(height: 6),
                         Row(
-                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
                           children: [
-                            Row(
-                              children: [
-                                const Icon(
-                                  LucideIcons.compass,
-                                  size: 18,
-                                  color: Color(0xFF1A73E8),
-                                ),
-                                const SizedBox(width: 8),
-                                Text(
-                                  widget.title ?? '360° Street View',
-                                  style: const TextStyle(
-                                    fontSize: 15,
-                                    fontWeight: FontWeight.w700,
-                                    color: Color(0xFF202124),
-                                    letterSpacing: -0.2,
+                            Expanded(
+                              child: Row(
+                                children: [
+                                  const Icon(
+                                    LucideIcons.compass,
+                                    size: 18,
+                                    color: Color(0xFF1A73E8),
                                   ),
-                                ),
-                              ],
+                                  const SizedBox(width: 8),
+                                  Expanded(
+                                    child: Text(
+                                      widget.title ?? '360° Street View',
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
+                                      style: const TextStyle(
+                                        fontSize: 15,
+                                        fontWeight: FontWeight.w700,
+                                        color: Color(0xFF202124),
+                                        letterSpacing: -0.2,
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                              ),
                             ),
+                            const SizedBox(width: 8),
                             Row(
+                              mainAxisSize: MainAxisSize.min,
                               children: [
                                 IconButton(
                                   icon: const Icon(

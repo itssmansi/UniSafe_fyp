@@ -14,6 +14,7 @@ import 'widgets/auth_slide_route.dart';
 import 'login_screen.dart';
 import 'services/digilocker_service.dart';
 import 'services/url_opener.dart';
+import '../../services/account_preferences.dart';
 
 class CitizenSignupScreen extends StatefulWidget {
   const CitizenSignupScreen({super.key});
@@ -52,10 +53,6 @@ class _CitizenSignupScreenState extends State<CitizenSignupScreen> {
 
   // Step 4 (Aadhaar & DigiLocker KYC)
   final TextEditingController _aadhaarNumberController = TextEditingController();
-  final TextEditingController _aadhaarOtpController = TextEditingController();
-  bool _isAadhaarOtpSent = false;
-  int _aadhaarOtpTimerSeconds = 30;
-  Timer? _aadhaarOtpTimer;
   bool _isDigiLockerVerifying = false;
   bool _isDigiLockerVerified = false;
   String? _digiLockerSessionId;
@@ -63,7 +60,6 @@ class _CitizenSignupScreenState extends State<CitizenSignupScreen> {
   String? _verifiedAadhaarName;
   String? _verifiedAadhaarMasked;
   Timer? _digiLockerPollTimer;
-  bool _showManualAadhaarFallback = false;
 
   @override
   void dispose() {
@@ -78,10 +74,8 @@ class _CitizenSignupScreenState extends State<CitizenSignupScreen> {
     _emailOtpController.dispose();
     _phoneOtpController.dispose();
     _aadhaarNumberController.dispose();
-    _aadhaarOtpController.dispose();
     _emailOtpTimer?.cancel();
     _phoneOtpTimer?.cancel();
-    _aadhaarOtpTimer?.cancel();
     super.dispose();
   }
 
@@ -121,18 +115,6 @@ class _CitizenSignupScreenState extends State<CitizenSignupScreen> {
     });
   }
 
-  void _startAadhaarOtpTimer() {
-    _aadhaarOtpTimer?.cancel();
-    setState(() => _aadhaarOtpTimerSeconds = 30);
-    _aadhaarOtpTimer = Timer.periodic(const Duration(seconds: 1), (timer) {
-      if (_aadhaarOtpTimerSeconds <= 1) {
-        timer.cancel();
-        setState(() => _aadhaarOtpTimerSeconds = 0);
-      } else {
-        setState(() => _aadhaarOtpTimerSeconds--);
-      }
-    });
-  }
 
   // --- Step 1 Actions ---
   void _submitStep1() async {
@@ -439,6 +421,10 @@ class _CitizenSignupScreenState extends State<CitizenSignupScreen> {
         final profile = docRes['profile'] as Map;
         name = profile['name']?.toString() ?? profile['user_name']?.toString() ?? name;
         masked = profile['aadhaar_number']?.toString() ?? profile['masked_aadhaar']?.toString() ?? masked;
+        final photoBase64 = profile['photo']?.toString() ?? profile['image']?.toString() ?? profile['user_photo']?.toString();
+        if (photoBase64 != null && photoBase64.isNotEmpty) {
+          await AccountPreferences.instance.setCitizenAadhaarPhoto(photoBase64);
+        }
       }
 
       setState(() {
@@ -470,59 +456,11 @@ class _CitizenSignupScreenState extends State<CitizenSignupScreen> {
     }
   }
 
-  void _sendAadhaarOtp() async {
-    FocusScope.of(context).unfocus();
-    final rawNumber = _aadhaarNumberController.text.replaceAll(' ', '').trim();
-    if (rawNumber.length != 12) {
-      setState(() => _errorMessage = 'Please enter a valid 12-digit Aadhaar number.');
-      return;
-    }
-
-    setState(() {
-      _isLoading = true;
-      _errorMessage = null;
-    });
-
-    try {
-      final response = await SupabaseConfig.client.functions.invoke(
-        'send-aadhar-otp',
-        body: {'aadhaar': rawNumber},
-      );
-
-      if (!mounted) return;
-
-      if (response.data is Map && response.data['success'] == true) {
-        setState(() {
-          _isLoading = false;
-          _isAadhaarOtpSent = true;
-          _aadhaarOtpController.clear();
-        });
-        _startAadhaarOtpTimer();
-        _showToast('UIDAI verification code sent to Aadhaar-linked mobile');
-      } else {
-        setState(() {
-          _isLoading = false;
-          _errorMessage = response.data?['message']?.toString() ?? 'Failed to send Aadhaar OTP.';
-        });
-      }
-    } catch (e) {
-      if (!mounted) return;
-      final err = e.toString().toLowerCase();
-      final userFriendly = (err.contains('not found') || err.contains('404'))
-          ? 'Aadhaar not found in test records. Use DigiLocker for genuine verification.'
-          : 'Could not request Aadhaar OTP: $e';
-      setState(() {
-        _isLoading = false;
-        _errorMessage = userFriendly;
-      });
-    }
-  }
-
   void _completeRegistration() async {
     FocusScope.of(context).unfocus();
 
-    if (!_isDigiLockerVerified && !_isAadhaarOtpSent && !_showManualAadhaarFallback) {
-      setState(() => _errorMessage = 'Please complete DigiLocker verification first.');
+    if (!_isDigiLockerVerified) {
+      setState(() => _errorMessage = 'Please complete DigiLocker Aadhaar verification first.');
       return;
     }
 
@@ -532,28 +470,6 @@ class _CitizenSignupScreenState extends State<CitizenSignupScreen> {
     });
 
     try {
-      if (_showManualAadhaarFallback && _isAadhaarOtpSent) {
-        final aadhaarOtp = _aadhaarOtpController.text.trim();
-        final rawAadhaar = _aadhaarNumberController.text.replaceAll(' ', '').trim();
-        final aadharRes = await SupabaseConfig.client.functions.invoke(
-          'verify-aadhaar-otp',
-          body: {
-            'aadhaar': rawAadhaar,
-            'otp': aadhaarOtp,
-          },
-        );
-
-        if (!mounted) return;
-
-        if (aadharRes.data is! Map || aadharRes.data['success'] != true) {
-          setState(() {
-            _isLoading = false;
-            _errorMessage = aadharRes.data?['message']?.toString() ?? 'Invalid Aadhaar OTP.';
-          });
-          return;
-        }
-      }
-
       final rawAadhaar = _verifiedAadhaarMasked ??
           (_aadhaarNumberController.text.isNotEmpty
               ? _aadhaarNumberController.text.replaceAll(' ', '').trim()
@@ -663,11 +579,7 @@ class _CitizenSignupScreenState extends State<CitizenSignupScreen> {
     if (_currentStep > 0) {
       setState(() {
         _errorMessage = null;
-        if (_currentStep == 3 && _isAadhaarOtpSent) {
-          _isAadhaarOtpSent = false;
-        } else {
-          _currentStep--;
-        }
+        _currentStep--;
       });
     }
   }
@@ -1560,133 +1472,6 @@ class _CitizenSignupScreenState extends State<CitizenSignupScreen> {
           ),
         ]
 
-        // ================= MANUAL FALLBACK MODE =================
-        else if (_showManualAadhaarFallback) ...[
-          if (!_isAadhaarOtpSent) ...[
-            Padding(
-              padding: const EdgeInsets.only(left: 24, right: 24, bottom: 16),
-              child: Container(
-                padding: const EdgeInsets.all(12),
-                decoration: BoxDecoration(
-                  color: const Color(0xFFFFFBEB),
-                  borderRadius: BorderRadius.circular(10),
-                  border: Border.all(color: const Color(0xFFFDE68A)),
-                ),
-                child: Row(
-                  children: const [
-                    Icon(Icons.info_outline_rounded, color: Color(0xFFD97706), size: 18),
-                    SizedBox(width: 8),
-                    Expanded(
-                      child: Text(
-                        'Offline Test Mode: This manual form only validates mock test numbers. For your real Aadhaar, use DigiLocker.',
-                        style: TextStyle(fontSize: 11.5, color: Color(0xFF92400E)),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ),
-            RoundedInputField(
-              controller: _aadhaarNumberController,
-              labelText: 'Aadhaar Number',
-              hintText: 'XXXX XXXX XXXX (12 digits)',
-              keyboardType: TextInputType.number,
-              maxLength: 14,
-              inputFormatters: [
-                FilteringTextInputFormatter.digitsOnly,
-                _AadhaarNumberFormatter(),
-              ],
-              validator: (value) {
-                final raw = (value ?? '').replaceAll(' ', '');
-                if (raw.length != 12) {
-                  return 'Please enter a 12-digit Aadhaar number';
-                }
-                return null;
-              },
-            ),
-            const SizedBox(height: 24),
-            CustomFormButton(
-              innerText: 'Send Aadhaar OTP',
-              onPressed: _sendAadhaarOtp,
-              isLoading: _isLoading,
-            ),
-            const SizedBox(height: 16),
-            TextButton(
-              onPressed: () => setState(() {
-                _showManualAadhaarFallback = false;
-                _errorMessage = null;
-              }),
-              child: const Text('← Back to DigiLocker Real Verification', style: TextStyle(color: Color(0xFF0284C7), fontWeight: FontWeight.w600)),
-            ),
-          ] else ...[
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 24),
-              child: Container(
-                width: double.infinity,
-                padding: const EdgeInsets.all(12),
-                decoration: BoxDecoration(
-                  color: const Color(0xFFF8FAFC),
-                  borderRadius: BorderRadius.circular(12),
-                  border: Border.all(color: const Color(0xFFE2E8F0)),
-                ),
-                child: Row(
-                  children: [
-                    const Icon(Icons.fingerprint_rounded, color: Color(0xFF0B3B68), size: 22),
-                    const SizedBox(width: 10),
-                    Expanded(
-                      child: Text(
-                        'Aadhaar: •••• •••• ${_aadhaarNumberController.text.trim().split(' ').last}',
-                        style: const TextStyle(
-                          fontSize: 13.5,
-                          fontWeight: FontWeight.bold,
-                          color: Color(0xFF0B3B68),
-                        ),
-                      ),
-                    ),
-                    GestureDetector(
-                      onTap: () => setState(() => _isAadhaarOtpSent = false),
-                      child: const Text('Change', style: TextStyle(fontSize: 12, color: Color(0xFF0B3B68), fontWeight: FontWeight.bold)),
-                    ),
-                  ],
-                ),
-              ),
-            ),
-            const SizedBox(height: 20),
-            OtpBoxInput(
-              controller: _aadhaarOtpController,
-              onChanged: (code) {
-                if (_errorMessage != null) setState(() => _errorMessage = null);
-              },
-              onCompleted: (_) => _completeRegistration(),
-            ),
-            const SizedBox(height: 18),
-            Row(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                const Text("Didn't receive UIDAI code? ", style: TextStyle(fontSize: 13, color: Color(0xFF94A3B8))),
-                if (_aadhaarOtpTimerSeconds > 0)
-                  Text('Resend in 00:${_aadhaarOtpTimerSeconds.toString().padLeft(2, '0')}', style: const TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: Color(0xFF0B3B68)))
-                else
-                  GestureDetector(
-                    onTap: _sendAadhaarOtp,
-                    child: const Text('Resend OTP', style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: Color(0xFF0B3B68), decoration: TextDecoration.underline)),
-                  ),
-              ],
-            ),
-            const SizedBox(height: 28),
-            CustomFormButton(
-              innerText: 'Verify & Complete Registration',
-              onPressed: _completeRegistration,
-              isLoading: _isLoading,
-            ),
-            const SizedBox(height: 16),
-            TextButton(
-              onPressed: () => setState(() => _isAadhaarOtpSent = false),
-              child: const Text('← Back to Aadhaar Number', style: TextStyle(color: Color(0xFF94A3B8), fontWeight: FontWeight.w600)),
-            ),
-          ],
-        ]
-
         // ================= DEFAULT DIGILOCKER LANDING STATE =================
         else ...[
           Padding(
@@ -1755,23 +1540,6 @@ class _CitizenSignupScreenState extends State<CitizenSignupScreen> {
             isLoading: _isDigiLockerVerifying,
           ),
           const SizedBox(height: 14),
-
-          // Secondary Fallback Option
-          TextButton(
-            onPressed: () => setState(() {
-              _showManualAadhaarFallback = true;
-              _errorMessage = null;
-            }),
-            child: const Text(
-              'Or enter Aadhaar number manually (Offline Mock DB)',
-              style: TextStyle(
-                fontSize: 12.5,
-                color: Color(0xFF64748B),
-                fontWeight: FontWeight.w600,
-                decoration: TextDecoration.underline,
-              ),
-            ),
-          ),
           const SizedBox(height: 6),
           TextButton(
             onPressed: () => setState(() => _currentStep = 2),
@@ -1801,29 +1569,6 @@ class _CitizenSignupScreenState extends State<CitizenSignupScreen> {
           ),
         ),
       ],
-    );
-  }
-}
-
-/// Custom formatter for Aadhaar: formats raw 12 digits into 'XXXX XXXX XXXX'
-class _AadhaarNumberFormatter extends TextInputFormatter {
-  @override
-  TextEditingValue formatEditUpdate(
-    TextEditingValue oldValue,
-    TextEditingValue newValue,
-  ) {
-    final text = newValue.text.replaceAll(' ', '');
-    final buffer = StringBuffer();
-    for (int i = 0; i < text.length; i++) {
-      if (i > 0 && i % 4 == 0) {
-        buffer.write(' ');
-      }
-      buffer.write(text[i]);
-    }
-    final formatted = buffer.toString();
-    return TextEditingValue(
-      text: formatted,
-      selection: TextSelection.collapsed(offset: formatted.length),
     );
   }
 }

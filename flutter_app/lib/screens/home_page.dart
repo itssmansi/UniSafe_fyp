@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:math' as math;
 import 'dart:ui';
@@ -13,11 +14,16 @@ import 'interactive_map/report_model.dart';
 import 'interactive_map/report_provider.dart';
 import 'interactive_map/street_view_modal.dart';
 import 'kanban_board_ui/kanban_board_screen.dart';
+import 'instant_capture/instant_camera_screen.dart';
+import 'instant_capture/instant_gallery_screen.dart';
+import '../services/instant_capture_service.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../config/supabase_config.dart';
 import '../services/account_preferences.dart';
 import '../services/device_service.dart';
 import '../theme/unisafe_theme.dart';
+import 'SignupLogin_ui/services/digilocker_service.dart';
+import 'SignupLogin_ui/services/url_opener.dart';
 
 class HomePage extends ConsumerStatefulWidget {
   const HomePage({super.key});
@@ -28,6 +34,8 @@ class HomePage extends ConsumerStatefulWidget {
 
 class _HomePageState extends ConsumerState<HomePage> {
   int _currentIndex = 0;
+  bool _isGallerySelectionMode = false;
+  late final PageController _pageController;
   String _selectedInboxFilter = 'All';
 
   User? _currentUser;
@@ -39,12 +47,41 @@ class _HomePageState extends ConsumerState<HomePage> {
   @override
   void initState() {
     super.initState();
+    _pageController = PageController(initialPage: _currentIndex);
     _checkAuthAndLoadProfile();
     _determineUserLocation();
     _loadMyDeviceReportIds();
     AccountPreferences.instance.load().then((_) {
       if (mounted) setState(() {});
     });
+  }
+
+  @override
+  void dispose() {
+    _pageController.dispose();
+    super.dispose();
+  }
+
+  void _switchTab(int index) {
+    if (_currentIndex == index) return;
+    final int oldIndex = _currentIndex;
+    setState(() => _currentIndex = index);
+
+    if (_pageController.hasClients) {
+      final int diff = (index - oldIndex).abs();
+      if (diff > 1) {
+        // Direct jump between non-adjacent pages (e.g. Home <-> Account):
+        // Instant switch with no right/left animation
+        _pageController.jumpToPage(index);
+      } else {
+        // Smooth directional slide for adjacent pages (Home <-> Inbox, Inbox <-> Account)
+        _pageController.animateToPage(
+          index,
+          duration: const Duration(milliseconds: 280),
+          curve: Curves.easeOutCubic,
+        );
+      }
+    }
   }
 
   Future<void> _loadMyDeviceReportIds() async {
@@ -292,32 +329,51 @@ class _HomePageState extends ConsumerState<HomePage> {
         backgroundColor: Colors.white,
         body: Stack(
           children: [
-            // Active Tab Content
-            AnimatedSwitcher(
-              duration: const Duration(milliseconds: 360),
-              switchInCurve: Curves.easeOutCubic,
-              switchOutCurve: Curves.easeInCubic,
-              transitionBuilder: (child, animation) => FadeTransition(
-                opacity: animation,
-                child: SlideTransition(
-                  position: Tween<Offset>(begin: const Offset(0.018, 0), end: Offset.zero).animate(animation),
-                  child: child,
+            // Active Tab Content (Swipeable & Animated Directionally like Instagram)
+            PageView(
+              controller: _pageController,
+              onPageChanged: (index) {
+                if (_currentIndex != index) {
+                  setState(() {
+                    _currentIndex = index;
+                    if (index != 2) {
+                      _isGallerySelectionMode = false;
+                    }
+                  });
+                }
+              },
+              children: [
+                _KeepAliveWrapper(child: _buildHomeTab()),
+                _KeepAliveWrapper(child: _buildInboxTab()),
+                _KeepAliveWrapper(
+                  child: InstantGalleryScreen(
+                    isTab: true,
+                    onSelectionModeChanged: (isSelecting) {
+                      if (mounted) setState(() => _isGallerySelectionMode = isSelecting);
+                    },
+                  ),
                 ),
-              ),
-              child: KeyedSubtree(
-                key: ValueKey(_currentIndex),
-                child: [_buildHomeTab(), _buildInboxTab(), _buildAccountTab()][_currentIndex],
-              ),
+                _KeepAliveWrapper(child: _buildAccountTab()),
+              ],
             ),
 
             // Linear-Style Floating Bottom Navigation Dock
-            Positioned(
+            AnimatedPositioned(
+              duration: const Duration(milliseconds: 240),
+              curve: Curves.easeOutCubic,
               left: 0,
               right: 0,
-              bottom: 24,
-              child: Align(
-                alignment: Alignment.bottomCenter,
-                child: _buildLinearFloatingDock(),
+              bottom: (_currentIndex == 2 && _isGallerySelectionMode) ? -120 : 24,
+              child: AnimatedOpacity(
+                duration: const Duration(milliseconds: 200),
+                opacity: (_currentIndex == 2 && _isGallerySelectionMode) ? 0.0 : 1.0,
+                child: IgnorePointer(
+                  ignoring: _currentIndex == 2 && _isGallerySelectionMode,
+                  child: Align(
+                    alignment: Alignment.bottomCenter,
+                    child: _buildLinearFloatingDock(),
+                  ),
+                ),
               ),
             ),
           ],
@@ -332,9 +388,7 @@ class _HomePageState extends ConsumerState<HomePage> {
   Widget _buildLinearFloatingDock() {
     return _LinearDraggableDock(
       currentIndex: _currentIndex,
-      onTabSelected: (index) {
-        setState(() => _currentIndex = index);
-      },
+      onTabSelected: _switchTab,
     );
   }
 
@@ -349,23 +403,54 @@ class _HomePageState extends ConsumerState<HomePage> {
       backgroundColor: UniSafeColors.canvas,
       body: SafeArea(
         bottom: false,
-        child: ListView(
-          padding: const EdgeInsets.fromLTRB(20, 16, 20, 130),
-          children: [
-            // 1. Native Header (Greeting)
-            EntranceReveal(child: _buildHeader()),
-            const SizedBox(height: 18),
+        child: GestureDetector(
+          onHorizontalDragEnd: (details) {
+            // Drag left-to-right (swipe right)
+            if (details.primaryVelocity != null && details.primaryVelocity! > 250) {
+              _openInstantCamera();
+            }
+          },
+          child: ListView(
+            padding: const EdgeInsets.fromLTRB(20, 16, 20, 130),
+            children: [
+              // 1. Native Header (Greeting)
+              EntranceReveal(child: _buildHeader()),
+              const SizedBox(height: 18),
 
-            // 2. Civic & Safety Bento Grid
-            EntranceReveal(child: _buildCivicActions()),
-            const SizedBox(height: 26),
+              // 2. Civic & Safety Bento Grid
+              EntranceReveal(child: _buildCivicActions()),
+              const SizedBox(height: 26),
 
-            // 3. Neighborhood Safety Feed (Realistic, Beautiful Civic Activity Stream)
-            EntranceReveal(child: _buildNeighborhoodFeed()),
-          ],
+              // 3. Neighborhood Safety Feed (Realistic, Beautiful Civic Activity Stream)
+              EntranceReveal(child: _buildNeighborhoodFeed()),
+            ],
+          ),
         ),
       ),
     );
+  }
+
+  void _openInstantCamera() {
+    Navigator.of(context).push(
+      PageRouteBuilder(
+        pageBuilder: (context, animation, secondaryAnimation) => const InstantCameraScreen(),
+        transitionsBuilder: (context, animation, secondaryAnimation, child) {
+          final tween = Tween<Offset>(begin: const Offset(-1.0, 0.0), end: Offset.zero)
+              .chain(CurveTween(curve: Curves.easeOutCubic));
+          return SlideTransition(position: animation.drive(tween), child: child);
+        },
+      ),
+    ).then((_) {
+      if (mounted) setState(() {});
+    });
+  }
+
+  void _openInstantGallery() {
+    Navigator.of(context).push(
+      MaterialPageRoute(builder: (context) => const InstantGalleryScreen()),
+    ).then((_) {
+      if (mounted) setState(() {});
+    });
   }
 
   String _greetingTime() {
@@ -607,7 +692,7 @@ class _HomePageState extends ConsumerState<HomePage> {
                   ),
                 ),
                 Padding(
-                  padding: const EdgeInsets.all(14),
+                  padding: const EdgeInsets.fromLTRB(12, 12, 12, 12),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
@@ -658,9 +743,9 @@ class _HomePageState extends ConsumerState<HomePage> {
                                   badgeText,
                                   style: TextStyle(
                                     color: accentColor,
-                                    fontSize: 9,
+                                    fontSize: 8.5,
                                     fontWeight: FontWeight.w700,
-                                    letterSpacing: 0.4,
+                                    letterSpacing: 0.3,
                                   ),
                                 ),
                               ],
@@ -671,14 +756,18 @@ class _HomePageState extends ConsumerState<HomePage> {
                       const Spacer(),
 
                       // Title & Subtitle
-                      Text(
-                        title,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(
-                          color: Color(0xFF0F172A),
-                          fontSize: 14.5,
-                          fontWeight: FontWeight.w700,
+                      FittedBox(
+                        fit: BoxFit.scaleDown,
+                        alignment: Alignment.centerLeft,
+                        child: Text(
+                          title,
+                          maxLines: 1,
+                          style: const TextStyle(
+                            color: Color(0xFF0F172A),
+                            fontSize: 13.5,
+                            fontWeight: FontWeight.w700,
+                            letterSpacing: -0.2,
+                          ),
                         ),
                       ),
                       const SizedBox(height: 2),
@@ -688,8 +777,8 @@ class _HomePageState extends ConsumerState<HomePage> {
                         overflow: TextOverflow.ellipsis,
                         style: const TextStyle(
                           color: Color(0xFF64748B),
-                          fontSize: 11,
-                          height: 1.25,
+                          fontSize: 10.5,
+                          height: 1.22,
                         ),
                       ),
                       const SizedBox(height: 8),
@@ -750,25 +839,25 @@ class _HomePageState extends ConsumerState<HomePage> {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Row(
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
-            const Row(
-              children: [
-                Icon(LucideIcons.radio, size: 14, color: Color(0xFF2563EB)),
-                SizedBox(width: 7),
-                Text(
-                  'NEIGHBORHOOD ACTIVITY',
-                  style: TextStyle(
-                    color: Color(0xFF6B7280),
-                    fontSize: 11,
-                    fontWeight: FontWeight.w700,
-                    letterSpacing: 0.8,
-                  ),
+            const Icon(LucideIcons.radio, size: 14, color: Color(0xFF2563EB)),
+            const SizedBox(width: 7),
+            const Expanded(
+              child: Text(
+                'NEIGHBORHOOD ACTIVITY',
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(
+                  color: Color(0xFF6B7280),
+                  fontSize: 11,
+                  fontWeight: FontWeight.w700,
+                  letterSpacing: 0.8,
                 ),
-              ],
+              ),
             ),
+            const SizedBox(width: 8),
             Container(
-              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3.5),
+              padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
               decoration: BoxDecoration(
                 color: const Color(0xFFEFF6FF),
                 borderRadius: BorderRadius.circular(8),
@@ -778,7 +867,7 @@ class _HomePageState extends ConsumerState<HomePage> {
                 'Within 3 km • ${reportsWithin3Km.length} active',
                 style: const TextStyle(
                   color: Color(0xFF1D4ED8),
-                  fontSize: 10.5,
+                  fontSize: 10,
                   fontWeight: FontWeight.w700,
                 ),
               ),
@@ -2375,17 +2464,57 @@ class _HomePageState extends ConsumerState<HomePage> {
                       ),
                     ),
                     const SizedBox(height: 3),
-                    Text(
-                      _displayEmailOrPhone,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(
-                        color: Color(0xFF71717A),
-                        fontSize: 12.5,
+                    FittedBox(
+                      fit: BoxFit.scaleDown,
+                      alignment: Alignment.centerLeft,
+                      child: Text(
+                        _displayEmailOrPhone,
+                        maxLines: 1,
+                        style: const TextStyle(
+                          color: Color(0xFF71717A),
+                          fontSize: 12.5,
+                        ),
                       ),
                     ),
                     const SizedBox(height: 10),
-                    _buildAccountStatusPill(verified),
+                    Wrap(
+                      spacing: 8,
+                      runSpacing: 6,
+                      crossAxisAlignment: WrapCrossAlignment.center,
+                      children: [
+                        _buildAccountStatusPill(verified),
+                        InkWell(
+                          onTap: _showDigiLockerSyncModal,
+                          borderRadius: BorderRadius.circular(999),
+                          child: Container(
+                            padding: const EdgeInsets.fromLTRB(9, 4, 10, 4),
+                            decoration: BoxDecoration(
+                              color: const Color(0xFFEFF6FF),
+                              borderRadius: BorderRadius.circular(999),
+                              border: Border.all(color: const Color(0xFFBFDBFE), width: 1),
+                            ),
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                const Icon(LucideIcons.camera, size: 12, color: Color(0xFF2563EB)),
+                                const SizedBox(width: 5),
+                                Text(
+                                  AccountPreferences.instance.citizenAadhaarPhoto != null
+                                      ? 'Update Photo'
+                                      : 'Sync Photo',
+                                  style: const TextStyle(
+                                    color: Color(0xFF1D4ED8),
+                                    fontSize: 10,
+                                    fontWeight: FontWeight.w800,
+                                    letterSpacing: 0.3,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
                   ],
                 ),
               ),
@@ -2411,55 +2540,85 @@ class _HomePageState extends ConsumerState<HomePage> {
   }
 
   Widget _buildAccountAvatar(bool verified) {
-    return SizedBox(
-      width: 60,
-      height: 60,
-      child: Stack(
-        clipBehavior: Clip.none,
-        children: [
-          Container(
-            width: 60,
-            height: 60,
-            alignment: Alignment.center,
-            decoration: BoxDecoration(
-              shape: BoxShape.circle,
-              color: const Color(0xFF18181B),
-              border: Border.all(color: Colors.white, width: 2),
-              boxShadow: const [
-                BoxShadow(color: Color(0x14000000), blurRadius: 14, offset: Offset(0, 6)),
-              ],
-            ),
-            child: Text(
-              _avatarInitials,
-              style: const TextStyle(
-                color: Colors.white,
-                fontSize: 20,
-                fontWeight: FontWeight.w800,
-                letterSpacing: -0.4,
-              ),
-            ),
-          ),
-          if (verified)
-            Positioned(
-              right: -1,
-              bottom: -1,
-              child: Container(
-                width: 22,
-                height: 22,
-                alignment: Alignment.center,
+    final photoBase64 = AccountPreferences.instance.citizenAadhaarPhoto;
+    final hasValidPhoto = photoBase64 != null && photoBase64.isNotEmpty;
+
+    return GestureDetector(
+      onTap: _showDigiLockerSyncModal,
+      child: Tooltip(
+        message: hasValidPhoto ? 'Tap to update DigiLocker photo' : 'Tap to sync DigiLocker photo',
+        child: SizedBox(
+          width: 60,
+          height: 60,
+          child: Stack(
+            clipBehavior: Clip.none,
+            children: [
+              Container(
+                width: 60,
+                height: 60,
                 decoration: BoxDecoration(
                   shape: BoxShape.circle,
-                  color: const Color(0xFF10B981),
+                  color: const Color(0xFF18181B),
                   border: Border.all(color: Colors.white, width: 2),
+                  boxShadow: const [
+                    BoxShadow(color: Color(0x14000000), blurRadius: 14, offset: Offset(0, 6)),
+                  ],
                 ),
-                child: const Icon(
-                  LucideIcons.check,
-                  size: 11,
-                  color: Colors.white,
+                child: ClipOval(
+                  child: hasValidPhoto
+                      ? Image.memory(
+                          base64Decode(photoBase64.contains(',') ? photoBase64.split(',').last : photoBase64),
+                          width: 60,
+                          height: 60,
+                          fit: BoxFit.cover,
+                          errorBuilder: (context, error, stackTrace) => Center(
+                            child: Text(
+                              _avatarInitials,
+                              style: const TextStyle(
+                                color: Colors.white,
+                                fontSize: 20,
+                                fontWeight: FontWeight.w800,
+                                letterSpacing: -0.4,
+                              ),
+                            ),
+                          ),
+                        )
+                      : Center(
+                          child: Text(
+                            _avatarInitials,
+                            style: const TextStyle(
+                              color: Colors.white,
+                              fontSize: 20,
+                              fontWeight: FontWeight.w800,
+                              letterSpacing: -0.4,
+                            ),
+                          ),
+                        ),
                 ),
               ),
-            ),
-        ],
+              if (verified)
+                Positioned(
+                  right: -1,
+                  bottom: -1,
+                  child: Container(
+                    width: 22,
+                    height: 22,
+                    alignment: Alignment.center,
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      color: const Color(0xFF10B981),
+                      border: Border.all(color: Colors.white, width: 2),
+                    ),
+                    child: const Icon(
+                      LucideIcons.check,
+                      size: 11,
+                      color: Colors.white,
+                    ),
+                  ),
+                ),
+            ],
+          ),
+        ),
       ),
     );
   }
@@ -2496,6 +2655,286 @@ class _HomePageState extends ConsumerState<HomePage> {
         ],
       ),
     );
+  }
+
+  Future<void> _showDigiLockerSyncModal() async {
+    final digiService = DigiLockerService();
+    String statusMessage = 'Connecting to DigiLocker Sandbox...';
+    bool isInitializing = true;
+    bool isSuccess = false;
+    String? errorMessage;
+    String? sessionId;
+    Timer? pollTimer;
+
+    await showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (bottomSheetContext) {
+        return StatefulBuilder(
+          builder: (context, setModalState) {
+            void stopPolling() {
+              pollTimer?.cancel();
+              pollTimer = null;
+            }
+
+            Future<void> completeSync(String currentSessionId) async {
+              stopPolling();
+              setModalState(() {
+                statusMessage = 'Fetching official Aadhaar photograph...';
+              });
+              try {
+                final docRes = await digiService.fetchUserProfile(currentSessionId);
+                if (docRes['success'] == true && docRes['profile'] is Map) {
+                  final profile = docRes['profile'] as Map;
+                  final photoBase64 = profile['photo']?.toString() ??
+                      profile['image']?.toString() ??
+                      profile['user_photo']?.toString();
+                  if (photoBase64 != null && photoBase64.isNotEmpty) {
+                    await AccountPreferences.instance.setCitizenAadhaarPhoto(photoBase64);
+                    if (mounted) setState(() {});
+                    setModalState(() {
+                      isSuccess = true;
+                      statusMessage = 'Official Aadhaar photo synced successfully!';
+                    });
+                    await Future.delayed(const Duration(milliseconds: 1400));
+                    if (bottomSheetContext.mounted) {
+                      Navigator.of(bottomSheetContext).pop();
+                    }
+                    return;
+                  }
+                }
+                setModalState(() {
+                  errorMessage = 'Could not find photo in DigiLocker profile payload.';
+                });
+              } catch (e) {
+                setModalState(() {
+                  errorMessage = 'Error retrieving document: $e';
+                });
+              }
+            }
+
+            void checkStatusManual() async {
+              if (sessionId == null) return;
+              setModalState(() {
+                statusMessage = 'Checking verification status...';
+              });
+              try {
+                final res = await digiService.checkStatus(sessionId!);
+                final status = (res['status'] ?? '').toString().toLowerCase();
+                if (status == 'completed' || status == 'success' || status == 'succeeded' || status == 'approved') {
+                  await completeSync(sessionId!);
+                } else if (status == 'failed' || status == 'denied') {
+                  stopPolling();
+                  setModalState(() {
+                    errorMessage = 'Verification was cancelled or denied on DigiLocker.';
+                  });
+                } else {
+                  setModalState(() {
+                    statusMessage = 'Status: $status. Please finish login in browser tab.';
+                  });
+                }
+              } catch (e) {
+                setModalState(() {
+                  errorMessage = 'Connection error: $e';
+                });
+              }
+            }
+
+            void startInit() async {
+              try {
+                final res = await digiService.initSession();
+                if (res['success'] == true && res['authorization_url'] != null) {
+                  sessionId = res['session_id'];
+                  final authUrl = res['authorization_url'] as String;
+                  openUrlInNewTab(authUrl);
+                  setModalState(() {
+                    isInitializing = false;
+                    statusMessage = 'DigiLocker portal opened in a new tab.\nPlease complete authentication.';
+                  });
+
+                  pollTimer = Timer.periodic(const Duration(seconds: 3), (timer) async {
+                    if (sessionId == null) {
+                      timer.cancel();
+                      return;
+                    }
+                    try {
+                      final statusRes = await digiService.checkStatus(sessionId!);
+                      final status = (statusRes['status'] ?? '').toString().toLowerCase();
+                      if (status == 'completed' || status == 'success' || status == 'succeeded' || status == 'approved') {
+                        timer.cancel();
+                        await completeSync(sessionId!);
+                      } else if (status == 'failed' || status == 'denied') {
+                        timer.cancel();
+                        setModalState(() {
+                          errorMessage = 'Authorization was cancelled or denied.';
+                        });
+                      }
+                    } catch (_) {}
+                  });
+                } else {
+                  setModalState(() {
+                    isInitializing = false;
+                    errorMessage = res['message']?.toString() ?? 'Failed to initialize DigiLocker session.';
+                  });
+                }
+              } catch (e) {
+                setModalState(() {
+                  isInitializing = false;
+                  errorMessage = 'Could not reach DigiLocker Sandbox: $e';
+                });
+              }
+            }
+
+            if (isInitializing && sessionId == null && errorMessage == null) {
+              WidgetsBinding.instance.addPostFrameCallback((_) => startInit());
+            }
+
+            return PopScope(
+              onPopInvokedWithResult: (didPop, result) => stopPolling(),
+              child: Container(
+                padding: const EdgeInsets.fromLTRB(24, 20, 24, 32),
+                decoration: const BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+                ),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Container(
+                      width: 36,
+                      height: 4,
+                      decoration: BoxDecoration(
+                        color: const Color(0xFFE4E4E7),
+                        borderRadius: BorderRadius.circular(2),
+                      ),
+                    ),
+                    const SizedBox(height: 20),
+                    if (isSuccess) ...[
+                      const Icon(LucideIcons.circleCheck, color: Color(0xFF10B981), size: 48),
+                      const SizedBox(height: 14),
+                      const Text(
+                        'Photo Synced!',
+                        style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800, color: Color(0xFF18181B)),
+                      ),
+                      const SizedBox(height: 6),
+                      Text(
+                        statusMessage,
+                        textAlign: TextAlign.center,
+                        style: const TextStyle(fontSize: 13, color: Color(0xFF71717A)),
+                      ),
+                      const SizedBox(height: 16),
+                    ] else if (errorMessage != null) ...[
+                      const Icon(LucideIcons.triangleAlert, color: Color(0xFFEF4444), size: 48),
+                      const SizedBox(height: 14),
+                      const Text(
+                        'Sync Failed',
+                        style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800, color: Color(0xFF18181B)),
+                      ),
+                      const SizedBox(height: 6),
+                      Text(
+                        errorMessage!,
+                        textAlign: TextAlign.center,
+                        style: const TextStyle(fontSize: 13, color: Color(0xFFEF4444)),
+                      ),
+                      const SizedBox(height: 20),
+                      Row(
+                        children: [
+                          Expanded(
+                            child: OutlinedButton(
+                              onPressed: () {
+                                stopPolling();
+                                Navigator.of(bottomSheetContext).pop();
+                              },
+                              style: OutlinedButton.styleFrom(
+                                padding: const EdgeInsets.symmetric(vertical: 13),
+                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                              ),
+                              child: const Text('Close'),
+                            ),
+                          ),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: ElevatedButton(
+                              onPressed: () {
+                                setModalState(() {
+                                  errorMessage = null;
+                                  isInitializing = true;
+                                  sessionId = null;
+                                  statusMessage = 'Connecting to DigiLocker...';
+                                });
+                                startInit();
+                              },
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: const Color(0xFF2563EB),
+                                padding: const EdgeInsets.symmetric(vertical: 13),
+                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                              ),
+                              child: const Text('Retry', style: TextStyle(color: Colors.white)),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ] else ...[
+                      const SizedBox(
+                        width: 38,
+                        height: 38,
+                        child: CircularProgressIndicator(strokeWidth: 3, color: Color(0xFF2563EB)),
+                      ),
+                      const SizedBox(height: 16),
+                      const Text(
+                        'Syncing DigiLocker Photo',
+                        style: TextStyle(fontSize: 17, fontWeight: FontWeight.w800, color: Color(0xFF18181B)),
+                      ),
+                      const SizedBox(height: 6),
+                      Text(
+                        statusMessage,
+                        textAlign: TextAlign.center,
+                        style: const TextStyle(fontSize: 13, color: Color(0xFF71717A), height: 1.35),
+                      ),
+                      const SizedBox(height: 20),
+                      if (!isInitializing) ...[
+                        Row(
+                          children: [
+                            Expanded(
+                              child: OutlinedButton(
+                                onPressed: () {
+                                  stopPolling();
+                                  Navigator.of(bottomSheetContext).pop();
+                                },
+                                style: OutlinedButton.styleFrom(
+                                  padding: const EdgeInsets.symmetric(vertical: 12),
+                                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                                ),
+                                child: const Text('Cancel'),
+                              ),
+                            ),
+                            const SizedBox(width: 12),
+                            Expanded(
+                              child: ElevatedButton.icon(
+                                onPressed: checkStatusManual,
+                                icon: const Icon(LucideIcons.refreshCw, size: 14, color: Colors.white),
+                                label: const Text('Check Status', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+                                style: ElevatedButton.styleFrom(
+                                  backgroundColor: const Color(0xFF2563EB),
+                                  padding: const EdgeInsets.symmetric(vertical: 12),
+                                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ],
+                    ],
+                  ],
+                ),
+              ),
+            );
+          },
+        );
+      },
+    );
+    pollTimer?.cancel();
   }
 
   Widget _buildAccountImpactCard({
@@ -2596,7 +3035,7 @@ class _HomePageState extends ConsumerState<HomePage> {
             Material(
               color: Colors.transparent,
               child: InkWell(
-                onTap: () => setState(() => _currentIndex = 1),
+                onTap: () => _switchTab(1),
                 child: const Padding(
                   padding: EdgeInsets.fromLTRB(18, 14, 16, 14),
                   child: Row(
@@ -2945,7 +3384,7 @@ class _LinearDraggableDockState extends State<_LinearDraggableDock>
   static const double _itemWidth = 66.0;
   static const double _itemHeight = 44.0;
   static const double _padding = 6.0;
-  static const int _itemCount = 3;
+  static const int _itemCount = 4;
 
   late AnimationController _snapController;
   late Animation<double> _snapAnimation;
@@ -3311,7 +3750,8 @@ class _LinearDraggableDockState extends State<_LinearDraggableDock>
                           children: [
                             _buildDockItem(0, LucideIcons.house, 'Home'),
                             _buildDockItem(1, LucideIcons.inbox, 'Your Reports'),
-                            _buildDockItem(2, LucideIcons.user, 'Account'),
+                            _buildDockItem(2, LucideIcons.images, 'Gallery'),
+                            _buildDockItem(3, LucideIcons.user, 'Account'),
                           ],
                         ),
                       ],
@@ -3410,4 +3850,24 @@ class _ReportWithDistance {
   final ReportModel report;
   final double distanceMeters;
   const _ReportWithDistance(this.report, this.distanceMeters);
+}
+
+class _KeepAliveWrapper extends StatefulWidget {
+  final Widget child;
+  const _KeepAliveWrapper({required this.child});
+
+  @override
+  State<_KeepAliveWrapper> createState() => _KeepAliveWrapperState();
+}
+
+class _KeepAliveWrapperState extends State<_KeepAliveWrapper>
+    with AutomaticKeepAliveClientMixin {
+  @override
+  bool get wantKeepAlive => true;
+
+  @override
+  Widget build(BuildContext context) {
+    super.build(context);
+    return widget.child;
+  }
 }

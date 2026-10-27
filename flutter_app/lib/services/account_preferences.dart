@@ -11,12 +11,15 @@ class AccountPreferences {
 
   static const String _pushNotificationsKey = 'unisafe_push_notifications';
   static const String _anonymousReportingKey = 'unisafe_anonymous_reporting';
+  static const String _citizenAadhaarPhotoKey = 'unisafe_citizen_aadhaar_photo';
 
   bool _pushNotificationsEnabled = true;
   bool _anonymousReportingEnabled = false;
+  String? _citizenAadhaarPhoto;
 
   bool get pushNotificationsEnabled => _pushNotificationsEnabled;
   bool get anonymousReportingEnabled => _anonymousReportingEnabled;
+  String? get citizenAadhaarPhoto => _citizenAadhaarPhoto;
 
   /// Reads persisted values into memory. Safe to call once at startup.
   Future<void> load() async {
@@ -25,6 +28,7 @@ class AccountPreferences {
       _pushNotificationsEnabled = prefs.getBool(_pushNotificationsKey) ?? true;
       _anonymousReportingEnabled =
           prefs.getBool(_anonymousReportingKey) ?? false;
+      _citizenAadhaarPhoto = prefs.getString(_citizenAadhaarPhotoKey);
     } catch (_) {
       // Storage restricted (private mode / web restrictions): keep defaults.
     }
@@ -38,6 +42,18 @@ class AccountPreferences {
   Future<void> setAnonymousReporting(bool value) async {
     _anonymousReportingEnabled = value;
     await _persist(_anonymousReportingKey, value);
+  }
+
+  Future<void> setCitizenAadhaarPhoto(String? base64Photo) async {
+    _citizenAadhaarPhoto = base64Photo;
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      if (base64Photo != null) {
+        await prefs.setString(_citizenAadhaarPhotoKey, base64Photo);
+      } else {
+        await prefs.remove(_citizenAadhaarPhotoKey);
+      }
+    } catch (_) {}
   }
 
   Future<void> _persist(String key, bool value) async {

@@ -16,6 +16,8 @@ import 'report_provider.dart';
 import 'street_view_modal.dart';
 import '../home_page.dart';
 import '../../theme/unisafe_theme.dart';
+import '../../config/supabase_config.dart';
+import '../../services/device_service.dart';
 
 /// Centralized visual identity for each issue category.
 class CategoryStyle {
@@ -347,12 +349,18 @@ class InteractiveMapScreen extends ConsumerStatefulWidget {
   final LatLng? initialCenter;
   final String? initialReportId;
   final double? initialZoom;
+  final String? initialReportImagePath;
+  final Uint8List? initialReportImageBytes;
+  final bool openReportFormImmediately;
 
   const InteractiveMapScreen({
     super.key,
     this.initialCenter,
     this.initialReportId,
     this.initialZoom,
+    this.initialReportImagePath,
+    this.initialReportImageBytes,
+    this.openReportFormImmediately = false,
   });
 
   @override
@@ -361,6 +369,49 @@ class InteractiveMapScreen extends ConsumerStatefulWidget {
 
 class _InteractiveMapScreenState extends ConsumerState<InteractiveMapScreen> {
   final MapController _mapController = MapController();
+  List<String> _myDeviceReportIds = [];
+  String? _currentAuthUserId;
+  String? _currentCitizenId;
+
+  Future<void> _loadUserOwnershipCredentials() async {
+    final ids = await DeviceService.getMyReportIds();
+    final authUser = SupabaseConfig.client.auth.currentUser;
+    String? citizenId;
+    if (authUser != null) {
+      try {
+        var query = SupabaseConfig.client.from('citizens').select('id');
+        if (authUser.email != null && authUser.email!.isNotEmpty) {
+          query = query.or('auth_user_id.eq.${authUser.id},email.eq.${authUser.email}');
+        } else if (authUser.phone != null && authUser.phone!.isNotEmpty) {
+          query = query.or('auth_user_id.eq.${authUser.id},phone.eq.${authUser.phone}');
+        } else {
+          query = query.eq('auth_user_id', authUser.id);
+        }
+        final record = await query.maybeSingle();
+        citizenId = record?['id']?.toString();
+      } catch (_) {}
+    }
+    if (mounted) {
+      setState(() {
+        _myDeviceReportIds = ids;
+        _currentAuthUserId = authUser?.id;
+        _currentCitizenId = citizenId;
+      });
+    }
+  }
+
+  bool _isMyReport(ReportModel r) {
+    if (_currentAuthUserId != null && r.authUserId != null && r.authUserId == _currentAuthUserId) {
+      return true;
+    }
+    if (_currentCitizenId != null && r.citizenId != null && r.citizenId == _currentCitizenId) {
+      return true;
+    }
+    if (_myDeviceReportIds.contains(r.id)) {
+      return true;
+    }
+    return false;
+  }
   final TextEditingController _searchController = TextEditingController();
   final GlobalKey _mapKey = GlobalKey();
   final FocusNode _searchFocusNode = FocusNode();
@@ -381,11 +432,20 @@ class _InteractiveMapScreenState extends ConsumerState<InteractiveMapScreen> {
   @override
   void initState() {
     super.initState();
+    _loadUserOwnershipCredentials();
     _searchFocusNode.addListener(() {
       if (mounted) setState(() {});
     });
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (widget.initialCenter != null) {
+      if (widget.openReportFormImmediately && widget.initialCenter != null) {
+        _droppedLocation = widget.initialCenter;
+        _showReportForm(
+          context,
+          widget.initialCenter!,
+          initialImagePath: widget.initialReportImagePath,
+          initialImageBytes: widget.initialReportImageBytes,
+        );
+      } else if (widget.initialCenter != null) {
         _mapController.move(widget.initialCenter!, widget.initialZoom ?? 16.5);
       } else {
         _goToMyLocation();
@@ -563,7 +623,8 @@ class _InteractiveMapScreenState extends ConsumerState<InteractiveMapScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final reports = ref.watch(interactiveReportProvider);
+    final allReports = ref.watch(interactiveReportProvider);
+    final reports = allReports.where(_isMyReport).toList();
     return PopScope(
       canPop: false,
       onPopInvokedWithResult: (didPop, result) {
@@ -1216,6 +1277,7 @@ class _InteractiveMapScreenState extends ConsumerState<InteractiveMapScreen> {
             initialImageBytes: initialImageBytes,
             onSubmit: (report) {
               ref.read(interactiveReportProvider.notifier).addReport(report);
+              _loadUserOwnershipCredentials();
               setState(() {
                 _droppedLocation = null;
                 _selectedCategory = null;

@@ -1492,7 +1492,7 @@ class _ReportFormWidgetState extends State<ReportFormWidget> {
               );
             },
             icon: const Icon(LucideIcons.camera, size: 20),
-            label: const Text('Add Photo (Optional)', style: TextStyle(fontSize: 15, fontWeight: FontWeight.w600)),
+            label: const Text('Add Photo (Required)', style: TextStyle(fontSize: 15, fontWeight: FontWeight.w600)),
             style: OutlinedButton.styleFrom(
               padding: const EdgeInsets.symmetric(vertical: 16),
               shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),

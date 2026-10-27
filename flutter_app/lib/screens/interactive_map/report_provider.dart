@@ -26,10 +26,19 @@ class InteractiveReportNotifier extends Notifier<List<ReportModel>> {
   /// Loads all stored complaints from Supabase and joins the reporting citizen profile.
   Future<void> _loadReportsFromSupabase() async {
     try {
-      final response = await SupabaseConfig.client
-          .from('complaints')
-          .select('*, citizens(name, phone)')
-          .order('created_at', ascending: false);
+      dynamic response;
+      try {
+        response = await SupabaseConfig.client
+            .from('complaints')
+            .select('*, citizens(name, phone)')
+            .order('created_at', ascending: false);
+      } catch (joinErr) {
+        debugPrint('[InteractiveReportNotifier] Joined query failed, falling back to direct select: $joinErr');
+        response = await SupabaseConfig.client
+            .from('complaints')
+            .select('*')
+            .order('created_at', ascending: false);
+      }
 
       final list = (response as List)
           .map((row) => ReportModel.fromSupabase(Map<String, dynamic>.from(row)))

@@ -55,6 +55,18 @@ class UniSafeApp extends StatelessWidget {
       title: 'UniSafe',
       debugShowCheckedModeBanner: false,
       theme: UniSafeTheme.light(),
+      builder: (context, child) {
+        final mediaQuery = MediaQuery.of(context);
+        return MediaQuery(
+          data: mediaQuery.copyWith(
+            textScaler: mediaQuery.textScaler.clamp(
+              minScaleFactor: 0.85,
+              maxScaleFactor: 1.0,
+            ),
+          ),
+          child: child ?? const SizedBox.shrink(),
+        );
+      },
       onGenerateRoute: (settings) {
         final routes = <String, WidgetBuilder>{
           '/home': (_) => const HomePage(),
