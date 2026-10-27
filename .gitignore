@@ -2,6 +2,8 @@
 web/node_modules/
 web/dist/
 web/.env.local
+.firebase/
+web/.firebase/
 
 # Builds
 UniSafe_App.apk

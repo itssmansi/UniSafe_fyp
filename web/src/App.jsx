@@ -10,6 +10,7 @@ import VerificationHub from "./screens/verification/VerificationHub";
 import AuthorityDashboard from "./pages/AuthorityDashboard";
 import AuthorityLoginPage from "./pages/AuthorityLoginPage";
 import Heatmap from "./pages/Heatmap";
+import LiveTrackingPage from "./pages/LiveTrackingPage";
 
 function Home({ user }) {
   const [backendStatus, setBackendStatus] = useState("Checking...");
@@ -289,6 +290,9 @@ export default function App() {
         <Route path="/heatmap" element={<Heatmap />} />
         <Route path="/verify" element={<VerificationHub />} />
         <Route path="/verify/:id" element={<ResolutionVerification />} />
+        
+        {/* Public Live Journey Tracking (for trusted contacts) */}
+        <Route path="/track" element={<LiveTrackingPage />} />
         
         {/* Fallback */}
         <Route path="*" element={<Navigate to="/" replace />} />

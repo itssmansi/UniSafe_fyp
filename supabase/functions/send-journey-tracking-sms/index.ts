@@ -64,9 +64,13 @@ Deno.serve(async (req: Request) => {
     const pingramApiKey = Deno.env.get("PINGRAM_API_KEY");
     const pingramSmsType =
       Deno.env.get("PINGRAM_SMS_TYPE") || "un1safe_otp";
+    const pingramBaseUrl = (
+      Deno.env.get("PINGRAM_BASE_URL") || "https://api.pingram.io"
+    ).replace(/\/+$/, "");
     const trackingBaseUrl =
       Deno.env.get("TRACKING_BASE_URL") ||
-      "https://unisafe-tracking.web.app/track";
+      Deno.env.get("PUBLIC_TRACKING_URL") ||
+      "https://unisafe-e08e5.web.app/track";
 
     if (!supabaseUrl || !serviceRoleKey) {
       console.error("Missing SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY");
@@ -115,12 +119,14 @@ Deno.serve(async (req: Request) => {
 
     // 2. Parse request body
     const body = await req.json();
+    const isTest = body.test_mode === true || Boolean(body.test_phone);
+    const testPhone = body.test_phone?.toString().trim();
     const journeyId = body.journey_id?.toString().trim();
     const isSos = body.is_sos === true;
     const customLat = body.latitude;
     const customLng = body.longitude;
 
-    if (!journeyId && !isSos) {
+    if (!isTest && !journeyId && !isSos) {
       return jsonResponse(
         { success: false, message: "journey_id is required." },
         400,
@@ -142,6 +148,99 @@ Deno.serve(async (req: Request) => {
         { success: false, message: "Citizen profile not found for authenticated user." },
         403,
       );
+    }
+
+    // 3b. Controlled test SMS flow (verifies Pingram integration without false SOS or active journey)
+    if (isTest) {
+      const targetPhone = testPhone || citizen.phone;
+      const normalized = targetPhone ? normalizeIndianPhone(targetPhone) : null;
+      if (!normalized) {
+        return jsonResponse(
+          {
+            success: false,
+            message: `Invalid test phone number format: ${maskPhone(targetPhone || "")}`,
+            error_category: "recipient_validation",
+          },
+          400,
+        );
+      }
+
+      const testMessage = `UniSafe Test: Pingram SMS API connection verified. Timestamp: ${new Date().toLocaleTimeString("en-IN")}`;
+      try {
+        const testRes = await fetch(`${pingramBaseUrl}/sms`, {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${pingramApiKey}`,
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            type: pingramSmsType,
+            to: normalized,
+            message: testMessage,
+          }),
+        });
+
+        const testData = await testRes.json().catch(() => ({}));
+        if (!testRes.ok) {
+          const errMsg =
+            testData?.message ||
+            testData?.error?.message ||
+            testData?.error ||
+            `Pingram HTTP error ${testRes.status}`;
+
+          let category = "provider_error";
+          if (
+            testRes.status === 401 ||
+            testRes.status === 403 ||
+            errMsg.toLowerCase().includes("key") ||
+            errMsg.toLowerCase().includes("unauthorized") ||
+            errMsg.toLowerCase().includes("auth")
+          ) {
+            category = "authentication";
+          } else if (
+            testRes.status === 429 ||
+            errMsg.toLowerCase().includes("quota") ||
+            errMsg.toLowerCase().includes("credit") ||
+            errMsg.toLowerCase().includes("rate limit")
+          ) {
+            category = "quota";
+          } else if (
+            testRes.status === 400 ||
+            errMsg.toLowerCase().includes("phone") ||
+            errMsg.toLowerCase().includes("recipient")
+          ) {
+            category = "recipient_validation";
+          }
+
+          return jsonResponse(
+            {
+              success: false,
+              message: `Pingram test SMS failed: ${errMsg}`,
+              error_category: category,
+              http_status: testRes.status,
+              recipient: maskPhone(normalized),
+            },
+            502,
+          );
+        }
+
+        return jsonResponse({
+          success: true,
+          message: "Test SMS sent successfully via Pingram.",
+          recipient: maskPhone(normalized),
+          provider: "Pingram",
+          base_url: pingramBaseUrl,
+        });
+      } catch (err) {
+        return jsonResponse(
+          {
+            success: false,
+            message: `Network error connecting to Pingram: ${err instanceof Error ? err.message : String(err)}`,
+            error_category: "network",
+          },
+          502,
+        );
+      }
     }
 
     let journey: Record<string, any> | null = null;
@@ -209,9 +308,12 @@ Deno.serve(async (req: Request) => {
     } else {
       const trackingUrl = `${trackingBaseUrl}?token=${encodeURIComponent(journey!.tracking_token)}`;
       const destination = journey!.destination_name || "Destination";
+      const lat = journey!.latest_latitude;
+      const lng = journey!.latest_longitude;
+      const mapFallback = (lat && lng) ? ` | Map: https://maps.google.com/?q=${lat},${lng}` : "";
       smsMessage =
         `UniSafe Alert: ${citizenName} has started a Safe Journey to ${destination}. ` +
-        `Track live location here: ${trackingUrl}`;
+        `Live: ${trackingUrl}${mapFallback}`;
     }
 
     console.log(
@@ -228,7 +330,7 @@ Deno.serve(async (req: Request) => {
           throw new Error(`Invalid phone number format: ${maskPhone(rawPhone)}`);
         }
 
-        const pingramResponse = await fetch("https://api.pingram.io/sms", {
+        const pingramResponse = await fetch(`${pingramBaseUrl}/sms`, {
           method: "POST",
           headers: {
             Authorization: `Bearer ${pingramApiKey}`,
@@ -246,6 +348,8 @@ Deno.serve(async (req: Request) => {
         if (!pingramResponse.ok) {
           const errMsg =
             pingramData?.message ||
+            pingramData?.error?.message ||
+            pingramData?.error ||
             `Pingram HTTP error status ${pingramResponse.status}`;
           throw new Error(errMsg);
         }

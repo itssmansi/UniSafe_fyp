@@ -1,5 +1,6 @@
 import 'package:flutter/foundation.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+
 import '../config/supabase_config.dart';
 
 class SosService {
@@ -16,23 +17,49 @@ class SosService {
     String? citizenName,
   }) async {
     try {
-      // 1. Record in `sos_events` table
-      final sosRecord = await _client
-          .from('sos_events')
-          .insert({
-            'citizen_id': citizenId,
-            'journey_id': journeyId,
-            'latitude': latitude,
-            'longitude': longitude,
-            'status': 'triggered',
-            'triggered_at': DateTime.now().toIso8601String(),
-            'metadata': {
-              'source': 'mobile_app',
-              'citizen_name': citizenName ?? 'UniSafe Citizen',
-            },
-          })
-          .select()
-          .maybeSingle();
+      // 1. Record in `sos_events` table (with fallback resilience)
+      Map<String, dynamic>? sosRecord;
+      try {
+        sosRecord = await _client
+            .from('sos_events')
+            .insert({
+              'citizen_id': citizenId,
+              'journey_id': journeyId,
+              'latitude': latitude,
+              'longitude': longitude,
+              'status': 'triggered',
+              'triggered_at': DateTime.now().toIso8601String(),
+              'metadata': {
+                'source': 'mobile_app',
+                'citizen_name': citizenName ?? 'UniSafe Citizen',
+                if (journeyId != null) 'journey_id': journeyId,
+              },
+            })
+            .select()
+            .maybeSingle();
+      } catch (dbErr) {
+        debugPrint(
+          '[SosService] Primary insert with journey_id failed: $dbErr. Retrying without foreign key...',
+        );
+        // Fallback insert without journey_id to guarantee emergency recording even if FK fails
+        sosRecord = await _client
+            .from('sos_events')
+            .insert({
+              'citizen_id': citizenId,
+              'journey_id': null,
+              'latitude': latitude,
+              'longitude': longitude,
+              'status': 'triggered',
+              'triggered_at': DateTime.now().toIso8601String(),
+              'metadata': {
+                'source': 'mobile_app',
+                'citizen_name': citizenName ?? 'UniSafe Citizen',
+                if (journeyId != null) 'journey_id': journeyId,
+              },
+            })
+            .select()
+            .maybeSingle();
+      }
 
       final eventId = sosRecord != null ? sosRecord['id']?.toString() : null;
 
@@ -57,8 +84,8 @@ class SosService {
         'sos_event_id': eventId,
         'sent_count': sentCount,
         'message': sentCount > 0
-            ? 'Emergency alert dispatched to $sentCount trusted contact(s).'
-            : 'SOS recorded. Alert notifications processed.',
+            ? 'SOS recorded and accepted for delivery to $sentCount trusted contact(s). Delivery is not confirmed.'
+            : 'SOS recorded, but no contact delivery was confirmed. Please use another way to contact help.',
       };
     } catch (e) {
       debugPrint('SOS trigger error: $e');

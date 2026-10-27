@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:geolocator/geolocator.dart';
 
 class LocationServiceException implements Exception {
@@ -63,6 +64,29 @@ class LocationService {
     }
   }
 
+  /// Background sharing is requested only after the user enables journey safety.
+  /// Android may require the user to grant "Allow all the time" from Settings.
+  Future<void> ensureBackgroundLocationReady() async {
+    await ensureLocationReady();
+    if (kIsWeb || defaultTargetPlatform != TargetPlatform.android) {
+      throw const LocationServiceException(
+        'Background safety monitoring is currently configured for Android only.',
+        code: 'BACKGROUND_PLATFORM_UNSUPPORTED',
+      );
+    }
+
+    var permission = await Geolocator.checkPermission();
+    if (permission != LocationPermission.always) {
+      permission = await Geolocator.requestPermission();
+    }
+    if (permission != LocationPermission.always) {
+      throw const LocationServiceException(
+        'Allow all the time location access in Android app settings to enable background safety monitoring.',
+        code: 'BACKGROUND_PERMISSION_REQUIRED',
+      );
+    }
+  }
+
   /// Retrieves the current device position with foreground high accuracy.
   Future<Position> getCurrentPosition({
     LocationAccuracy accuracy = LocationAccuracy.high,
@@ -90,11 +114,29 @@ class LocationService {
   Stream<Position> getPositionStream({
     int distanceFilter = 10,
     LocationAccuracy accuracy = LocationAccuracy.high,
+    bool backgroundTracking = false,
   }) {
-    final locationSettings = LocationSettings(
-      accuracy: accuracy,
-      distanceFilter: distanceFilter,
-    );
+    final LocationSettings locationSettings;
+    if (backgroundTracking &&
+        !kIsWeb &&
+        defaultTargetPlatform == TargetPlatform.android) {
+      locationSettings = AndroidSettings(
+        accuracy: accuracy,
+        distanceFilter: distanceFilter,
+        intervalDuration: const Duration(seconds: 30),
+        foregroundNotificationConfig: const ForegroundNotificationConfig(
+          notificationTitle: 'UniSafe journey monitoring is active',
+          notificationText:
+              'Location updates are being shared with your trusted contacts.',
+          enableWakeLock: true,
+        ),
+      );
+    } else {
+      locationSettings = LocationSettings(
+        accuracy: accuracy,
+        distanceFilter: distanceFilter,
+      );
+    }
 
     return Geolocator.getPositionStream(locationSettings: locationSettings);
   }

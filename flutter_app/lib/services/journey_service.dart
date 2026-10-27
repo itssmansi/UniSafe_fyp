@@ -314,9 +314,65 @@ class JourneyService {
     }
   }
 
+  /// Sends a safe, controlled test SMS via Pingram to verify API key validity
+  /// without triggering real emergency SOS or creating unnecessary active journeys.
+  Future<Map<String, dynamic>> sendTestSms({
+    String? testPhone,
+  }) async {
+    try {
+      final response = await _supabase.functions.invoke(
+        'send-journey-tracking-sms',
+        body: {
+          'test_mode': true,
+          if (testPhone != null && testPhone.trim().isNotEmpty)
+            'test_phone': testPhone.trim(),
+        },
+      );
+
+      if (response.data is Map) {
+        return Map<String, dynamic>.from(response.data);
+      }
+
+      return {
+        'success': false,
+        'message': 'No data received from Edge Function.',
+      };
+    } catch (e) {
+      debugPrint('Error invoking send-journey-tracking-sms (test): $e');
+      return {
+        'success': false,
+        'error': e.toString(),
+      };
+    }
+  }
+
   // ------------------------------------------------------------
   // HELPERS
   // ------------------------------------------------------------
+
+  /// Formats the public live-tracking URL for a given tracking token
+  static String buildTrackingUrl(String token) {
+    const baseUrl = String.fromEnvironment(
+      'UNISAFE_TRACKING_BASE_URL',
+      defaultValue: 'https://unisafe-e08e5.web.app/track',
+    );
+    return '$baseUrl?token=${Uri.encodeComponent(token)}';
+  }
+
+  /// Builds the shareable SMS tracking message
+  static String buildTrackingSmsText({
+    required String citizenName,
+    required String destinationName,
+    required String token,
+    double? latitude,
+    double? longitude,
+  }) {
+    final trackUrl = buildTrackingUrl(token);
+    final mapPart = (latitude != null && longitude != null)
+        ? ' | Map: https://maps.google.com/?q=$latitude,$longitude'
+        : '';
+    return 'UniSafe Alert: $citizenName has started a Safe Journey to $destinationName. Live: $trackUrl$mapPart';
+  }
 
   /// Generates a cryptographically secure 256-bit URL-safe token.
   String _generateSecureTrackingToken() {

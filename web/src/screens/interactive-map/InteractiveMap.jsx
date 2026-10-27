@@ -170,7 +170,7 @@ const InteractiveMap = () => {
       if (searchQuery.trim().length > 2) {
         setIsSearching(true);
         try {
-          const res = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(searchQuery)}`);
+          const res = await fetch(`https://nominatim.openstreetmap.org/search?format=json&countrycodes=in&q=${encodeURIComponent(searchQuery)}`);
           const data = await res.json();
           setSearchResults(data.slice(0, 5));
         } catch(err) {
@@ -285,7 +285,7 @@ const InteractiveMap = () => {
     if (e.key === 'Enter' && searchQuery.trim()) {
       setIsSearching(true);
       try {
-        const res = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(searchQuery)}`);
+        const res = await fetch(`https://nominatim.openstreetmap.org/search?format=json&countrycodes=in&q=${encodeURIComponent(searchQuery)}`);
         const data = await res.json();
         if (data && data.length > 0) {
           handleSelectLocation(data[0]);

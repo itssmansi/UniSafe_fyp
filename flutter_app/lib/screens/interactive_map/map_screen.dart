@@ -392,7 +392,7 @@ class _InteractiveMapScreenState extends ConsumerState<InteractiveMapScreen> {
       try {
         final response = await http.get(
           Uri.parse(
-              'https://nominatim.openstreetmap.org/search?q=${Uri.encodeComponent(query)}&format=json&limit=5'),
+              'https://nominatim.openstreetmap.org/search?q=${Uri.encodeComponent(query)}&countrycodes=in&format=json&limit=5&addressdetails=1&accept-language=en-IN,en'),
           headers: {'User-Agent': 'com.unisafe.app (Unisafe community reporting app)'},
         );
         // A slower, older request can resolve after a newer one — ignore it
@@ -400,8 +400,14 @@ class _InteractiveMapScreenState extends ConsumerState<InteractiveMapScreen> {
         if (requestId != _searchRequestId) return;
         if (response.statusCode == 200) {
           if (mounted) {
+            final rawList = json.decode(response.body) as List;
+            final inIndia = rawList.where((item) {
+              final lat = double.tryParse(item['lat']?.toString() ?? '') ?? 0.0;
+              final lon = double.tryParse(item['lon']?.toString() ?? '') ?? 0.0;
+              return lat >= 6.0 && lat <= 38.5 && lon >= 68.0 && lon <= 98.5;
+            }).toList();
             setState(() {
-              _suggestions = json.decode(response.body) as List;
+              _suggestions = inIndia;
             });
           }
         }
@@ -430,7 +436,7 @@ class _InteractiveMapScreenState extends ConsumerState<InteractiveMapScreen> {
     try {
       final response = await http.get(
         Uri.parse(
-            'https://nominatim.openstreetmap.org/search?q=${Uri.encodeComponent(query)}&format=json&limit=1'),
+            'https://nominatim.openstreetmap.org/search?q=${Uri.encodeComponent(query)}&countrycodes=in&format=json&limit=1&addressdetails=1&accept-language=en-IN,en'),
         headers: {'User-Agent': 'com.unisafe.app (Unisafe community reporting app)'},
       );
       if (response.statusCode == 200) {

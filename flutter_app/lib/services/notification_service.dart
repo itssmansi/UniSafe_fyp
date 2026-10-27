@@ -1,8 +1,10 @@
 import 'dart:async';
+
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
+
 import '../config/supabase_config.dart';
 
 class NotificationService {
@@ -23,6 +25,41 @@ class NotificationService {
   static bool get isAndroidTarget =>
       !kIsWeb && defaultTargetPlatform == TargetPlatform.android;
 
+  static Future<void> showSafetyCheckNotification() async {
+    if (!isAndroidTarget) return;
+    try {
+      await _localNotifications.show(
+        73001,
+        'ARE YOU SAFE?',
+        'UniSafe has not detected movement on your active journey. Open the app to respond.',
+        const NotificationDetails(
+          android: AndroidNotificationDetails(
+            _channelId,
+            _channelName,
+            channelDescription: _channelDesc,
+            importance: Importance.max,
+            priority: Priority.max,
+            category: AndroidNotificationCategory.alarm,
+            playSound: true,
+            enableVibration: true,
+          ),
+        ),
+        payload: 'safety_check',
+      );
+    } catch (error) {
+      debugPrint('Could not show journey safety notification: $error');
+    }
+  }
+
+  static Future<void> cancelSafetyCheckNotification() async {
+    if (!isAndroidTarget) return;
+    try {
+      await _localNotifications.cancel(73001);
+    } catch (error) {
+      debugPrint('Could not dismiss journey safety notification: $error');
+    }
+  }
+
   // ============================================================
   // INITIALIZATION (Android Citizen App)
   // ============================================================
@@ -42,8 +79,9 @@ class NotificationService {
 
     try {
       // 1. Initialize Flutter Local Notifications for Android foreground display
-      const androidInitSettings =
-          AndroidInitializationSettings('@mipmap/ic_launcher');
+      const androidInitSettings = AndroidInitializationSettings(
+        '@mipmap/ic_launcher',
+      );
       const initSettings = InitializationSettings(android: androidInitSettings);
 
       await _localNotifications.initialize(
@@ -63,9 +101,10 @@ class NotificationService {
         enableVibration: true,
       );
 
-      final androidPlugin =
-          _localNotifications.resolvePlatformSpecificImplementation<
-              AndroidFlutterLocalNotificationsPlugin>();
+      final androidPlugin = _localNotifications
+          .resolvePlatformSpecificImplementation<
+            AndroidFlutterLocalNotificationsPlugin
+          >();
 
       if (androidPlugin != null) {
         await androidPlugin.createNotificationChannel(androidChannel);
@@ -88,7 +127,9 @@ class NotificationService {
       // 4. Retrieve FCM Registration Token
       _cachedFcmToken = await _messaging.getToken();
       if (_cachedFcmToken != null) {
-        debugPrint('NotificationService: FCM registration token acquired: $_cachedFcmToken');
+        debugPrint(
+          'NotificationService: FCM registration token acquired: $_cachedFcmToken',
+        );
         // Synchronize with currently authenticated citizen in Supabase
         await syncTokenWithCurrentUser();
       }
@@ -145,7 +186,9 @@ class NotificationService {
     final currentUser = supabase.auth.currentUser;
 
     if (currentUser == null) {
-      debugPrint('NotificationService: No authenticated user session. Token sync deferred.');
+      debugPrint(
+        'NotificationService: No authenticated user session. Token sync deferred.',
+      );
       return;
     }
 
@@ -158,7 +201,9 @@ class NotificationService {
           .maybeSingle();
 
       if (citizenResponse == null) {
-        debugPrint('NotificationService: Citizen profile not found for user ${currentUser.id}');
+        debugPrint(
+          'NotificationService: Citizen profile not found for user ${currentUser.id}',
+        );
         return;
       }
 
@@ -167,21 +212,22 @@ class NotificationService {
 
       // 2. Upsert token into public.citizen_fcm_tokens
       final now = DateTime.now().toUtc().toIso8601String();
-      await supabase.from('citizen_fcm_tokens').upsert(
-        {
-          'citizen_id': citizenId,
-          'auth_user_id': currentUser.id,
-          'fcm_token': token,
-          'device_type': 'android',
-          'is_active': true,
-          'updated_at': now,
-        },
-        onConflict: 'fcm_token',
-      );
+      await supabase.from('citizen_fcm_tokens').upsert({
+        'citizen_id': citizenId,
+        'auth_user_id': currentUser.id,
+        'fcm_token': token,
+        'device_type': 'android',
+        'is_active': true,
+        'updated_at': now,
+      }, onConflict: 'fcm_token');
 
-      debugPrint('NotificationService: Successfully registered FCM token for citizen $citizenId');
+      debugPrint(
+        'NotificationService: Successfully registered FCM token for citizen $citizenId',
+      );
     } catch (e) {
-      debugPrint('NotificationService: Error synchronizing token with Supabase: $e');
+      debugPrint(
+        'NotificationService: Error synchronizing token with Supabase: $e',
+      );
     }
   }
 
@@ -194,10 +240,15 @@ class NotificationService {
       final supabase = SupabaseConfig.client;
       await supabase
           .from('citizen_fcm_tokens')
-          .update({'is_active': false, 'updated_at': DateTime.now().toUtc().toIso8601String()})
+          .update({
+            'is_active': false,
+            'updated_at': DateTime.now().toUtc().toIso8601String(),
+          })
           .eq('fcm_token', token);
 
-      debugPrint('NotificationService: Invalidated device FCM token on logout.');
+      debugPrint(
+        'NotificationService: Invalidated device FCM token on logout.',
+      );
     } catch (e) {
       debugPrint('NotificationService: Error unregistering FCM token: $e');
     }
@@ -238,6 +289,7 @@ class NotificationService {
   // ============================================================
 
   static void _handleLocalNotificationTap(String? payload) {
+    if (payload == 'safety_check') return;
     if (payload != null && payload.isNotEmpty) {
       _navigateToComplaintOrMap(payload);
     }
@@ -251,7 +303,9 @@ class NotificationService {
   static void _navigateToComplaintOrMap(String? complaintId) {
     final nav = navigatorKey?.currentState;
     if (nav == null) {
-      debugPrint('NotificationService: Navigator key is null. Cannot navigate.');
+      debugPrint(
+        'NotificationService: Navigator key is null. Cannot navigate.',
+      );
       return;
     }
 
@@ -270,7 +324,8 @@ class NotificationService {
     String? citizenId,
   }) async {
     const notifTitle = 'Complaint Submitted Successfully';
-    final notifBody = 'Your report "$title" has been registered and assigned for review.';
+    final notifBody =
+        'Your report "$title" has been registered and assigned for review.';
 
     await _recordAndDisplayNotification(
       complaintId: complaintId,
@@ -306,7 +361,8 @@ class NotificationService {
     String? citizenId,
   }) async {
     const notifTitle = 'Complaint Resolved';
-    final notifBody = 'Your report "$title" has been marked as Resolved by municipal authorities.';
+    final notifBody =
+        'Your report "$title" has been marked as Resolved by municipal authorities.';
 
     await _recordAndDisplayNotification(
       complaintId: complaintId,
@@ -372,7 +428,9 @@ class NotificationService {
         });
       }
     } catch (e) {
-      debugPrint('NotificationService: Error persisting notification in database: $e');
+      debugPrint(
+        'NotificationService: Error persisting notification in database: $e',
+      );
     }
 
     // 3. Show local notification on Android devices
@@ -410,7 +468,9 @@ class NotificationService {
             behavior: SnackBarBehavior.floating,
             backgroundColor: const Color(0xFF1E1B4B),
             elevation: 8,
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(12),
+            ),
             margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
             content: Row(
               crossAxisAlignment: CrossAxisAlignment.center,
@@ -421,7 +481,11 @@ class NotificationService {
                     color: Colors.amber.withValues(alpha: 0.2),
                     shape: BoxShape.circle,
                   ),
-                  child: const Icon(Icons.notifications_active, color: Colors.amber, size: 22),
+                  child: const Icon(
+                    Icons.notifications_active,
+                    color: Colors.amber,
+                    size: 22,
+                  ),
                 ),
                 const SizedBox(width: 12),
                 Expanded(
@@ -442,7 +506,10 @@ class NotificationService {
                         body,
                         maxLines: 2,
                         overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(color: Colors.white70, fontSize: 12),
+                        style: const TextStyle(
+                          color: Colors.white70,
+                          fontSize: 12,
+                        ),
                       ),
                     ],
                   ),
