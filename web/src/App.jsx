@@ -10,6 +10,7 @@ import VerificationHub from "./screens/verification/VerificationHub";
 import AuthorityDashboard from "./pages/AuthorityDashboard";
 import AuthorityLoginPage from "./pages/AuthorityLoginPage";
 import Heatmap from "./pages/Heatmap";
+import LiveTrackingPage from "./pages/LiveTrackingPage";
 
 function Home({ user }) {
   const [backendStatus, setBackendStatus] = useState("Checking...");
@@ -265,20 +266,24 @@ export default function App() {
   return (
     <BrowserRouter>
       <Routes>
-        <Route path="/" element={<Hero2Demo />} />
-        <Route path="/home" element={<Hero2Demo />} />
+        {/* Root: Authority Login if unauthenticated, Operations Hub if authenticated */}
+        <Route 
+          path="/" 
+          element={session && isAuthority ? <AuthorityDashboard /> : <AuthorityLoginPage />} 
+        />
+        <Route path="/home" element={<Navigate to="/" replace />} />
         <Route path="/status" element={<Home user={session?.user} />} />
         
         {/* Dedicated Authority Authentication Route */}
         <Route 
           path="/authority/login" 
-          element={session && isAuthority ? <Navigate to="/authority" replace /> : <AuthorityLoginPage />} 
+          element={session && isAuthority ? <Navigate to="/" replace /> : <AuthorityLoginPage />} 
         />
         
         {/* Redirect generic /auth and /login to authority login on web */}
-        <Route path="/auth" element={<Navigate to="/authority/login" replace />} />
-        <Route path="/login" element={<Navigate to="/authority/login" replace />} />
-        <Route path="/signup" element={<Navigate to="/authority/login" replace />} />
+        <Route path="/auth" element={<Navigate to="/" replace />} />
+        <Route path="/login" element={<Navigate to="/" replace />} />
+        <Route path="/signup" element={<Navigate to="/" replace />} />
 
         {/* Protected Authority Routes */}
         <Route path="/authority" element={<AuthorityRoute><AuthorityDashboard /></AuthorityRoute>} />
@@ -289,6 +294,9 @@ export default function App() {
         <Route path="/heatmap" element={<Heatmap />} />
         <Route path="/verify" element={<VerificationHub />} />
         <Route path="/verify/:id" element={<ResolutionVerification />} />
+        
+        {/* Public Live Journey Tracking (for trusted contacts) */}
+        <Route path="/track" element={<LiveTrackingPage />} />
         
         {/* Fallback */}
         <Route path="*" element={<Navigate to="/" replace />} />

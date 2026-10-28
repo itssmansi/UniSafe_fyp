@@ -1,237 +1,288 @@
-import { useState, useEffect } from 'react';
-import { supabase } from '../services/supabase';
-import { getAuthorityProfile, getComplaints, getNotifications, markNotificationRead } from '../services/authorityService';
-import AuthoritySidebar from '../components/authority/AuthoritySidebar';
-import AuthorityHeader from '../components/authority/AuthorityHeader';
-import PoliceDashboard from '../components/authority/PoliceDashboard';
-import BMCDashboard from '../components/authority/BMCDashboard';
-import AuthorityNotifications from '../components/authority/AuthorityNotifications';
-import AuthorityComplaintDetails from '../components/authority/AuthorityComplaintDetails';
-import AuthorityComplaintTable from '../components/authority/AuthorityComplaintTable';
-import AuthorityEscalations from '../components/authority/AuthorityEscalations';
-import AuthorityPerformance from '../components/authority/AuthorityPerformance';
-import InteractiveMap from '../screens/interactive-map/InteractiveMap';
-import KanbanBoard from '../screens/kanban-board/KanbanBoard';
+import React, { useState, useEffect } from 'react'
+import { supabase } from '../services/supabase'
+import {
+  getAuthorityProfile,
+  getComplaints,
+  getNotifications,
+  getAuthorities,
+  markNotificationRead,
+} from '../services/authorityService'
+
+import DashboardLayout from '../components/authority/watermelon/dashboard-layout'
+import { DashboardPage } from '../components/authority/watermelon/dashboard-content'
+import {
+  DashboardNavigationProvider,
+  useDashboardNavigation,
+} from '../components/authority/watermelon/navigation'
+import { ThemeProvider } from '../components/authority/watermelon/theme-provider'
+
+import AuthorityComplaintDetails from '../components/authority/AuthorityComplaintDetails'
+import AuthorityEscalations from '../components/authority/AuthorityEscalations'
+import AuthorityPerformance from '../components/authority/AuthorityPerformance'
+import KanbanBoard from '../screens/kanban-board/KanbanBoard'
+import Heatmap from './Heatmap'
+import VerificationHub from '../screens/verification/VerificationHub'
+import BmcOfficersPage from './BmcOfficersPage'
+import { ShieldCheck, MapPin, Building, Phone, Mail, UserCheck } from 'lucide-react'
+
+function DashboardRouter({
+  authority,
+  complaints,
+  officers,
+  notifications,
+  onSelectComplaint,
+  onUpdateComplaint,
+  onLogout,
+  onRefresh,
+}) {
+  const { pathname } = useDashboardNavigation()
+
+  let content = null
+
+  if (pathname === '/') {
+    content = (
+      <DashboardPage
+        authority={authority}
+        complaints={complaints}
+        officers={officers}
+        onSelectComplaint={onSelectComplaint}
+      />
+    )
+  } else if (pathname === '/kanban') {
+    content = (
+      <div className="p-4 sm:p-6 w-full h-full min-h-[750px] animate-in fade-in duration-300">
+        <div className="mb-4">
+          <h2 className="text-2xl font-bold tracking-tight text-foreground">
+            Field Dispatch Kanban Board
+          </h2>
+          <p className="text-xs text-muted-foreground">
+            Track and drag field tickets by priority and resolution stage.
+          </p>
+        </div>
+        <div className="w-full">
+          <KanbanBoard hideHeader={true} initialOfficers={officers} />
+        </div>
+      </div>
+    )
+  } else if (pathname === '/heatmap' || pathname === '/map') {
+    content = (
+      <div className="p-4 sm:p-6 w-full animate-in fade-in duration-300">
+        <Heatmap />
+      </div>
+    )
+  } else if (pathname === '/verification') {
+    content = (
+      <div className="p-4 sm:p-6 w-full animate-in fade-in duration-300">
+        <div className="mb-4">
+          <h2 className="text-2xl font-bold tracking-tight text-foreground">
+            Resolution Verification Tracking
+          </h2>
+          <p className="text-xs text-muted-foreground">
+            Track community verification milestones and citizen review status.
+          </p>
+        </div>
+        <VerificationHub />
+      </div>
+    )
+  } else if (pathname === '/escalations') {
+    content = (
+      <div className="p-4 sm:p-6 max-w-[1600px] mx-auto animate-in fade-in duration-300">
+        <div className="mb-6">
+          <h2 className="text-2xl font-bold tracking-tight text-foreground">
+            Critical Escalations
+          </h2>
+          <p className="text-xs text-muted-foreground">
+            High upvote and SLA-breached complaints requiring rapid intervention.
+          </p>
+        </div>
+        <AuthorityEscalations
+          complaints={complaints}
+          onRowClick={onSelectComplaint}
+        />
+      </div>
+    )
+  } else if (pathname === '/performance') {
+    content = (
+      <div className="p-4 sm:p-6 max-w-5xl mx-auto animate-in fade-in duration-300">
+        <div className="mb-6">
+          <h2 className="text-2xl font-bold tracking-tight text-foreground">
+            Department Performance & SLA
+          </h2>
+          <p className="text-xs text-muted-foreground">
+            Comparative analysis of resolution speed, verification score, and team throughput.
+          </p>
+        </div>
+        <AuthorityPerformance />
+      </div>
+    )
+  } else if (pathname === '/bmc-officers' || pathname === '/officers') {
+    content = (
+      <BmcOfficersPage
+        officers={officers}
+        complaints={complaints}
+        onRefresh={onRefresh}
+      />
+    )
+  } else if (pathname === '/settings') {
+    content = (
+      <div className="p-4 sm:p-6 max-w-3xl mx-auto animate-in fade-in duration-300">
+        <div className="mb-6">
+          <h2 className="text-2xl font-bold tracking-tight text-foreground">
+            Authority Officer Profile & Ward
+          </h2>
+          <p className="text-xs text-muted-foreground">
+            Official credentials, jurisdiction parameters, and department contact info.
+          </p>
+        </div>
+        <div className="bg-card p-6 rounded-2xl border border-border/60 shadow-xs space-y-6">
+          <div className="flex items-center gap-4 pb-6 border-b border-border/40">
+            <div className="size-16 rounded-2xl bg-primary/10 border border-primary/20 flex items-center justify-center text-primary font-bold text-2xl">
+              {authority?.name?.slice(0, 2) || 'AU'}
+            </div>
+            <div>
+              <h3 className="text-xl font-bold text-foreground">{authority?.name}</h3>
+              <p className="text-xs text-primary font-medium">{authority?.job_role || 'Zonal Authority Lead'}</p>
+              <p className="text-xs text-muted-foreground">{authority?.department}</p>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div className="p-3 rounded-xl bg-secondary/50 border border-border/40 flex items-start gap-3">
+              <Building className="size-5 text-primary mt-0.5 shrink-0" />
+              <div>
+                <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Department</p>
+                <p className="text-sm font-semibold text-foreground">{authority?.department || 'Brihanmumbai Municipal Corporation'}</p>
+              </div>
+            </div>
+
+            <div className="p-3 rounded-xl bg-secondary/50 border border-border/40 flex items-start gap-3">
+              <MapPin className="size-5 text-emerald-500 mt-0.5 shrink-0" />
+              <div>
+                <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Jurisdiction / Ward</p>
+                <p className="text-sm font-semibold text-foreground">{authority?.jurisdiction || 'Ward H-West (Bandra - Khar)'}</p>
+              </div>
+            </div>
+
+            <div className="p-3 rounded-xl bg-secondary/50 border border-border/40 flex items-start gap-3">
+              <Phone className="size-5 text-sky-500 mt-0.5 shrink-0" />
+              <div>
+                <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Official Phone</p>
+                <p className="text-sm font-semibold text-foreground">{authority?.phone || '+91 22 2642 1234'}</p>
+              </div>
+            </div>
+
+            <div className="p-3 rounded-xl bg-secondary/50 border border-border/40 flex items-start gap-3">
+              <Mail className="size-5 text-amber-500 mt-0.5 shrink-0" />
+              <div>
+                <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Email</p>
+                <p className="text-sm font-semibold text-foreground">{authority?.email || 'authority@unisafe.mumbai.gov.in'}</p>
+              </div>
+            </div>
+          </div>
+
+          <div className="pt-4 border-t border-border/40 flex justify-end">
+            <button
+              type="button"
+              onClick={onLogout}
+              className="px-4 py-2 text-xs font-semibold text-destructive bg-destructive/10 hover:bg-destructive/20 rounded-lg transition-colors"
+            >
+              Sign Out of Authority Portal
+            </button>
+          </div>
+        </div>
+      </div>
+    )
+  }
+
+  return (
+    <DashboardLayout authority={authority} onLogout={onLogout}>
+      {content}
+    </DashboardLayout>
+  )
+}
 
 export default function AuthorityDashboard() {
-  const [authority, setAuthority] = useState(null);
-  const [complaints, setComplaints] = useState([]);
-  const [notifications, setNotifications] = useState([]);
-  const [loading, setLoading] = useState(true);
-  
-  const [activeTab, setActiveTab] = useState('overview'); // overview, complaints, map, heatmap, notifications, profile
-  const [selectedComplaint, setSelectedComplaint] = useState(null);
-  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [authority, setAuthority] = useState(null)
+  const [complaints, setComplaints] = useState([])
+  const [notifications, setNotifications] = useState([])
+  const [officers, setOfficers] = useState([])
+  const [loading, setLoading] = useState(true)
+  const [selectedComplaint, setSelectedComplaint] = useState(null)
+
+  const loadData = async () => {
+    try {
+      const profile = await getAuthorityProfile()
+      if (profile) {
+        setAuthority(profile)
+        const [comps, notifs, auths] = await Promise.all([
+          getComplaints(profile),
+          getNotifications(profile.id),
+          getAuthorities(),
+        ])
+        setComplaints(comps || [])
+        setNotifications(notifs || [])
+        setOfficers(auths || [])
+      }
+    } catch (err) {
+      console.error('Dashboard initialization error:', err)
+    } finally {
+      setLoading(false)
+    }
+  }
 
   useEffect(() => {
-    async function loadData() {
-      try {
-        const profile = await getAuthorityProfile();
-        if (profile) {
-          setAuthority(profile);
-          const [comps, notifs] = await Promise.all([
-            getComplaints(profile),
-            getNotifications(profile.id)
-          ]);
-          setComplaints(comps);
-          setNotifications(notifs);
-        }
-      } catch (err) {
-        console.error("Dashboard init error:", err);
-      } finally {
-        setLoading(false);
-      }
-    }
-    loadData();
-  }, []);
+    loadData()
+  }, [])
 
   const handleLogout = async () => {
-    localStorage.removeItem('unisafe_authority');
-    localStorage.removeItem('user');
-    await supabase.auth.signOut();
-    window.location.href = '/authority/login';
-  };
+    await supabase.auth.signOut()
+    window.location.reload()
+  }
 
   const handleUpdateComplaint = (complaintId, newStatus) => {
-    setComplaints(prev => prev.map(c => c.id === complaintId ? { ...c, status: newStatus } : c));
+    setComplaints((prev) =>
+      prev.map((c) => (c.id === complaintId ? { ...c, status: newStatus } : c))
+    )
     if (selectedComplaint?.id === complaintId) {
-      setSelectedComplaint(prev => ({ ...prev, status: newStatus }));
+      setSelectedComplaint((prev) => ({ ...prev, status: newStatus }))
     }
-  };
-
-  const handleMarkNotificationRead = async (notifId) => {
-    await markNotificationRead(notifId);
-    setNotifications(prev => prev.filter(n => n.id !== notifId));
-  };
-
-  const handleNotificationClick = (notif) => {
-    if (notif.type === 'VIEW_ALL') {
-      setActiveTab('notifications');
-      return;
-    }
-    // TODO: In a real backend, notif would include `complaint_id`.
-    // For now, we try to match complaint title from notification body/title.
-    const matchedComplaint = complaints.find(c => notif.body?.includes(c.title) || notif.title?.includes(c.title));
-    if (matchedComplaint) {
-      setSelectedComplaint(matchedComplaint);
-    } else {
-      console.log("Could not link notification to complaint, open assignments tab instead.");
-      setActiveTab('assignments');
-    }
-  };
+  }
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-unisafe-smoke-white/20 flex items-center justify-center">
-        <div className="w-12 h-12 border-4 border-unisafe-teal border-t-transparent rounded-full animate-spin"></div>
+      <div className="min-h-screen bg-background flex items-center justify-center">
+        <div className="flex flex-col items-center gap-3">
+          <div className="w-10 h-10 border-3 border-primary border-t-transparent rounded-full animate-spin" />
+          <p className="text-xs font-medium text-muted-foreground">
+            Authenticating UniSafe Authority...
+          </p>
+        </div>
       </div>
-    );
+    )
   }
 
-  // Determine which dashboard variant to show
-  const isPolice = authority?.department?.toLowerCase().includes('police');
-  const isBMC = authority?.department?.toLowerCase().includes('bmc') || authority?.department?.toLowerCase().includes('municipal');
-
   return (
-    <div className="flex h-screen bg-[#F7F8F4] overflow-hidden font-sans">
-      
-      {/* Mobile Sidebar Overlay */}
-      {mobileMenuOpen && (
-        <div 
-          className="fixed inset-0 bg-unisafe-midnight-blue/50 z-40 md:hidden" 
-          onClick={() => setMobileMenuOpen(false)}
-        />
-      )}
-      
-      {/* Sidebar Wrapper (handles mobile translation) */}
-      <div className={`fixed inset-y-0 left-0 z-50 transform transition-transform duration-300 md:relative md:translate-x-0 ${mobileMenuOpen ? 'translate-x-0' : '-translate-x-full'}`}>
-        <AuthoritySidebar 
-          activeTab={activeTab} 
-          setActiveTab={(tab) => { setActiveTab(tab); setMobileMenuOpen(false); }} 
-          authority={authority} 
-          onLogout={handleLogout} 
-        />
-      </div>
-
-      <div className="flex-1 flex flex-col h-screen overflow-hidden">
-        <AuthorityHeader 
-          authority={authority} 
-          toggleMobileMenu={() => setMobileMenuOpen(true)} 
+    <ThemeProvider defaultTheme="light" storageKey="unisafe-authority-theme">
+      <DashboardNavigationProvider initialPath="/">
+        <DashboardRouter
+          onRefresh={loadData}
+          authority={authority}
+          complaints={complaints}
+          officers={officers}
           notifications={notifications}
-          onMarkRead={handleMarkNotificationRead}
-          onNotificationClick={handleNotificationClick}
+          onSelectComplaint={setSelectedComplaint}
+          onUpdateComplaint={handleUpdateComplaint}
+          onLogout={handleLogout}
         />
-        
-        <main className="flex-1 overflow-y-auto p-4 sm:p-6 lg:p-8">
-          {activeTab === 'overview' && (
-            isPolice ? (
-              <PoliceDashboard complaints={complaints} onRowClick={setSelectedComplaint} notifications={notifications} onNotificationClick={handleNotificationClick} />
-            ) : isBMC ? (
-              <BMCDashboard complaints={complaints} onRowClick={setSelectedComplaint} notifications={notifications} onNotificationClick={handleNotificationClick} />
-            ) : (
-              // Generic Fallback
-              <PoliceDashboard complaints={complaints} onRowClick={setSelectedComplaint} notifications={notifications} onNotificationClick={handleNotificationClick} />
-            )
-          )}
 
-          {activeTab === 'assignments' && (
-            <div className="animate-in fade-in slide-in-from-bottom-4 duration-500">
-              <div className="mb-6">
-                <h2 className="text-2xl font-bold tracking-tight text-unisafe-midnight-blue">My Assignments</h2>
-                <p className="text-sm text-unisafe-dark-midnight-blue/70">Complaints directly assigned to you.</p>
-              </div>
-              <AuthorityComplaintTable complaints={complaints.filter(c => c.assigned_authority_id === authority?.id)} onRowClick={setSelectedComplaint} />
-            </div>
-          )}
-
-          {activeTab === 'escalations' && (
-            <div className="animate-in fade-in slide-in-from-bottom-4 duration-500">
-              <div className="mb-6">
-                <h2 className="text-2xl font-bold tracking-tight text-unisafe-midnight-blue">All Escalations</h2>
-                <p className="text-sm text-unisafe-dark-midnight-blue/70">Complaints that have crossed the community threshold.</p>
-              </div>
-              <AuthorityEscalations complaints={complaints} onRowClick={setSelectedComplaint} />
-            </div>
-          )}
-
-          {activeTab === 'performance' && (
-            <div className="animate-in fade-in slide-in-from-bottom-4 duration-500 max-w-4xl mx-auto">
-              <div className="mb-6">
-                <h2 className="text-2xl font-bold tracking-tight text-unisafe-midnight-blue">Department Performance</h2>
-                <p className="text-sm text-unisafe-dark-midnight-blue/70">Analytics and resolution metrics.</p>
-              </div>
-              <AuthorityPerformance />
-            </div>
-          )}
-
-          {activeTab === 'notifications' && (
-            <AuthorityNotifications 
-              authority={authority} 
-              notifications={notifications}
-              onMarkRead={handleMarkNotificationRead}
-              onNotificationClick={handleNotificationClick}
-            />
-          )}
-
-          {/* Integration placeholders for teammates */}
-          {activeTab === 'map' && (
-            <div className="w-full h-full rounded-2xl overflow-hidden shadow-sm border border-slate-200 relative [&>div]:!h-full" style={{ minHeight: '600px' }}>
-              <InteractiveMap />
-            </div>
-          )}
-          
-          {activeTab === 'heatmap' && (
-            <div className="flex flex-col items-center justify-center h-full border-2 border-dashed border-unisafe-smoke-white/60 rounded-2xl bg-unisafe-white p-12 text-center animate-in fade-in duration-500">
-              <svg className="w-16 h-16 text-unisafe-teal/40 mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 20l-5.447-2.724A1 1 0 013 16.382V5.618a1 1 0 011.447-.894L9 7m0 13l6-3m-6 3V7m6 10l4.553 2.276A1 1 0 0021 18.382V7.618a1 1 0 00-.553-.894L15 4m0 13V4m0 0L9 7" /></svg>
-              <h3 className="text-xl font-bold text-unisafe-midnight-blue tracking-tight mb-2">
-                Heatmap Integration Module
-              </h3>
-              <p className="text-unisafe-dark-midnight-blue/60 max-w-md">
-                This area is reserved for the heatmap component. Your teammates can easily drop their React component right here without breaking the dashboard layout!
-              </p>
-            </div>
-          )}
-          
-          {activeTab === 'kanban' && (
-            <div className="w-full h-full rounded-2xl overflow-hidden shadow-sm border border-slate-200 relative" style={{ minHeight: '600px' }}>
-              <KanbanBoard />
-            </div>
-          )}
-          
-          {activeTab === 'profile' && (
-            <div className="animate-in fade-in slide-in-from-bottom-4 duration-500 max-w-2xl mx-auto">
-              <h2 className="text-2xl font-bold tracking-tight text-unisafe-midnight-blue mb-6">Authority Profile</h2>
-              <div className="bg-unisafe-white p-6 rounded-xl border border-unisafe-smoke-white/50 shadow-sm space-y-4">
-                <div>
-                  <p className="text-sm font-semibold uppercase tracking-wider text-unisafe-dark-midnight-blue/50 mb-1">Name</p>
-                  <p className="font-medium text-unisafe-midnight-blue text-lg">{authority?.name}</p>
-                </div>
-                <div>
-                  <p className="text-sm font-semibold uppercase tracking-wider text-unisafe-dark-midnight-blue/50 mb-1">Department</p>
-                  <p className="font-medium text-unisafe-midnight-blue">{authority?.department}</p>
-                </div>
-                <div>
-                  <p className="text-sm font-semibold uppercase tracking-wider text-unisafe-dark-midnight-blue/50 mb-1">Jurisdiction</p>
-                  <p className="font-medium text-unisafe-midnight-blue">{authority?.jurisdiction}</p>
-                </div>
-                <div>
-                  <p className="text-sm font-semibold uppercase tracking-wider text-unisafe-dark-midnight-blue/50 mb-1">Phone / ID</p>
-                  <p className="font-medium text-unisafe-midnight-blue">{authority?.phone || 'Not provided'}</p>
-                </div>
-              </div>
-            </div>
-          )}
-
-        </main>
-      </div>
-
-      {/* Details Slide-over */}
-      <AuthorityComplaintDetails 
-        complaint={selectedComplaint} 
-        authority={authority} 
-        onClose={() => setSelectedComplaint(null)} 
-        onUpdate={handleUpdateComplaint}
-      />
-    </div>
-  );
+        {/* Selected Complaint Detail Drawer */}
+        <AuthorityComplaintDetails
+          complaint={selectedComplaint}
+          authority={authority}
+          onClose={() => setSelectedComplaint(null)}
+          onUpdate={handleUpdateComplaint}
+        />
+      </DashboardNavigationProvider>
+    </ThemeProvider>
+  )
 }

@@ -25,6 +25,14 @@ class ReportModel {
   final String status;
   final int upvoteCount;
   final DateTime? createdAt;
+  final String? assignedAuthorityId;
+  final String? assignedOfficerName;
+  final String? assignedOfficerPhone;
+  final String? assignedOfficerDepartment;
+  final String? assignedOfficerJurisdiction;
+  final String? assignedOfficerRole;
+  final String? assignedOfficerAvatar;
+  final int? assignedOfficerSolvedCount;
 
   ReportModel({
     String? id,
@@ -41,6 +49,14 @@ class ReportModel {
     this.status = 'pending',
     this.upvoteCount = 0,
     this.createdAt,
+    this.assignedAuthorityId,
+    this.assignedOfficerName,
+    this.assignedOfficerPhone,
+    this.assignedOfficerDepartment,
+    this.assignedOfficerJurisdiction,
+    this.assignedOfficerRole,
+    this.assignedOfficerAvatar,
+    this.assignedOfficerSolvedCount,
   }) : id = id ?? const Uuid().v4();
 
   ReportModel copyWith({
@@ -58,6 +74,14 @@ class ReportModel {
     String? status,
     int? upvoteCount,
     DateTime? createdAt,
+    String? assignedAuthorityId,
+    String? assignedOfficerName,
+    String? assignedOfficerPhone,
+    String? assignedOfficerDepartment,
+    String? assignedOfficerJurisdiction,
+    String? assignedOfficerRole,
+    String? assignedOfficerAvatar,
+    int? assignedOfficerSolvedCount,
   }) {
     return ReportModel(
       id: id ?? this.id,
@@ -74,6 +98,14 @@ class ReportModel {
       status: status ?? this.status,
       upvoteCount: upvoteCount ?? this.upvoteCount,
       createdAt: createdAt ?? this.createdAt,
+      assignedAuthorityId: assignedAuthorityId ?? this.assignedAuthorityId,
+      assignedOfficerName: assignedOfficerName ?? this.assignedOfficerName,
+      assignedOfficerPhone: assignedOfficerPhone ?? this.assignedOfficerPhone,
+      assignedOfficerDepartment: assignedOfficerDepartment ?? this.assignedOfficerDepartment,
+      assignedOfficerJurisdiction: assignedOfficerJurisdiction ?? this.assignedOfficerJurisdiction,
+      assignedOfficerRole: assignedOfficerRole ?? this.assignedOfficerRole,
+      assignedOfficerAvatar: assignedOfficerAvatar ?? this.assignedOfficerAvatar,
+      assignedOfficerSolvedCount: assignedOfficerSolvedCount ?? this.assignedOfficerSolvedCount,
     );
   }
 
@@ -109,6 +141,28 @@ class ReportModel {
     String? citizenName;
     if (json['citizens'] != null && json['citizens'] is Map) {
       citizenName = json['citizens']['name']?.toString();
+    }
+
+    // Assigned officer data if joined or provided in json
+    String? assignedAuthorityId = json['assigned_authority_id']?.toString();
+    String? officerName = json['assigned_officer_name']?.toString();
+    String? officerPhone = json['assigned_officer_phone']?.toString();
+    String? officerDepartment = json['assigned_officer_department']?.toString();
+    String? officerJurisdiction = json['assigned_officer_jurisdiction']?.toString();
+    String? officerRole = json['assigned_officer_role']?.toString();
+    String? officerAvatar = json['assigned_officer_avatar']?.toString();
+    int? officerSolvedCount = (json['assigned_officer_solved_count'] as num?)?.toInt();
+
+    if (json['authorities'] != null && json['authorities'] is Map) {
+      final authMap = json['authorities'] as Map<String, dynamic>;
+      assignedAuthorityId = authMap['id']?.toString() ?? assignedAuthorityId;
+      officerName = authMap['name']?.toString() ?? officerName;
+      officerPhone = authMap['phone']?.toString() ?? officerPhone;
+      officerDepartment = authMap['department']?.toString() ?? officerDepartment;
+      officerJurisdiction = authMap['jurisdiction']?.toString() ?? officerJurisdiction;
+      officerRole = authMap['role']?.toString() ?? officerRole;
+      officerAvatar = authMap['avatar_url']?.toString() ?? officerAvatar;
+      officerSolvedCount = (authMap['solved_count'] as num?)?.toInt() ?? officerSolvedCount;
     }
 
     DateTime? createdAt;
@@ -149,6 +203,14 @@ class ReportModel {
       status: json['status']?.toString() ?? 'pending',
       upvoteCount: (json['upvote_count'] as num?)?.toInt() ?? 0,
       createdAt: createdAt,
+      assignedAuthorityId: assignedAuthorityId,
+      assignedOfficerName: officerName,
+      assignedOfficerPhone: officerPhone,
+      assignedOfficerDepartment: officerDepartment,
+      assignedOfficerJurisdiction: officerJurisdiction,
+      assignedOfficerRole: officerRole,
+      assignedOfficerAvatar: officerAvatar,
+      assignedOfficerSolvedCount: officerSolvedCount,
     );
   }
 

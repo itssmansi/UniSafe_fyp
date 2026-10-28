@@ -23,7 +23,7 @@ const DEPARTMENTS = [
 export default function AuthorityLoginPage() {
   const navigate = useNavigate();
 
-  const [department, setDepartment] = useState('POLICE');
+  const [department, setDepartment] = useState('BMC');
   const [name, setName] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
@@ -99,7 +99,7 @@ export default function AuthorityLoginPage() {
       setSuccessMsg('Signed in. Opening dashboard...');
 
       setTimeout(() => {
-        navigate('/authority', { replace: true });
+        navigate('/', { replace: true });
       }, 350);
     } catch (err) {
       console.error('Authority login failed:', err);

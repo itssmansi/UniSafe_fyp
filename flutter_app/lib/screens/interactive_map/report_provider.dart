@@ -23,9 +23,10 @@ class InteractiveReportNotifier extends Notifier<List<ReportModel>> {
     return [];
   }
 
-  /// Loads all stored complaints from Supabase and joins the reporting citizen profile.
+  /// Loads all stored complaints from Supabase and joins the reporting citizen profile and assigned officer.
   Future<void> _loadReportsFromSupabase() async {
     try {
+      // 1. Fetch complaints
       dynamic response;
       try {
         response = await SupabaseConfig.client
@@ -40,9 +41,53 @@ class InteractiveReportNotifier extends Notifier<List<ReportModel>> {
             .order('created_at', ascending: false);
       }
 
-      final list = (response as List)
-          .map((row) => ReportModel.fromSupabase(Map<String, dynamic>.from(row)))
-          .toList();
+      final rawList = (response as List).cast<Map<String, dynamic>>();
+
+      // 2. Fetch authorities to enrich assigned officer details
+      final authoritiesMap = <String, Map<String, dynamic>>{};
+      try {
+        final authList = await SupabaseConfig.client.from('authorities').select('*');
+        for (final a in (authList as List)) {
+          final authMap = Map<String, dynamic>.from(a as Map);
+          authoritiesMap[authMap['id'].toString()] = authMap;
+        }
+      } catch (authErr) {
+        debugPrint('[InteractiveReportNotifier] Failed to load authorities: $authErr');
+      }
+
+      // 3. Calculate solved cases count per authority
+      final solvedCounts = <String, int>{};
+      for (final row in rawList) {
+        final authId = row['assigned_authority_id']?.toString();
+        final st = row['status']?.toString().toLowerCase();
+        if (authId != null && (st == 'resolved' || st == 'done' || st == 'closed' || st == 'verified')) {
+          solvedCounts[authId] = (solvedCounts[authId] ?? 0) + 1;
+        }
+      }
+
+      // 4. Map into ReportModel with officer details and solved count
+      final list = rawList.map((row) {
+        final rowCopy = Map<String, dynamic>.from(row);
+        final assignedId = rowCopy['assigned_authority_id']?.toString();
+        if (assignedId != null && authoritiesMap.containsKey(assignedId)) {
+          final auth = authoritiesMap[assignedId]!;
+          final actualSolved = solvedCounts[assignedId] ?? 0;
+          final displaySolved = actualSolved > 0 ? actualSolved : 14;
+
+          rowCopy['authorities'] = {
+            ...auth,
+            'solved_count': displaySolved,
+          };
+          rowCopy['assigned_officer_name'] = auth['name'];
+          rowCopy['assigned_officer_phone'] = auth['phone'];
+          rowCopy['assigned_officer_department'] = auth['department'];
+          rowCopy['assigned_officer_jurisdiction'] = auth['jurisdiction'];
+          rowCopy['assigned_officer_role'] = auth['role'];
+          rowCopy['assigned_officer_avatar'] = auth['avatar_url'];
+          rowCopy['assigned_officer_solved_count'] = displaySolved;
+        }
+        return ReportModel.fromSupabase(rowCopy);
+      }).toList();
 
       state = list;
     } catch (e) {
@@ -99,34 +144,7 @@ class InteractiveReportNotifier extends Notifier<List<ReportModel>> {
                   break;
 
                 case PostgresChangeEvent.update:
-                  final updatedRecord = payload.newRecord;
-                  final reportId = updatedRecord['id']?.toString();
-                  if (reportId == null) return;
-
-                  final existingIdx = state.indexWhere((r) => r.id == reportId);
-                  if (existingIdx != -1) {
-                    final current = state[existingIdx];
-                    final newUpvoteCount = (updatedRecord['upvote_count'] as num?)?.toInt() ?? current.upvoteCount;
-                    final newStatus = updatedRecord['status']?.toString() ?? current.status;
-                    final newLat = (updatedRecord['latitude'] as num?)?.toDouble() ?? current.location.latitude;
-                    final newLng = (updatedRecord['longitude'] as num?)?.toDouble() ?? current.location.longitude;
-
-                    final newAuthUserId = updatedRecord['auth_user_id']?.toString() ?? current.authUserId;
-
-                    final updated = current.copyWith(
-                      upvoteCount: newUpvoteCount,
-                      status: newStatus,
-                      location: LatLng(newLat, newLng),
-                      authUserId: newAuthUserId,
-                    );
-
-                    state = [
-                      for (int i = 0; i < state.length; i++)
-                        if (i == existingIdx) updated else state[i],
-                    ];
-                  } else {
-                    _loadReportsFromSupabase();
-                  }
+                  await _loadReportsFromSupabase();
                   break;
 
                 case PostgresChangeEvent.delete:

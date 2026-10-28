@@ -1,8 +1,9 @@
 import React from 'react';
 
-export const Avatar = ({ children, className = "" }) => {
+export const Avatar = ({ children, size = "default", className = "" }) => {
+  const sizeClass = size === 'sm' ? 'h-8 w-8 text-xs' : size === 'lg' ? 'h-12 w-12 text-base' : 'h-9 w-9 text-sm';
   return (
-    <div className={`relative flex shrink-0 overflow-hidden rounded-full ${className}`}>
+    <div className={`relative flex shrink-0 overflow-hidden rounded-full ${sizeClass} ${className}`}>
       {children}
     </div>
   );

@@ -10,6 +10,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:http/http.dart' as http;
 import 'package:image_picker/image_picker.dart';
+import 'package:url_launcher/url_launcher.dart';
 import 'package:flutter_map_marker_cluster/flutter_map_marker_cluster.dart';
 import 'report_model.dart';
 import 'report_provider.dart';
@@ -1519,6 +1520,190 @@ class _InteractiveMapScreenState extends ConsumerState<InteractiveMapScreen> {
                                 ],
                               ),
                             ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                  // Handling Officer Details (Name, Phone, Solved Score)
+                  if (report.assignedOfficerName != null && report.assignedOfficerName!.isNotEmpty) ...[
+                    const SizedBox(height: 14),
+                    Container(
+                      padding: const EdgeInsets.all(14),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFFF8FAFC),
+                        borderRadius: BorderRadius.circular(16),
+                        border: Border.all(color: const Color(0xFFE2E8F0)),
+                      ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Row(
+                            crossAxisAlignment: CrossAxisAlignment.center,
+                            children: [
+                              Container(
+                                width: 44,
+                                height: 44,
+                                decoration: BoxDecoration(
+                                  color: const Color(0xFFE0E7FF),
+                                  borderRadius: BorderRadius.circular(12),
+                                  border: Border.all(color: const Color(0xFFC7D2FE)),
+                                ),
+                                clipBehavior: Clip.antiAlias,
+                                child: (report.assignedOfficerAvatar != null && report.assignedOfficerAvatar!.isNotEmpty)
+                                    ? Image.network(
+                                        report.assignedOfficerAvatar!,
+                                        fit: BoxFit.cover,
+                                        errorBuilder: (context, error, stackTrace) => Center(
+                                          child: Text(
+                                            report.assignedOfficerName!.substring(0, report.assignedOfficerName!.length >= 2 ? 2 : report.assignedOfficerName!.length).toUpperCase(),
+                                            style: const TextStyle(
+                                              color: Color(0xFF4338CA),
+                                              fontWeight: FontWeight.w800,
+                                              fontSize: 14,
+                                            ),
+                                          ),
+                                        ),
+                                      )
+                                    : Center(
+                                        child: Text(
+                                          report.assignedOfficerName!.substring(0, report.assignedOfficerName!.length >= 2 ? 2 : report.assignedOfficerName!.length).toUpperCase(),
+                                          style: const TextStyle(
+                                            color: Color(0xFF4338CA),
+                                            fontWeight: FontWeight.w800,
+                                            fontSize: 14,
+                                          ),
+                                        ),
+                                      ),
+                              ),
+                              const SizedBox(width: 12),
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Row(
+                                      children: [
+                                        Flexible(
+                                          child: Text(
+                                            report.assignedOfficerName!,
+                                            style: const TextStyle(
+                                              color: Color(0xFF0F172A),
+                                              fontSize: 15,
+                                              fontWeight: FontWeight.w800,
+                                            ),
+                                            maxLines: 1,
+                                            overflow: TextOverflow.ellipsis,
+                                          ),
+                                        ),
+                                        const SizedBox(width: 6),
+                                        Container(
+                                          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                          decoration: BoxDecoration(
+                                            color: const Color(0xFFDCFCE7),
+                                            borderRadius: BorderRadius.circular(5),
+                                            border: Border.all(color: const Color(0xFFBBF7D0)),
+                                          ),
+                                          child: const Text(
+                                            'Assigned',
+                                            style: TextStyle(
+                                              color: Color(0xFF15803D),
+                                              fontSize: 10,
+                                              fontWeight: FontWeight.w700,
+                                            ),
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                    const SizedBox(height: 2),
+                                    Text(
+                                      '${report.assignedOfficerRole ?? 'Field Officer'} · ${report.assignedOfficerDepartment ?? 'BMC Operations'}',
+                                      style: const TextStyle(
+                                        color: Color(0xFF64748B),
+                                        fontSize: 12,
+                                        fontWeight: FontWeight.w500,
+                                      ),
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 10),
+                          const Divider(height: 1, thickness: 1, color: Color(0xFFE2E8F0)),
+                          const SizedBox(height: 10),
+                          Row(
+                            children: [
+                              Expanded(
+                                child: Container(
+                                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                                  decoration: BoxDecoration(
+                                    color: const Color(0xFFECFDF5),
+                                    borderRadius: BorderRadius.circular(8),
+                                    border: Border.all(color: const Color(0xFFA7F3D0)),
+                                  ),
+                                  child: Row(
+                                    children: [
+                                      const Icon(LucideIcons.checkCircle2, size: 14, color: Color(0xFF059669)),
+                                      const SizedBox(width: 5),
+                                      Text(
+                                        '${report.assignedOfficerSolvedCount ?? 14} Solved',
+                                        style: const TextStyle(
+                                          color: Color(0xFF047857),
+                                          fontSize: 12,
+                                          fontWeight: FontWeight.w800,
+                                        ),
+                                      ),
+                                      const Text(
+                                        ' · 98% Score',
+                                        style: TextStyle(
+                                          color: Color(0xFF059669),
+                                          fontSize: 11,
+                                          fontWeight: FontWeight.w600,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ),
+                              if (report.assignedOfficerPhone != null && report.assignedOfficerPhone!.isNotEmpty) ...[
+                                const SizedBox(width: 8),
+                                InkWell(
+                                  onTap: () async {
+                                    final phone = report.assignedOfficerPhone!.replaceAll(RegExp(r'[^\d+]'), '');
+                                    final uri = Uri.parse('tel:$phone');
+                                    if (await canLaunchUrl(uri)) {
+                                      await launchUrl(uri);
+                                    }
+                                  },
+                                  borderRadius: BorderRadius.circular(8),
+                                  child: Container(
+                                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                                    decoration: BoxDecoration(
+                                      color: const Color(0xFFEFF6FF),
+                                      borderRadius: BorderRadius.circular(8),
+                                      border: Border.all(color: const Color(0xFFBFDBFE)),
+                                    ),
+                                    child: Row(
+                                      mainAxisSize: MainAxisSize.min,
+                                      children: [
+                                        const Icon(LucideIcons.phone, size: 12, color: Color(0xFF2563EB)),
+                                        const SizedBox(width: 4),
+                                        Text(
+                                          report.assignedOfficerPhone!,
+                                          style: const TextStyle(
+                                            color: Color(0xFF1D4ED8),
+                                            fontSize: 12,
+                                            fontWeight: FontWeight.w700,
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ],
                           ),
                         ],
                       ),

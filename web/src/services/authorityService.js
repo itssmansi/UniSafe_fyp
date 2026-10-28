@@ -33,21 +33,32 @@ export async function getAuthorityProfile() {
  */
 export async function getComplaints(authority) {
   try {
-    if (!authority?.id) return [];
-    const query = supabase.from('complaints').select('*')
-      .eq('assigned_authority_id', authority.id)
-      .order('created_at', { ascending: false });
+    const query = supabase.from('complaints').select('*').order('created_at', { ascending: false });
 
     const { data, error } = await query;
 
     if (error) throw error;
     
-    return data.map(c => ({
+    return (data || []).map(c => ({
       ...c,
       verification_count: c.verification_count ?? 0
     }));
   } catch (err) {
     console.error("Error fetching complaints:", err);
+    return [];
+  }
+}
+
+/**
+ * Fetch list of official authority personnel from Supabase
+ */
+export async function getAuthorities() {
+  try {
+    const { data, error } = await supabase.from('authorities').select('*');
+    if (error) throw error;
+    return data || [];
+  } catch (err) {
+    console.error("Error fetching authorities:", err);
     return [];
   }
 }
@@ -149,5 +160,124 @@ export async function markNotificationRead(notificationId) {
     await supabase.from('notifications').update({ is_read: true }).eq('id', notificationId);
   } catch (err) {
     console.error("Error marking notification read:", err);
+  }
+}
+
+
+/**
+ * Upsert (create or update) a BMC officer in Supabase
+ */
+export async function upsertBmcOfficer(officerData) {
+  try {
+    const { data, error } = await supabase.rpc('upsert_bmc_officer', {
+      p_id: officerData.id || null,
+      p_name: officerData.name?.trim(),
+      p_phone: officerData.phone?.trim() || null,
+      p_department: officerData.department?.trim() || 'BMC',
+      p_jurisdiction: officerData.jurisdiction?.trim() || 'Ward H-West',
+      p_role: officerData.role?.trim() || 'Ward Officer',
+      p_avatar_url: officerData.avatar_url?.trim() || null
+    });
+
+    if (error) {
+      console.warn('RPC upsert_bmc_officer failed, falling back to direct table mutation:', error);
+      if (officerData.id) {
+        const { data: updated, error: uErr } = await supabase
+          .from('authorities')
+          .update({
+            name: officerData.name,
+            phone: officerData.phone,
+            department: officerData.department || 'BMC',
+            jurisdiction: officerData.jurisdiction,
+            role: officerData.role || 'Ward Officer',
+            avatar_url: officerData.avatar_url || null
+          })
+          .eq('id', officerData.id)
+          .select()
+          .maybeSingle();
+        if (uErr) throw uErr;
+        return updated;
+      } else {
+        const { data: inserted, error: iErr } = await supabase
+          .from('authorities')
+          .insert({
+            name: officerData.name,
+            phone: officerData.phone,
+            department: officerData.department || 'BMC',
+            jurisdiction: officerData.jurisdiction,
+            role: officerData.role || 'Ward Officer',
+            avatar_url: officerData.avatar_url || null,
+            user_type: 'authority',
+            verification_status: 'verified'
+          })
+          .select()
+          .maybeSingle();
+        if (iErr) throw iErr;
+        return inserted;
+      }
+    }
+
+    return data;
+  } catch (err) {
+    console.error('Error saving BMC officer:', err);
+    throw err;
+  }
+}
+
+/**
+ * Delete a BMC officer and safely unlink their past complaint assignments
+ */
+export async function deleteBmcOfficer(officerId) {
+  try {
+    const { data, error } = await supabase.rpc('delete_bmc_officer', {
+      p_id: officerId
+    });
+
+    if (error) {
+      console.warn('RPC delete_bmc_officer failed, falling back to direct unlink & delete:', error);
+      await supabase.from('complaints').update({ assigned_authority_id: null }).eq('assigned_authority_id', officerId);
+      const { error: dErr } = await supabase.from('authorities').delete().eq('id', officerId);
+      if (dErr) throw dErr;
+    }
+
+    return true;
+  } catch (err) {
+    console.error('Error deleting BMC officer:', err);
+    throw err;
+  }
+}
+
+/**
+ * Assign a complaint to an officer and move status to in-progress
+ */
+export async function assignComplaintToOfficer(complaintId, officerId, reason = null) {
+  try {
+    const { data, error } = await supabase.rpc('assign_complaint_officer', {
+      p_complaint_id: complaintId,
+      p_officer_id: officerId,
+      p_reason: reason || 'Dispatched via Kanban Board'
+    });
+
+    if (error) {
+      console.warn('RPC assign_complaint_officer failed, falling back to direct update:', error);
+      const { data: updated, error: uErr } = await supabase
+        .from('complaints')
+        .update({
+          assigned_authority_id: officerId,
+          status: 'in-progress',
+          assignment_status: 'assigned',
+          assignment_reason: reason || 'Dispatched via Kanban Board'
+        })
+        .eq('id', complaintId)
+        .select();
+
+      if (uErr) throw uErr;
+      return updated?.[0] || { id: complaintId, assigned_authority_id: officerId, status: 'in-progress' };
+    }
+
+    return data;
+  } catch (err) {
+    console.error('Error assigning complaint to officer:', err);
+    throw err;
   }
 }

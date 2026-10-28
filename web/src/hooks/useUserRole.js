@@ -5,7 +5,6 @@ import { useState, useEffect } from 'react';
  * 
  * Safely inspects if an authenticated user object exists in local/session storage,
  * defaulting safely to 'citizen' (read-only mode) if no role is available.
- * Keeps role integration isolated so Seana's authentication module can connect cleanly later.
  */
 export function useUserRole() {
   const [roleInfo, setRoleInfo] = useState({
@@ -17,13 +16,13 @@ export function useUserRole() {
   useEffect(() => {
     try {
       // Check existing storage keys if set by auth module
-      const rawUser = localStorage.getItem('user') || sessionStorage.getItem('user');
+      const rawUser = localStorage.getItem('user') || localStorage.getItem('unisafe_authority') || sessionStorage.getItem('user');
       let role = 'citizen';
 
       if (rawUser) {
         const parsed = JSON.parse(rawUser);
-        if (parsed && parsed.role) {
-          role = String(parsed.role).toLowerCase();
+        if (parsed && (parsed.role || parsed.user_type || parsed.department)) {
+          role = String(parsed.role || parsed.user_type || 'authority').toLowerCase();
         }
       }
 
