@@ -1,21 +1,44 @@
 import React, { useEffect, useState, useMemo, useRef } from 'react';
-
 import HeatmapHeader from '../components/heatmap/HeatmapHeader';
+import HeatmapStats from '../components/heatmap/HeatmapStats';
 import HeatmapFilters from '../components/heatmap/HeatmapFilters';
-import HeatmapLegend from '../components/heatmap/HeatmapLegend';
-import HotspotCard from '../components/heatmap/HotspotCard';
+import HeatmapFloatingLayerCard from '../components/heatmap/HeatmapFloatingLayerCard';
+import HeatmapTopRightDock from '../components/heatmap/HeatmapTopRightDock';
+import HeatmapFloatingLegend from '../components/heatmap/HeatmapFloatingLegend';
+import MumbaiViewButton from '../components/heatmap/MumbaiViewButton';
 import HotspotDetails from '../components/heatmap/HotspotDetails';
-import { ActiveHotspotsStat, HighRiskAreasStat, ClusteredComplaintsStat } from '../components/heatmap/HeatmapStats';
 import { fetchHeatmapData } from '../services/heatmapService';
+import { getAuthorityProfile } from '../services/authorityService';
 
-export default function Heatmap() {
+export default function Heatmap({ authority: propAuthority = null, isEmbedded = false }) {
+  const [authority, setAuthority] = useState(propAuthority);
   const [zones, setZones] = useState([]);
+  const [categoryHierarchy, setCategoryHierarchy] = useState({
+    totalCount: 0,
+    mainCategories: {},
+    subCategoriesByMain: {},
+  });
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
 
-  // Filters state
-  const [selectedCategory, setSelectedCategory] = useState('All');
+  // Department identification
+  const department = authority?.department || null;
+  const isPolice = department?.toLowerCase().includes('police');
+  const isBMC =
+    department?.toLowerCase().includes('bmc') ||
+    department?.toLowerCase().includes('municipal');
+
+  // Filter States matching reference design
+  const [selectedCategory, setSelectedCategory] = useState(
+    isPolice ? 'Safety' : 'Infrastructure'
+  );
+  const [selectedSubCategory, setSelectedSubCategory] = useState('All');
+  const [activeMode, setActiveMode] = useState('hybrid'); // 'hybrid' | 'heatmap' | 'hotspots'
   const [selectedSeverity, setSelectedSeverity] = useState('All');
+  const [timeRange, setTimeRange] = useState('all');
+  const [selectedJurisdiction, setSelectedJurisdiction] = useState('All');
+  const [searchQuery, setSearchQuery] = useState('');
+  const [isLayerExpanded, setIsLayerExpanded] = useState(true);
 
   // Selected hotspot for details & map focus
   const [selectedZone, setSelectedZone] = useState(null);
@@ -23,27 +46,60 @@ export default function Heatmap() {
   // Map DOM Ref and Leaflet Instance Refs
   const mapContainerRef = useRef(null);
   const mapInstanceRef = useRef(null);
-  const circlesLayerRef = useRef([]);
+  const mapLayersRef = useRef([]);
 
   // Default Map Center: Mumbai
-  const defaultCenter = [19.0760, 72.8777];
+  const defaultCenter = [19.076, 72.8777];
 
-  // 1. Fetch heatmap data from backend API
+  // Resolve authority profile if not provided via props
+  useEffect(() => {
+    if (propAuthority) {
+      setAuthority(propAuthority);
+      return;
+    }
+    const cached = localStorage.getItem('unisafe_authority');
+    if (cached) {
+      try {
+        setAuthority(JSON.parse(cached));
+      } catch (_) {}
+    } else {
+      getAuthorityProfile().then((prof) => {
+        if (prof) setAuthority(prof);
+      });
+    }
+  }, [propAuthority]);
+
+  // Sync default category when department is known
+  useEffect(() => {
+    if (isPolice && selectedCategory === 'Infrastructure') {
+      setSelectedCategory('Safety');
+    }
+  }, [isPolice]);
+
+  // 1. Fetch heatmap data from Supabase
   useEffect(() => {
     let isMounted = true;
     setLoading(true);
     setError(null);
 
-    fetchHeatmapData()
+    fetchHeatmapData({
+      authority,
+      role: 'authority',
+      timeRange,
+      jurisdiction: selectedJurisdiction !== 'All' ? selectedJurisdiction : null,
+    })
       .then((data) => {
         if (isMounted) {
           setZones(data || []);
+          if (data?.categoryHierarchy) {
+            setCategoryHierarchy(data.categoryHierarchy);
+          }
           setLoading(false);
         }
       })
       .catch((err) => {
         if (isMounted) {
-          setError(err.message || 'Failed to load heatmap data from server.');
+          setError(err.message || 'Failed to load heatmap data from Supabase.');
           setLoading(false);
         }
       });
@@ -51,12 +107,12 @@ export default function Heatmap() {
     return () => {
       isMounted = false;
     };
-  }, []);
+  }, [authority, timeRange, selectedJurisdiction]);
 
-  // 2. Initialize Leaflet Map instance LOCKED to public OpenStreetMap tiles
+  // 2. Initialize Leaflet Map instance
   useEffect(() => {
     if (!mapContainerRef.current) return;
-    if (mapInstanceRef.current) return; // Prevent double initialization
+    if (mapInstanceRef.current) return;
 
     const L = window.L;
     if (!L) {
@@ -70,15 +126,27 @@ export default function Heatmap() {
       zoomControl: true,
     });
 
-    // LOCKED IMPLEMENTATION: Public OpenStreetMap tile layer (100% free, public, ZERO API key required)
+    // Public OpenStreetMap tile layer
     L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-      attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
+      attribution:
+        '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
       maxZoom: 19,
     }).addTo(map);
 
     mapInstanceRef.current = map;
 
+    // Handle container resize & ensure full render
+    const handleResize = () => {
+      if (mapInstanceRef.current) {
+        mapInstanceRef.current.invalidateSize();
+      }
+    };
+    window.addEventListener('resize', handleResize);
+    const timer = setTimeout(handleResize, 300);
+
     return () => {
+      window.removeEventListener('resize', handleResize);
+      clearTimeout(timer);
       if (mapInstanceRef.current) {
         mapInstanceRef.current.remove();
         mapInstanceRef.current = null;
@@ -86,259 +154,335 @@ export default function Heatmap() {
     };
   }, []);
 
-  // Extract unique categories dynamically from API zones
-  const categories = useMemo(() => {
-    const set = new Set();
-    zones.forEach((z) => {
-      if (z.zone_type) set.add(z.zone_type);
-    });
-    return Array.from(set).sort();
-  }, [zones]);
-
-  // Filter & Sort zones (HIGH severity first)
+  // Filter zones according to selected category, sub-category, severity, and search
   const filteredZones = useMemo(() => {
     let list = [...zones];
 
+    // Filter by Main Category
     if (selectedCategory !== 'All') {
-      list = list.filter((z) => z.zone_type?.toLowerCase() === selectedCategory.toLowerCase());
+      list = list.filter((z) => {
+        const main = (z.main_category || z.zone_type || '').toLowerCase();
+        return (
+          main.includes(selectedCategory.toLowerCase()) ||
+          selectedCategory.toLowerCase().includes(main)
+        );
+      });
     }
 
+    // Filter by Sub-Category
+    if (selectedSubCategory !== 'All') {
+      list = list.filter((z) => {
+        const sub = (z.sub_category || '').toLowerCase();
+        return (
+          sub.includes(selectedSubCategory.toLowerCase()) ||
+          selectedSubCategory.toLowerCase().includes(sub)
+        );
+      });
+    }
+
+    // Filter by Severity
     if (selectedSeverity !== 'All') {
       list = list.filter((z) => z.severity === selectedSeverity);
     }
 
-    // Sort: HIGH > MEDIUM > LOW
-    const severityOrder = { HIGH: 1, MEDIUM: 2, LOW: 3 };
-    list.sort((a, b) => (severityOrder[a.severity] || 4) - (severityOrder[b.severity] || 4));
+    // Filter by Search Query
+    if (searchQuery.trim()) {
+      const q = searchQuery.toLowerCase().trim();
+      list = list.filter((z) => {
+        const matchesType = (z.zone_type || '').toLowerCase().includes(q);
+        const matchesSub = (z.sub_category || '').toLowerCase().includes(q);
+        const matchesWard = (z.jurisdiction || '').toLowerCase().includes(q);
+        const matchesComplaints = (z.complaints || []).some(
+          (c) =>
+            (c.title || '').toLowerCase().includes(q) ||
+            (c.address || '').toLowerCase().includes(q)
+        );
+        return matchesType || matchesSub || matchesWard || matchesComplaints;
+      });
+    }
 
     return list;
-  }, [zones, selectedCategory, selectedSeverity]);
+  }, [
+    zones,
+    selectedCategory,
+    selectedSubCategory,
+    selectedSeverity,
+    searchQuery,
+  ]);
 
-  // Helper for Severity Color Lookup
-  const getSeverityColor = (severity) => {
-    switch (severity) {
-      case 'LOW':
-        return '#10B981';
-      case 'MEDIUM':
-        return '#D97706';
-      case 'HIGH':
-      default:
-        return '#DC2626';
-    }
-  };
+  // Compute severity counts for the floating legend
+  const severityCounts = useMemo(() => {
+    const counts = { LOW: 0, MEDIUM: 0, HIGH: 0 };
+    filteredZones.forEach((z) => {
+      if (counts[z.severity] !== undefined) counts[z.severity]++;
+    });
+    return counts;
+  }, [filteredZones]);
 
-  // 3. Render Concentric Layered Radial Heat Circles on Leaflet Map
+  // Extract unique jurisdictions for the filter popover
+  const jurisdictions = useMemo(() => {
+    const set = new Set();
+    zones.forEach((z) => {
+      if (z.jurisdiction) set.add(z.jurisdiction);
+    });
+    return Array.from(set).sort();
+  }, [zones]);
+
+  // 3. Render Concentric Radial Circles & Cluster Count Badges
   useEffect(() => {
     const map = mapInstanceRef.current;
     const L = window.L;
     if (!map || !L) return;
 
-    // Clear previous circle layers
-    circlesLayerRef.current.forEach((layer) => map.removeLayer(layer));
-    circlesLayerRef.current = [];
+    // Clear previous map layers
+    mapLayersRef.current.forEach((layer) => map.removeLayer(layer));
+    mapLayersRef.current = [];
 
     filteredZones.forEach((zone) => {
       if (!zone.latitude || !zone.longitude) return;
 
-      const color = getSeverityColor(zone.severity);
       const isSelected = selectedZone?.id === zone.id;
-      const baseRadius = zone.radius_meters || 150;
+      const baseRadius = zone.radius_meters || 200;
       const center = [zone.latitude, zone.longitude];
 
-      // Layer 1: Outer Fading Ring (100% radius)
-      const outerCircle = L.circle(center, {
-        radius: baseRadius,
-        color: isSelected ? '#0B192C' : color,
-        fillColor: color,
-        fillOpacity: isSelected ? 0.25 : 0.14,
-        weight: isSelected ? 2.5 : 1,
-      }).addTo(map);
+      // ==========================================
+      // A. Heatmap Gradient Layer (In 'hybrid' or 'heatmap' mode)
+      // Warm amber glow fading into intense crimson core
+      // ==========================================
+      if (activeMode === 'hybrid' || activeMode === 'heatmap') {
+        // Layer 1: Outer Fading Ring (100% radius) - Warm Amber
+        const outerCircle = L.circle(center, {
+          radius: baseRadius,
+          color: isSelected ? '#0F172A' : '#F59E0B',
+          fillColor: '#F59E0B',
+          fillOpacity: isSelected ? 0.30 : 0.16,
+          weight: isSelected ? 2 : 0,
+        }).addTo(map);
 
-      // Layer 2: Mid-Outer Ring (72% radius)
-      const midOuterCircle = L.circle(center, {
-        radius: baseRadius * 0.72,
-        color: color,
-        fillColor: color,
-        fillOpacity: isSelected ? 0.40 : 0.24,
-        weight: 0,
-      }).addTo(map);
+        // Layer 2: Mid-Outer Ring (72% radius) - Warm Orange
+        const midOuterCircle = L.circle(center, {
+          radius: baseRadius * 0.72,
+          color: '#EA580C',
+          fillColor: '#EA580C',
+          fillOpacity: isSelected ? 0.45 : 0.30,
+          weight: 0,
+        }).addTo(map);
 
-      // Layer 3: Mid-Inner Ring (45% radius)
-      const midInnerCircle = L.circle(center, {
-        radius: baseRadius * 0.45,
-        color: color,
-        fillColor: color,
-        fillOpacity: isSelected ? 0.60 : 0.40,
-        weight: 0,
-      }).addTo(map);
+        // Layer 3: Mid-Inner Ring (45% radius) - Vivid Crimson
+        const midInnerCircle = L.circle(center, {
+          radius: baseRadius * 0.45,
+          color: '#DC2626',
+          fillColor: '#DC2626',
+          fillOpacity: isSelected ? 0.70 : 0.52,
+          weight: 0,
+        }).addTo(map);
 
-      // Layer 4: Concentrated Core Ring (20% radius)
-      const coreCircle = L.circle(center, {
-        radius: baseRadius * 0.20,
-        color: color,
-        fillColor: color,
-        fillOpacity: isSelected ? 0.90 : 0.70,
-        weight: 0,
-      }).addTo(map);
+        // Layer 4: Concentrated Core Ring (20% radius) - Deep Red / Maroon
+        const coreCircle = L.circle(center, {
+          radius: baseRadius * 0.20,
+          color: '#991B1B',
+          fillColor: '#991B1B',
+          fillOpacity: isSelected ? 0.95 : 0.82,
+          weight: 0,
+        }).addTo(map);
 
-      // Popup Content
-      const popupContent = `
-        <div style="font-family: sans-serif; font-size: 12px; color: #152937; min-width: 150px;">
-          <div style="display: flex; align-items: center; justify-content: space-between; border-bottom: 1px solid #f3f4f6; padding-bottom: 4px; margin-bottom: 4px;">
-            <strong style="text-transform: capitalize; font-size: 13px;">${zone.zone_type} Zone</strong>
-            <span style="background-color: ${color}; color: white; padding: 2px 6px; border-radius: 4px; font-weight: bold; font-size: 10px;">${zone.severity}</span>
-          </div>
-          <p style="margin: 4px 0;"><strong>${zone.complaint_count}</strong> complaints reported</p>
-          <p style="margin: 4px 0;">Radius: <strong>${zone.radius_meters}m</strong></p>
-          ${zone.risk_score !== undefined ? `<p style="margin-top: 4px; font-weight: bold; color: #0B192C;">Risk Score: ${zone.risk_score} / 100</p>` : ''}
-        </div>
-      `;
+        const handleZoneClick = () => handleSelectZone(zone);
+        outerCircle.on('click', handleZoneClick);
+        midOuterCircle.on('click', handleZoneClick);
+        midInnerCircle.on('click', handleZoneClick);
+        coreCircle.on('click', handleZoneClick);
 
-      outerCircle.bindPopup(popupContent);
+        mapLayersRef.current.push(
+          outerCircle,
+          midOuterCircle,
+          midInnerCircle,
+          coreCircle
+        );
+      } else if (activeMode === 'hotspots') {
+        // Hotspots Mode: Clean boundary ring
+        const boundaryCircle = L.circle(center, {
+          radius: baseRadius,
+          color: isSelected ? '#0F172A' : '#EF4444',
+          fillColor: '#EF4444',
+          fillOpacity: 0.10,
+          weight: 2,
+        }).addTo(map);
 
-      // Click event handlers
-      const handleZoneClick = () => handleSelectZone(zone);
-      outerCircle.on('click', handleZoneClick);
-      midOuterCircle.on('click', handleZoneClick);
-      midInnerCircle.on('click', handleZoneClick);
-      coreCircle.on('click', handleZoneClick);
-
-      // Automatically open popup if selected
-      if (isSelected) {
-        outerCircle.openPopup();
+        boundaryCircle.on('click', () => handleSelectZone(zone));
+        mapLayersRef.current.push(boundaryCircle);
       }
 
-      circlesLayerRef.current.push(outerCircle, midOuterCircle, midInnerCircle, coreCircle);
-    });
-  }, [filteredZones, selectedZone]);
+      // ==========================================
+      // B. Circular White Count Badge (In 'hybrid' or 'hotspots' mode)
+      // Displays the cluster count (e.g., 36, 24, 10, 15) right at center
+      // ==========================================
+      if (activeMode === 'hybrid' || activeMode === 'hotspots') {
+        const markerHtml = `
+          <div style="
+            background: white;
+            color: #0F172A;
+            font-weight: 800;
+            font-size: 13px;
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            width: 32px;
+            height: 32px;
+            border-radius: 9999px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            box-shadow: 0 4px 14px rgba(0,0,0,0.22);
+            border: 2px solid white;
+            cursor: pointer;
+            transform: ${isSelected ? 'scale(1.2)' : 'scale(1)'};
+            transition: transform 0.15s ease;
+          ">
+            ${zone.complaint_count}
+          </div>
+        `;
 
-  // Handle hotspot selection from card or circle click
+        const badgeIcon = L.divIcon({
+          className: 'custom-hotspot-count-marker',
+          html: markerHtml,
+          iconSize: [32, 32],
+          iconAnchor: [16, 16],
+        });
+
+        const countMarker = L.marker(center, { icon: badgeIcon }).addTo(map);
+        countMarker.on('click', () => handleSelectZone(zone));
+        mapLayersRef.current.push(countMarker);
+      }
+    });
+  }, [filteredZones, selectedZone, activeMode]);
+
+  // Handle hotspot selection & smooth pan
   const handleSelectZone = (zone) => {
     setSelectedZone(zone);
-
     const map = mapInstanceRef.current;
     if (map && zone.latitude && zone.longitude) {
-      map.flyTo([zone.latitude, zone.longitude], 14, { duration: 1.2 });
+      map.flyTo([zone.latitude, zone.longitude], 14, { duration: 1.0 });
     }
   };
 
-  const handleClearFilters = () => {
-    setSelectedCategory('All');
-    setSelectedSeverity('All');
-    setSelectedZone(null);
-
+  // Re-center on Mumbai
+  const handleCenterMumbai = () => {
     const map = mapInstanceRef.current;
     if (map) {
       map.flyTo(defaultCenter, 12, { duration: 1.0 });
     }
   };
 
-  // Metrics data
-  const totalHotspots = filteredZones.length;
-  const totalComplaints = filteredZones.reduce((acc, z) => acc + (z.complaint_count || 0), 0);
-  const highRiskCount = filteredZones.filter((z) => z.severity === 'HIGH').length;
+  // Clear / reset all filters
+  const handleResetFilters = () => {
+    setSelectedCategory(isPolice ? 'Safety' : 'Infrastructure');
+    setSelectedSubCategory('All');
+    setSelectedSeverity('All');
+    setTimeRange('all');
+    setSelectedJurisdiction('All');
+    setSearchQuery('');
+    setSelectedZone(null);
+  };
 
   return (
-    <div className="min-h-screen w-full bg-[#F9FAFB] font-sans flex flex-col select-none overflow-x-hidden">
-      {/* Header matching the Kanban board */}
-      <HeatmapHeader />
+    <div className={`w-full bg-[#F8FAFC] flex flex-col font-sans ${isEmbedded ? 'rounded-2xl' : 'min-h-screen'}`}>
+      {/* 1. Header with Page Title, Live Indicator, Search Bar & Citizen Portal Button */}
+      <HeatmapHeader
+        searchQuery={searchQuery}
+        setSearchQuery={setSearchQuery}
+        onSearchSubmit={(q) => console.log('Search submit:', q)}
+        authority={authority}
+        isEmbedded={isEmbedded}
+      />
 
-      {/* Dashboard Layout */}
-      <div className="flex flex-col lg:flex-row gap-4 lg:gap-6 w-full flex-1 max-w-7xl mx-auto px-4 md:px-8 pb-8 items-start">
-        
-        {/* LEFT RAIL: Scrollable stats, filters, and list */}
-        <div className="w-full lg:w-[320px] flex flex-col gap-4 lg:overflow-y-auto lg:h-[calc(100vh-120px)] custom-scrollbar pr-1 shrink-0">
-          <HighRiskAreasStat count={highRiskCount} />
-          <ClusteredComplaintsStat count={totalComplaints} />
-          <ActiveHotspotsStat count={totalHotspots} />
-          
+      {/* 2. Main 2-Column Dashboard Layout */}
+      <div className="flex-1 max-w-[1600px] w-full mx-auto p-4 sm:p-6 flex flex-col lg:flex-row gap-5">
+        {/* Left Column: Summary Stat Cards + Filter Controls */}
+        <div className="w-full lg:w-[320px] xl:w-[340px] shrink-0 space-y-4">
+          {/* Summary Stat Cards (High Risk Areas, Clustered Complaints, Active Hotspots) */}
+          <HeatmapStats zones={filteredZones} />
+
+          {/* Filter Hotspots Card (Problem Category, Sub-Category, Severity Level) */}
           <HeatmapFilters
-            categories={categories}
+            categoryHierarchy={categoryHierarchy}
             selectedCategory={selectedCategory}
             setSelectedCategory={setSelectedCategory}
+            selectedSubCategory={selectedSubCategory}
+            setSelectedSubCategory={setSelectedSubCategory}
             selectedSeverity={selectedSeverity}
             setSelectedSeverity={setSelectedSeverity}
-            onClearFilters={handleClearFilters}
+            onClearFilters={handleResetFilters}
+            department={department}
           />
-
-          <div className="bg-white border border-gray-200 rounded-[16px] p-5 shadow-sm space-y-3.5 flex-1 flex flex-col min-h-[300px]">
-            <div className="flex items-center justify-between pb-2 border-b border-gray-100">
-              <span className="text-[11px] font-bold text-[#64748B] uppercase tracking-wider block">
-                ACTIVE HOTSPOTS
-              </span>
-              <span className="text-[11px] font-bold text-gray-400">
-                {totalHotspots} areas
-              </span>
-            </div>
-
-            {filteredZones.length === 0 ? (
-              <div className="py-8 text-center text-gray-400 text-xs flex-1">
-                <p className="font-semibold text-gray-500">No Hotspots Found</p>
-                <button
-                  onClick={handleClearFilters}
-                  className="mt-2 text-[11px] text-[#0B192C] font-bold underline cursor-pointer"
-                >
-                  Reset Filters
-                </button>
-              </div>
-            ) : (
-              <div className="space-y-3.5 flex-1 overflow-y-auto pr-1">
-                {filteredZones.map((zone) => (
-                  <HotspotCard
-                    key={zone.id}
-                    zone={zone}
-                    isSelected={selectedZone?.id === zone.id}
-                    onSelect={handleSelectZone}
-                  />
-                ))}
-              </div>
-            )}
-          </div>
         </div>
 
-        {/* RIGHT COLUMN: Map and Details */}
-        <div className="flex-1 w-full flex flex-col gap-4 lg:h-[calc(100vh-120px)]">
-          {/* Map Centerpiece */}
-          <div className="relative flex-1 bg-white border border-gray-200 rounded-[16px] overflow-hidden shadow-sm min-h-[400px]">
-            {loading ? (
-              <div className="absolute inset-0 flex flex-col items-center justify-center bg-white/80 z-20">
-                <div className="w-8 h-8 border-3 border-[#0B192C] border-t-transparent rounded-full animate-spin"></div>
-                <p className="mt-3 text-xs font-semibold text-[#0B192C]">
-                  Loading Civic Risk Heatmap...
-                </p>
-              </div>
-            ) : error ? (
-              <div className="absolute inset-0 flex flex-col items-center justify-center p-6 text-center bg-white z-20">
-                <div className="w-10 h-10 rounded-full bg-red-50 text-[#DC2626] flex items-center justify-center font-bold mb-2">
-                  !
-                </div>
-                <h3 className="text-sm font-bold text-[#152937]">Unable to Load Heatmap</h3>
-                <p className="text-xs text-gray-500 mt-1 max-w-sm">{error}</p>
-                <button
-                  onClick={() => window.location.reload()}
-                  className="mt-4 px-4 py-1.5 bg-[#0B192C] text-white text-xs font-semibold rounded-lg hover:bg-black transition cursor-pointer"
-                >
-                  Retry Connection
-                </button>
-              </div>
-            ) : null}
+        {/* Right Column: Full Interactive Map Area */}
+        <div className="flex-1 w-full h-[650px] lg:h-[calc(100vh-140px)] min-h-[620px] relative rounded-[22px] overflow-hidden shadow-xs border border-slate-200/90 bg-white">
+          {/* Leaflet Map DOM */}
+          <div ref={mapContainerRef} className="w-full h-full z-0" />
 
-            {/* Floating Legend */}
-            <div className="absolute bottom-4 left-4 z-[1000] hidden sm:block max-w-xs pointer-events-auto">
-              <HeatmapLegend />
-            </div>
+          {/* Floating Layer & Sub-Categories Card (Top-Left of map) */}
+          <HeatmapFloatingLayerCard
+            categoryHierarchy={categoryHierarchy}
+            selectedCategory={selectedCategory}
+            setSelectedCategory={setSelectedCategory}
+            selectedSubCategory={selectedSubCategory}
+            setSelectedSubCategory={setSelectedSubCategory}
+            department={department}
+            isExpanded={isLayerExpanded}
+            setIsExpanded={setIsLayerExpanded}
+          />
 
-            {/* Leaflet Map DOM Element Container */}
-            <div ref={mapContainerRef} className="w-full h-full z-0" style={{ background: '#f8f9fa' }} />
-          </div>
+          {/* Floating Mode Dock (Top-Right of map: Hybrid, Heatmap, Hotspots + Settings) */}
+          <HeatmapTopRightDock
+            activeMode={activeMode}
+            setActiveMode={setActiveMode}
+            timeRange={timeRange}
+            setTimeRange={setTimeRange}
+            selectedSeverity={selectedSeverity}
+            setSelectedSeverity={setSelectedSeverity}
+            selectedJurisdiction={selectedJurisdiction}
+            setSelectedJurisdiction={setSelectedJurisdiction}
+            jurisdictions={jurisdictions}
+            onResetFilters={handleResetFilters}
+            department={department}
+          />
 
-          {/* Selected Hotspot Details */}
+          {/* Floating Heatmap Legend (Bottom-Left of map: Gradient + Low/Med/High boxes) */}
+          <HeatmapFloatingLegend
+            selectedCategory={selectedCategory}
+            activeMode={activeMode}
+            severityCounts={severityCounts}
+            department={department}
+          />
+
+          {/* Floating "Mumbai View" Button (Bottom-Right of map) */}
+          <MumbaiViewButton onCenterMumbai={handleCenterMumbai} />
+
+          {/* Selected Hotspot Details Slide-over Drawer */}
           {selectedZone && (
-            <div className="w-full shrink-0">
+            <div className="absolute top-16 right-4 sm:right-6 z-[1001] w-80 max-w-[calc(100vw-32px)] shadow-2xl rounded-2xl animate-in fade-in slide-in-from-right-4 duration-200">
               <HotspotDetails
                 zone={selectedZone}
                 onClose={() => setSelectedZone(null)}
               />
+            </div>
+          )}
+
+          {/* Loading Overlay */}
+          {loading && (
+            <div className="absolute inset-0 bg-white/60 backdrop-blur-xs flex items-center justify-center z-[1002]">
+              <div className="bg-white px-4 py-3 rounded-2xl shadow-xl border border-slate-100 flex items-center gap-3">
+                <span className="w-4 h-4 border-2 border-slate-800 border-t-transparent rounded-full animate-spin" />
+                <span className="text-xs font-bold text-slate-800">
+                  Loading {isPolice ? 'Police Hotspots' : 'BMC Ward Heatmap'}...
+                </span>
+              </div>
+            </div>
+          )}
+
+          {/* Error Notice */}
+          {error && (
+            <div className="absolute top-20 left-1/2 -translate-x-1/2 z-[1002] bg-rose-50 border border-rose-200 text-rose-800 text-xs font-semibold px-4 py-2 rounded-xl shadow-lg flex items-center gap-2">
+              <span>⚠ {error}</span>
             </div>
           )}
         </div>

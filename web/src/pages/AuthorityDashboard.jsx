@@ -12,6 +12,7 @@ import AuthorityEscalations from '../components/authority/AuthorityEscalations';
 import AuthorityPerformance from '../components/authority/AuthorityPerformance';
 import InteractiveMap from '../screens/interactive-map/InteractiveMap';
 import KanbanBoard from '../screens/kanban-board/KanbanBoard';
+import Heatmap from './Heatmap';
 
 export default function AuthorityDashboard() {
   const [authority, setAuthority] = useState(null);
@@ -181,14 +182,8 @@ export default function AuthorityDashboard() {
           )}
           
           {activeTab === 'heatmap' && (
-            <div className="flex flex-col items-center justify-center h-full border-2 border-dashed border-unisafe-smoke-white/60 rounded-2xl bg-unisafe-white p-12 text-center animate-in fade-in duration-500">
-              <svg className="w-16 h-16 text-unisafe-teal/40 mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 20l-5.447-2.724A1 1 0 013 16.382V5.618a1 1 0 011.447-.894L9 7m0 13l6-3m-6 3V7m6 10l4.553 2.276A1 1 0 0021 18.382V7.618a1 1 0 00-.553-.894L15 4m0 13V4m0 0L9 7" /></svg>
-              <h3 className="text-xl font-bold text-unisafe-midnight-blue tracking-tight mb-2">
-                Heatmap Integration Module
-              </h3>
-              <p className="text-unisafe-dark-midnight-blue/60 max-w-md">
-                This area is reserved for the heatmap component. Your teammates can easily drop their React component right here without breaking the dashboard layout!
-              </p>
+            <div className="w-full rounded-2xl overflow-hidden shadow-sm border border-slate-200 relative bg-white">
+              <Heatmap authority={authority} isEmbedded={true} />
             </div>
           )}
           
