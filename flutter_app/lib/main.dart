@@ -8,6 +8,7 @@ import 'screens/heatmap_ui/map_screen.dart';
 import 'screens/home_page.dart';
 import 'screens/interactive_map/map_screen.dart';
 import 'screens/kanban_board_ui/kanban_board_screen.dart';
+import 'screens/women_safety/women_safety_screen.dart';
 import 'screens/SignupLogin_ui/welcome_screen.dart';
 import 'screens/SignupLogin_ui/login_screen.dart';
 import 'screens/SignupLogin_ui/signup_screen.dart';
@@ -73,6 +74,7 @@ class UniSafeApp extends StatelessWidget {
           '/interactive-map': (_) => const InteractiveMapScreen(),
           '/heatmap': (_) => const MapScreen(),
           '/kanban': (_) => const KanbanBoardScreen(),
+          '/women-safety': (_) => const WomenSafetyScreen(),
         };
         final builder = routes[settings.name];
         return builder == null ? null : UniSafePageRoute(builder: builder, settings: settings);
@@ -86,6 +88,7 @@ class UniSafeApp extends StatelessWidget {
         '/citizen-auth-forget-password': (context) => const ForgetPasswordScreen(),
         '/auth-choice': (context) => const AuthChoiceScreen(),
         '/authority-login': (context) => const AuthorityLoginScreen(),
+        '/women-safety': (context) => const WomenSafetyScreen(),
       },
     );
   }

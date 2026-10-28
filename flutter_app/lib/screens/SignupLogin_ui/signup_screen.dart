@@ -134,9 +134,46 @@ class _CitizenSignupScreenState extends State<CitizenSignupScreen> {
     });
 
     try {
+      final uname = _usernameController.text.trim();
+      final phone = _phoneController.text.trim();
+      final email = _emailController.text.trim().toLowerCase();
+
+      // Early Uniqueness check for username & phone to avoid wasted user effort
+      try {
+        final existingUname = await SupabaseConfig.client
+            .from('citizens')
+            .select('id, email')
+            .eq('username', uname)
+            .maybeSingle();
+
+        if (existingUname != null && existingUname['email']?.toString().toLowerCase() != email) {
+          setState(() {
+            _isLoading = false;
+            _errorMessage = 'Username "$uname" is already taken. Please choose another username.';
+          });
+          return;
+        }
+
+        final existingPhone = await SupabaseConfig.client
+            .from('citizens')
+            .select('id, email')
+            .eq('phone', phone)
+            .maybeSingle();
+
+        if (existingPhone != null && existingPhone['email']?.toString().toLowerCase() != email) {
+          setState(() {
+            _isLoading = false;
+            _errorMessage = 'Phone number +91 $phone is already registered with another account.';
+          });
+          return;
+        }
+      } catch (checkErr) {
+        debugPrint('[Signup] Early check non-fatal error: $checkErr');
+      }
+
       // Trigger Supabase Sign Up which sends the "Confirm sign up" email template
       await SupabaseConfig.client.auth.signUp(
-        email: _emailController.text.trim(),
+        email: email,
         password: _passwordController.text,
       );
 
@@ -147,11 +184,29 @@ class _CitizenSignupScreenState extends State<CitizenSignupScreen> {
         _currentStep = 1;
       });
       _startEmailOtpTimer();
-      _showToast('Verification code sent to ${_emailController.text.trim()}');
+      _showToast('Verification code sent to $email');
     } on AuthException catch (e) {
       if (!mounted) return;
       final msg = e.message.toLowerCase();
       if (msg.contains('already registered') || msg.contains('already exists')) {
+        // Check if citizen profile already completed
+        try {
+          final citizenRecord = await SupabaseConfig.client
+              .from('citizens')
+              .select('id')
+              .eq('email', _emailController.text.trim().toLowerCase())
+              .maybeSingle();
+
+          if (citizenRecord != null) {
+            setState(() {
+              _isLoading = false;
+              _errorMessage = 'This email is already fully registered. Please log in.';
+            });
+            return;
+          }
+        } catch (_) {}
+
+        // Incomplete / orphan Auth account: advance and let them complete OTP / registration!
         try {
           await SupabaseConfig.client.auth.resend(
             type: OtpType.signup,
@@ -165,7 +220,18 @@ class _CitizenSignupScreenState extends State<CitizenSignupScreen> {
           _startEmailOtpTimer();
           _showToast('Verification code resent to ${_emailController.text.trim()}');
           return;
-        } catch (_) {}
+        } catch (resendErr) {
+          if (resendErr.toString().toLowerCase().contains('confirmed')) {
+            setState(() {
+              _isLoading = false;
+              _currentStep = 2;
+            });
+            _authService.sendOtp(phone: _phoneController.text.trim());
+            _startPhoneOtpTimer();
+            _showToast('Email verified. Please complete phone verification.');
+            return;
+          }
+        }
       }
       setState(() {
         _isLoading = false;
@@ -235,7 +301,12 @@ class _CitizenSignupScreenState extends State<CitizenSignupScreen> {
 
       if (otpResult['success'] == true) {
         _startPhoneOtpTimer();
-        _showToast('SMS OTP sent to +91 $phone');
+        final devHint = otpResult['dev_hint'];
+        if (devHint != null) {
+          _showToast('SMS OTP: $devHint');
+        } else {
+          _showToast('SMS OTP sent to +91 $phone');
+        }
       } else {
         setState(() {
           _errorMessage = otpResult['message']?.toString() ?? 'Could not send SMS OTP.';
@@ -286,7 +357,12 @@ class _CitizenSignupScreenState extends State<CitizenSignupScreen> {
       if (!mounted) return;
       if (otpResult['success'] == true) {
         _startPhoneOtpTimer();
-        _showToast('New SMS sent to +91 $phone');
+        final devHint = otpResult['dev_hint'];
+        if (devHint != null) {
+          _showToast('New SMS: $devHint');
+        } else {
+          _showToast('New SMS sent to +91 $phone');
+        }
       } else {
         setState(() => _errorMessage = otpResult['message']?.toString() ?? 'Could not resend OTP.');
       }
@@ -351,7 +427,19 @@ class _CitizenSignupScreenState extends State<CitizenSignupScreen> {
 
   void _startDigiLockerPolling() {
     _digiLockerPollTimer?.cancel();
+    int pollCount = 0;
     _digiLockerPollTimer = Timer.periodic(const Duration(seconds: 3), (timer) async {
+      pollCount++;
+      if (pollCount > 60) {
+        timer.cancel();
+        if (mounted) {
+          setState(() {
+            _isDigiLockerVerifying = false;
+            _errorMessage = 'DigiLocker verification timed out. Tap manual check or retry.';
+          });
+        }
+        return;
+      }
       if (_digiLockerSessionId == null) {
         timer.cancel();
         return;
@@ -470,12 +558,20 @@ class _CitizenSignupScreenState extends State<CitizenSignupScreen> {
     });
 
     try {
-      final rawAadhaar = _verifiedAadhaarMasked ??
-          (_aadhaarNumberController.text.isNotEmpty
-              ? _aadhaarNumberController.text.replaceAll(' ', '').trim()
-              : '999988887777');
+      String rawAadhaar = _verifiedAadhaarMasked ?? _aadhaarNumberController.text.trim();
+      if (rawAadhaar.isEmpty) {
+        final phoneDigits = _phoneController.text.length >= 4
+            ? _phoneController.text.substring(_phoneController.text.length - 4)
+            : '0101';
+        rawAadhaar = 'XXXXXXXX$phoneDigits';
+      }
+      // Remove spaces or hyphens to ensure clean formatting within VARCHAR(32)
+      rawAadhaar = rawAadhaar.replaceAll(' ', '').replaceAll('-', '');
+      if (rawAadhaar.length > 32) {
+        rawAadhaar = rawAadhaar.substring(0, 32);
+      }
 
-      // Call teammate's verifyOtp to verify phone OTP and create the Citizen account in Supabase
+      // Call verifyOtp to verify phone OTP and create the Citizen account in Supabase
       final result = await _authService.verifyOtp(
         phone: _phoneController.text.trim(),
         otp: _phoneOtpController.text.trim(),
@@ -496,7 +592,9 @@ class _CitizenSignupScreenState extends State<CitizenSignupScreen> {
             email: _emailController.text.trim(),
             password: _passwordController.text,
           );
-        } catch (_) {}
+        } catch (loginErr) {
+          debugPrint('[Signup] Automatic sign-in note: $loginErr');
+        }
 
         if (!mounted) return;
         setState(() => _isLoading = false);
@@ -506,48 +604,22 @@ class _CitizenSignupScreenState extends State<CitizenSignupScreen> {
         Navigator.of(context).pushNamedAndRemoveUntil('/home', (route) => false);
         return;
       } else {
-        try {
-          final loginRes = await _authService.loginWithEmail(
-            email: _emailController.text.trim(),
-            password: _passwordController.text,
-          );
-          if (loginRes.user != null) {
-            if (!mounted) return;
-            setState(() => _isLoading = false);
-            _showToast('Welcome to UniSafe! Redirecting to dashboard...', icon: Icons.check_circle_rounded);
-            await Future.delayed(const Duration(milliseconds: 500));
-            if (!mounted) return;
-            Navigator.of(context).pushNamedAndRemoveUntil('/home', (route) => false);
-            return;
-          }
-        } catch (_) {}
-
+        // True error handling: surface backend message rather than hiding with fake login!
+        final errMsg = result['message']?.toString() ?? 'Registration failed. Please check your details and try again.';
         setState(() {
           _isLoading = false;
-          _errorMessage = result['message']?.toString() ?? 'Registration failed.';
+          _errorMessage = errMsg;
         });
+        _showToast(errMsg, icon: Icons.error_outline_rounded);
       }
     } catch (e) {
       if (!mounted) return;
-      try {
-        final loginRes = await _authService.loginWithEmail(
-          email: _emailController.text.trim(),
-          password: _passwordController.text,
-        );
-        if (loginRes.user != null) {
-          setState(() => _isLoading = false);
-          _showToast('Welcome to UniSafe! Redirecting to dashboard...', icon: Icons.check_circle_rounded);
-          await Future.delayed(const Duration(milliseconds: 500));
-          if (!mounted) return;
-          Navigator.of(context).pushNamedAndRemoveUntil('/home', (route) => false);
-          return;
-        }
-      } catch (_) {}
-
+      final errMsg = 'Registration could not be completed: $e';
       setState(() {
         _isLoading = false;
-        _errorMessage = 'Registration could not be completed: $e';
+        _errorMessage = errMsg;
       });
+      _showToast(errMsg, icon: Icons.error_outline_rounded);
     }
   }
 

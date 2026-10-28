@@ -7,13 +7,13 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
-import 'heatmap_ui/map_screen.dart' hide kCategoryStyles, CategoryStyle;
 import 'package:latlong2/latlong.dart' hide Path;
 import 'interactive_map/map_screen.dart';
 import 'interactive_map/report_model.dart';
 import 'interactive_map/report_provider.dart';
 import 'interactive_map/street_view_modal.dart';
 import 'kanban_board_ui/kanban_board_screen.dart';
+import 'women_safety/women_safety_screen.dart';
 import 'instant_capture/instant_camera_screen.dart';
 import 'instant_capture/instant_gallery_screen.dart';
 import '../services/instant_capture_service.dart';
@@ -600,7 +600,7 @@ class _HomePageState extends ConsumerState<HomePage> {
 
         const SizedBox(height: 12),
 
-        // Row 2: Kanban Board (Left) & Safety Heatmaps (Right)
+        // Row 2: Kanban Board (Left) & Women Safety (Right)
         Row(
           children: [
             Expanded(
@@ -624,18 +624,18 @@ class _HomePageState extends ConsumerState<HomePage> {
             const SizedBox(width: 12),
             Expanded(
               child: _buildBentoActionCard(
-                icon: LucideIcons.flame,
-                accentColor: UniSafeColors.teal,
-                iconBg: UniSafeColors.mint,
-                iconBorder: const Color(0xFFB9E3DB),
-                badgeText: '94% SAFE',
-                title: 'Safety Heatmaps',
-                subtitle: 'Lighting & crime risk density analysis',
-                actionText: 'View Heatmap',
-                watermarkIcon: LucideIcons.flame,
+                icon: LucideIcons.shield,
+                accentColor: const Color(0xFFE11D48),
+                iconBg: const Color(0xFFFFF1F2),
+                iconBorder: const Color(0xFFFECDD3),
+                badgeText: 'SOS READY',
+                title: 'Women Safety',
+                subtitle: 'Inactivity guardian & emergency SOS',
+                actionText: 'Open Safety',
+                watermarkIcon: LucideIcons.shield,
                 onTap: () {
                   Navigator.of(context).push(
-                    UniSafePageRoute(builder: (context) => const MapScreen()),
+                    UniSafePageRoute(builder: (context) => const WomenSafetyScreen()),
                   );
                 },
               ),

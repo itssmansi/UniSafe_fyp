@@ -4,8 +4,12 @@ import 'package:http/http.dart' as http;
 import '../../../../config/supabase_config.dart';
 
 class DigiLockerService {
-  static const String _apiKey = 'key_live_2f653498e8674e74ba759412432638cb';
-  static const String _apiSecret = 'secret_live_de1fcbec97174666a861dd6bf511be82';
+  // Read from environment; in production all KYC calls delegate to the backend
+  // digilocker-kyc Supabase Edge Function to avoid exposing secret keys in the client.
+  static const String _apiKey =
+      String.fromEnvironment('SANDBOX_KEY', defaultValue: '');
+  static const String _apiSecret =
+      String.fromEnvironment('SANDBOX_SECRET', defaultValue: '');
   static const String _baseUrl = 'https://api.sandbox.co.in';
 
   String? _accessToken;

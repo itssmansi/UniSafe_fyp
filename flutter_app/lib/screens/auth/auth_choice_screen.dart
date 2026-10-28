@@ -3,7 +3,7 @@ import 'package:flutter/material.dart';
 import '../../theme/unisafe_theme.dart';
 import 'authority_login_screen.dart';
 import 'login_screen.dart';
-import 'signup_screen.dart';
+import '../SignupLogin_ui/signup_screen.dart';
 
 class AuthChoiceScreen extends StatelessWidget {
   const AuthChoiceScreen({super.key});
@@ -38,7 +38,7 @@ class AuthChoiceScreen extends StatelessWidget {
                         const SizedBox(height: 22),
                         _AuthAction(label: 'Log in', icon: Icons.login_rounded, primary: true, onTap: () => Navigator.push(context, UniSafePageRoute(builder: (_) => const LoginScreen()))),
                         const SizedBox(height: 12),
-                        _AuthAction(label: 'Create an account', icon: Icons.person_add_alt_1_outlined, onTap: () => Navigator.push(context, UniSafePageRoute(builder: (_) => const SignupScreen()))),
+                        _AuthAction(label: 'Create an account', icon: Icons.person_add_alt_1_outlined, onTap: () => Navigator.push(context, UniSafePageRoute(builder: (_) => const CitizenSignupScreen()))),
                         const SizedBox(height: 18),
                         const Divider(color: UniSafeColors.line),
                         TextButton.icon(onPressed: () => Navigator.push(context, UniSafePageRoute(builder: (_) => const AuthorityLoginScreen())), icon: const Icon(Icons.admin_panel_settings_outlined, size: 18), label: const Text('Authority access')),

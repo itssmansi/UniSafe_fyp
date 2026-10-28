@@ -18,7 +18,11 @@ class StreetViewModal extends StatefulWidget {
   });
 
   /// Session-persisted Google Maps API Key for in-app Street View iframe embedding
-  static String? sessionApiKey = 'AIzaSyByV-cPIBexOEt32rSJpz7OAVxQpKOSmmE';
+  /// Reads from compile-time environment or user entry in modal.
+  static String? sessionApiKey =
+      const String.fromEnvironment('GOOGLE_MAPS_API_KEY').isNotEmpty
+          ? const String.fromEnvironment('GOOGLE_MAPS_API_KEY')
+          : null;
 
   static Future<void> show(
     BuildContext context, {
