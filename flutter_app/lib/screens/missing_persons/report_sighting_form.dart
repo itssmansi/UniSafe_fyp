@@ -36,7 +36,7 @@ class _ReportSightingFormState extends State<ReportSightingForm> {
 
   final _locationController = TextEditingController();
   final _descriptionController = TextEditingController();
-  final _contactController = TextEditingController();
+  final _contactEmailController = TextEditingController();
 
   DateTime _selectedDateTime = DateTime.now();
   XFile? _pickedImage;
@@ -63,7 +63,7 @@ class _ReportSightingFormState extends State<ReportSightingForm> {
   void dispose() {
     _locationController.dispose();
     _descriptionController.dispose();
-    _contactController.dispose();
+    _contactEmailController.dispose();
     super.dispose();
   }
 
@@ -220,6 +220,14 @@ class _ReportSightingFormState extends State<ReportSightingForm> {
       final enteredAddress = _locationController.text.trim();
       if (enteredAddress.isNotEmpty) {
         request.fields['address'] = enteredAddress;
+      }
+
+      // Add optional contact email if not anonymous
+      if (!_isAnonymous) {
+        final enteredEmail = _contactEmailController.text.trim();
+        if (enteredEmail.isNotEmpty) {
+          request.fields['contact_email'] = enteredEmail;
+        }
       }
 
       // Add optional coordinates
@@ -882,13 +890,23 @@ class _ReportSightingFormState extends State<ReportSightingForm> {
               ),
               const SizedBox(height: 6),
               TextFormField(
-                controller: _contactController,
-                keyboardType: TextInputType.phone,
+                controller: _contactEmailController,
+                keyboardType: TextInputType.emailAddress,
                 enabled: !_isAnonymous,
                 decoration: InputDecoration(
-                  hintText: _isAnonymous ? 'Anonymous mode enabled' : 'Phone number (for officer verification)',
-                  prefixIcon: const Icon(Icons.phone_outlined, color: UniSafeTheme.textMuted, size: 20),
+                  hintText: _isAnonymous ? 'Anonymous mode enabled' : 'Contact email (for officer follow-up)',
+                  prefixIcon: const Icon(Icons.email_outlined, color: UniSafeTheme.textMuted, size: 20),
                 ),
+                validator: (val) {
+                  if (_isAnonymous) return null;
+                  final trimmed = val?.trim() ?? '';
+                  if (trimmed.isEmpty) return null;
+                  final emailRegex = RegExp(r'^[^@\s]+@[^@\s]+\.[^@\s]+$');
+                  if (!emailRegex.hasMatch(trimmed)) {
+                    return 'Please enter a valid email address';
+                  }
+                  return null;
+                },
               ),
               const SizedBox(height: 6),
               Row(
@@ -900,7 +918,7 @@ class _ReportSightingFormState extends State<ReportSightingForm> {
                       setState(() {
                         _isAnonymous = val ?? false;
                         if (_isAnonymous) {
-                          _contactController.clear();
+                          _contactEmailController.clear();
                         }
                       });
                     },

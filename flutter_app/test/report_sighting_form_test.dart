@@ -314,4 +314,143 @@ void main() {
     expect(find.text('Thane Station Platform 2'), findsOneWidget);
     expect(find.text('Photo attached'), findsOneWidget);
   });
+
+  testWidgets('Submitting with a valid contact email sends contact_email in request fields',
+      (WidgetTester tester) async {
+    tester.view.physicalSize = const Size(1080, 2400);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(() => tester.view.resetPhysicalSize());
+
+    String? capturedContactEmail;
+
+    final mockClient = MockClient.streaming((request, bodyStream) async {
+      if (request is http.MultipartRequest) {
+        capturedContactEmail = request.fields['contact_email'];
+      }
+
+      final responseBody = jsonEncode({
+        'message': 'Sighting submitted successfully',
+        'sighting_id': 'sght-email-test-001',
+        'contact_email': 'witness@unisafe.org',
+      });
+
+      return http.StreamedResponse(
+        Stream.value(utf8.encode(responseBody)),
+        201,
+        headers: {'content-type': 'application/json'},
+      );
+    });
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: ReportSightingForm(
+          initialImageBytes: validPngBytes,
+          httpClient: mockClient,
+        ),
+      ),
+    );
+
+    // Enter location
+    final locationFinder = find.byType(TextFormField).first;
+    await tester.enterText(locationFinder, 'Bandra Kurla Complex');
+    await tester.pumpAndSettle();
+
+    // Enter valid email in the contact email field
+    final emailFinder = find.byType(TextFormField).at(2);
+    await tester.enterText(emailFinder, 'witness@unisafe.org');
+    await tester.pumpAndSettle();
+
+    await tester.ensureVisible(find.text('Submit Sighting Report'));
+    await tester.tap(find.text('Submit Sighting Report'));
+    await tester.pumpAndSettle();
+
+    expect(capturedContactEmail, equals('witness@unisafe.org'));
+    expect(find.text('Sighting Logged'), findsOneWidget);
+  });
+
+  testWidgets('Submitting with an invalid contact email shows validation error and halts submission',
+      (WidgetTester tester) async {
+    tester.view.physicalSize = const Size(1080, 2400);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(() => tester.view.resetPhysicalSize());
+
+    bool requestSent = false;
+    final mockClient = MockClient.streaming((request, bodyStream) async {
+      requestSent = true;
+      return http.StreamedResponse(Stream.value([]), 200);
+    });
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: ReportSightingForm(
+          initialImageBytes: validPngBytes,
+          httpClient: mockClient,
+        ),
+      ),
+    );
+
+    // Enter location
+    final locationFinder = find.byType(TextFormField).first;
+    await tester.enterText(locationFinder, 'Dadar Station');
+    await tester.pumpAndSettle();
+
+    // Enter invalid email
+    final emailFinder = find.byType(TextFormField).at(2);
+    await tester.enterText(emailFinder, 'invalid-email-no-at-sign');
+    await tester.pumpAndSettle();
+
+    await tester.ensureVisible(find.text('Submit Sighting Report'));
+    await tester.tap(find.text('Submit Sighting Report'));
+    await tester.pumpAndSettle();
+
+    expect(requestSent, isFalse);
+    expect(find.text('Please enter a valid email address'), findsOneWidget);
+  });
+
+  testWidgets('Submitting with empty contact email succeeds without contact_email field',
+      (WidgetTester tester) async {
+    tester.view.physicalSize = const Size(1080, 2400);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(() => tester.view.resetPhysicalSize());
+
+    bool hasContactEmailKey = false;
+    final mockClient = MockClient.streaming((request, bodyStream) async {
+      if (request is http.MultipartRequest) {
+        hasContactEmailKey = request.fields.containsKey('contact_email');
+      }
+
+      final responseBody = jsonEncode({
+        'message': 'Sighting submitted successfully',
+        'sighting_id': 'sght-no-email-001',
+      });
+
+      return http.StreamedResponse(
+        Stream.value(utf8.encode(responseBody)),
+        201,
+        headers: {'content-type': 'application/json'},
+      );
+    });
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: ReportSightingForm(
+          initialImageBytes: validPngBytes,
+          httpClient: mockClient,
+        ),
+      ),
+    );
+
+    // Enter location
+    final locationFinder = find.byType(TextFormField).first;
+    await tester.enterText(locationFinder, 'Andheri West');
+    await tester.pumpAndSettle();
+
+    // Leave email field empty
+    await tester.ensureVisible(find.text('Submit Sighting Report'));
+    await tester.tap(find.text('Submit Sighting Report'));
+    await tester.pumpAndSettle();
+
+    expect(hasContactEmailKey, isFalse);
+    expect(find.text('Sighting Logged'), findsOneWidget);
+  });
 }

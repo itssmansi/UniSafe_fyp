@@ -2031,6 +2031,186 @@ class TestSightingsRoutes(unittest.TestCase):
         self.assertEqual(res_json["sightings"][0]["address"], "Bandra Station Platform 1")
         self.assertIsNone(res_json["sightings"][1]["address"])
 
+    @patch("routes.sightings.get_supabase_client")
+    @patch("routes.sightings.extract_all_sighting_faces_from_image")
+    def test_post_sighting_with_valid_contact_email(self, mock_extract, mock_get_supabase):
+        mock_extract.return_value = [{
+            "face_index": 0,
+            "embedding": self.base_emb,
+            "bbox": [10.0, 10.0, 50.0, 50.0],
+            "det_score": 0.90,
+        }]
+
+        captured_records = []
+        def capture_insert():
+            res = MagicMock()
+            rec = {
+                "id": str(uuid4()),
+                "missing_person_id": self.valid_person_id,
+                "contact_email": "witness.citizen@example.com",
+            }
+            captured_records.append(rec)
+            res.data = [rec]
+            return res
+
+        mock_supabase, _ = self._setup_mock_supabase(insert_on_execute=capture_insert)
+        mock_get_supabase.return_value = mock_supabase
+
+        jpeg_bytes = make_dummy_jpeg()
+        data = {
+            "sighting_image": (io.BytesIO(jpeg_bytes), "sighting.jpg"),
+            "contact_email": "witness.citizen@example.com",
+        }
+
+        response = self.client.post("/api/sightings", data=data, content_type="multipart/form-data")
+        self.assertEqual(response.status_code, 201)
+        res_json = response.get_json()
+        self.assertEqual(res_json["contact_email"], "witness.citizen@example.com")
+
+    @patch("routes.sightings.get_supabase_client")
+    @patch("routes.sightings.extract_all_sighting_faces_from_image")
+    def test_post_sighting_with_invalid_contact_email_rejected(self, mock_extract, mock_get_supabase):
+        mock_extract.return_value = [{
+            "face_index": 0,
+            "embedding": self.base_emb,
+            "bbox": [10.0, 10.0, 50.0, 50.0],
+            "det_score": 0.90,
+        }]
+
+        jpeg_bytes = make_dummy_jpeg()
+        data = {
+            "sighting_image": (io.BytesIO(jpeg_bytes), "sighting.jpg"),
+            "contact_email": "not-a-valid-email-address",
+        }
+
+        response = self.client.post("/api/sightings", data=data, content_type="multipart/form-data")
+        self.assertEqual(response.status_code, 400)
+        res_json = response.get_json()
+        self.assertIn("Invalid contact email", res_json.get("error", ""))
+
+    @patch("routes.sightings.get_supabase_client")
+    @patch("routes.sightings.extract_all_sighting_faces_from_image")
+    def test_post_sighting_without_contact_email_stores_null(self, mock_extract, mock_get_supabase):
+        mock_extract.return_value = [{
+            "face_index": 0,
+            "embedding": self.base_emb,
+            "bbox": [10.0, 10.0, 50.0, 50.0],
+            "det_score": 0.90,
+        }]
+
+        captured_records = []
+        def capture_insert():
+            res = MagicMock()
+            rec = {
+                "id": str(uuid4()),
+                "missing_person_id": self.valid_person_id,
+                "contact_email": None,
+            }
+            captured_records.append(rec)
+            res.data = [rec]
+            return res
+
+        mock_supabase, _ = self._setup_mock_supabase(insert_on_execute=capture_insert)
+        mock_get_supabase.return_value = mock_supabase
+
+        jpeg_bytes = make_dummy_jpeg()
+        data = {
+            "sighting_image": (io.BytesIO(jpeg_bytes), "sighting.jpg"),
+        }
+
+        response = self.client.post("/api/sightings", data=data, content_type="multipart/form-data")
+        self.assertEqual(response.status_code, 201)
+        res_json = response.get_json()
+        self.assertIsNone(res_json["contact_email"])
+
+    @patch("routes.sightings.get_supabase_client")
+    def test_get_sighting_detail_with_contact_email(self, mock_get_supabase):
+        sighting_id = str(uuid4())
+        sighting_record = {
+            "id": sighting_id,
+            "missing_person_id": self.valid_person_id,
+            "citizen_id": None,
+            "latitude": 19.0544,
+            "longitude": 72.8402,
+            "address": "Dadar Bastian cafe",
+            "contact_email": "reporter@example.org",
+            "image_url": "sightings/sighting_sample.jpg",
+            "is_verified": False,
+            "created_at": "2026-10-01T12:00:00Z",
+            "citizen_note": None,
+            "ai_matches": [],
+        }
+        mock_supabase, _ = self._setup_mock_supabase(sightings_data=[sighting_record])
+        mock_get_supabase.return_value = mock_supabase
+
+        response = self.client.get(f"/api/sightings/{sighting_id}")
+        self.assertEqual(response.status_code, 200)
+        res_json = response.get_json()
+        self.assertEqual(res_json["contact_email"], "reporter@example.org")
+
+    @patch("routes.sightings.get_supabase_client")
+    def test_get_sighting_detail_null_contact_email_backwards_compatible(self, mock_get_supabase):
+        sighting_id = str(uuid4())
+        sighting_record = {
+            "id": sighting_id,
+            "missing_person_id": self.valid_person_id,
+            "citizen_id": None,
+            "latitude": None,
+            "longitude": None,
+            "address": None,
+            "contact_email": None,
+            "image_url": "sightings/sighting_sample.jpg",
+            "is_verified": False,
+            "created_at": "2026-10-01T12:00:00Z",
+            "citizen_note": None,
+            "ai_matches": [],
+        }
+        mock_supabase, _ = self._setup_mock_supabase(sightings_data=[sighting_record])
+        mock_get_supabase.return_value = mock_supabase
+
+        response = self.client.get(f"/api/sightings/{sighting_id}")
+        self.assertEqual(response.status_code, 200)
+        res_json = response.get_json()
+        self.assertIsNone(res_json["contact_email"])
+
+    @patch("routes.sightings.get_supabase_client")
+    def test_get_sightings_list_includes_contact_email(self, mock_get_supabase):
+        records = [
+            {
+                "id": str(uuid4()),
+                "missing_person_id": self.valid_person_id,
+                "latitude": 19.0544,
+                "longitude": 72.8402,
+                "address": "Bandra Station Platform 1",
+                "contact_email": "citizen1@unisafe.org",
+                "image_url": "sightings/1.jpg",
+                "is_verified": False,
+                "created_at": "2026-10-02T12:00:00Z",
+                "citizen_note": None,
+            },
+            {
+                "id": str(uuid4()),
+                "missing_person_id": None,
+                "latitude": None,
+                "longitude": None,
+                "address": None,
+                "contact_email": None,
+                "image_url": "sightings/2.jpg",
+                "is_verified": False,
+                "created_at": "2026-10-01T12:00:00Z",
+                "citizen_note": None,
+            },
+        ]
+        mock_supabase, _ = self._setup_mock_supabase(sightings_data=records)
+        mock_get_supabase.return_value = mock_supabase
+
+        response = self.client.get("/api/sightings")
+        self.assertEqual(response.status_code, 200)
+        res_json = response.get_json()
+        self.assertEqual(len(res_json["sightings"]), 2)
+        self.assertEqual(res_json["sightings"][0]["contact_email"], "citizen1@unisafe.org")
+        self.assertIsNone(res_json["sightings"][1]["contact_email"])
+
 
 if __name__ == "__main__":
     unittest.main()

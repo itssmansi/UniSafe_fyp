@@ -1,5 +1,6 @@
 import os
 import io
+import re
 from flask import Blueprint, request, jsonify, current_app, g
 import cv2
 import numpy as np
@@ -191,6 +192,15 @@ def submit_sighting():
     if address and len(address) > 1000:
         address = address[:1000]
 
+    # Read optional contact_email
+    raw_contact_email = request.form.get("contact_email")
+    contact_email = raw_contact_email.strip() if raw_contact_email and isinstance(raw_contact_email, str) and raw_contact_email.strip() else None
+    if contact_email is not None:
+        if not re.match(r"^[^@\s]+@[^@\s]+\.[^@\s]+$", contact_email):
+            return jsonify({"error": "Invalid contact email address format"}), 400
+        if len(contact_email) > 255:
+            return jsonify({"error": "contact_email exceeds maximum length of 255 characters"}), 400
+
     # Read optional citizen_note (e.g. citizen's suggested person)
     raw_citizen_note = request.form.get("citizen_note")
     citizen_note = raw_citizen_note.strip() if raw_citizen_note and isinstance(raw_citizen_note, str) and raw_citizen_note.strip() else None
@@ -296,6 +306,7 @@ def submit_sighting():
             "latitude": parsed_latitude,
             "longitude": parsed_longitude,
             "address": address,
+            "contact_email": contact_email,
             "image_url": storage_path,
             "is_verified": False,  # Never mark an AI match as verified
             "face_data": sighting_faces,
@@ -310,8 +321,13 @@ def submit_sighting():
                 .execute()
             )
         except Exception as ins_err:
-            if "address" in str(ins_err).lower():
-                sighting_data_fallback = {k: v for k, v in sighting_data.items() if k != "address"}
+            ins_err_str = str(ins_err).lower()
+            if "address" in ins_err_str or "contact_email" in ins_err_str:
+                sighting_data_fallback = dict(sighting_data)
+                if "address" in ins_err_str:
+                    sighting_data_fallback.pop("address", None)
+                if "contact_email" in ins_err_str:
+                    sighting_data_fallback.pop("contact_email", None)
                 insert_res = (
                     supabase.table("missing_person_sightings")
                     .insert(sighting_data_fallback)
@@ -335,6 +351,7 @@ def submit_sighting():
             "ai_matches": ai_matches,
             "citizen_note": sighting_record.get("citizen_note") if isinstance(sighting_record, dict) else citizen_note,
             "address": sighting_record.get("address") if isinstance(sighting_record, dict) else address,
+            "contact_email": sighting_record.get("contact_email") if isinstance(sighting_record, dict) else contact_email,
         }), 201
 
     except Exception:
@@ -363,7 +380,7 @@ def get_sightings_list():
 
     # Confirmed columns in public.missing_person_sightings
     columns = (
-        "id, missing_person_id, latitude, longitude, address, image_url, is_verified, created_at, citizen_note"
+        "id, missing_person_id, latitude, longitude, address, contact_email, image_url, is_verified, created_at, citizen_note"
     )
 
     try:
@@ -403,14 +420,16 @@ def get_sightings_list():
         try:
             res = query.execute()
         except Exception as q_err:
-            # Resilient fallback if address or citizen_note column does not yet exist in target DB
+            # Resilient fallback if address, contact_email or citizen_note column does not yet exist in target DB
             err_str = str(q_err).lower()
-            if "address" in err_str or "citizen_note" in err_str:
+            if "address" in err_str or "citizen_note" in err_str or "contact_email" in err_str:
                 base_cols = ["id", "missing_person_id", "latitude", "longitude", "image_url", "is_verified", "created_at"]
                 if "citizen_note" not in err_str:
                     base_cols.append("citizen_note")
                 if "address" not in err_str:
                     base_cols.append("address")
+                if "contact_email" not in err_str:
+                    base_cols.append("contact_email")
                 fallback_columns = ", ".join(base_cols)
                 fallback_query = supabase.table("missing_person_sightings").select(fallback_columns).order("created_at", desc=True)
                 if is_verified_param and is_verified_param.strip().lower() in ("true", "1"):
@@ -458,6 +477,7 @@ def get_sightings_list():
         item = {k: v for k, v in record.items() if k not in biometric_keys}
         item["citizen_note"] = record.get("citizen_note") or None
         item["address"] = record.get("address") or None
+        item["contact_email"] = record.get("contact_email") or None
         if "image_url" in item and "image_path" not in item:
             item["image_path"] = item["image_url"]
 
@@ -592,7 +612,7 @@ def get_sighting_detail(sighting_id):
     supabase = get_supabase_client()
 
     columns = (
-        "id, missing_person_id, citizen_id, latitude, longitude, address, "
+        "id, missing_person_id, citizen_id, latitude, longitude, address, contact_email, "
         "image_url, is_verified, created_at, ai_matches, citizen_note"
     )
 
@@ -607,7 +627,7 @@ def get_sighting_detail(sighting_id):
             )
         except Exception as q_err:
             err_str = str(q_err).lower()
-            if "address" in err_str or "citizen_note" in err_str:
+            if "address" in err_str or "citizen_note" in err_str or "contact_email" in err_str:
                 base_cols = [
                     "id", "missing_person_id", "citizen_id", "latitude", "longitude",
                     "image_url", "is_verified", "created_at", "ai_matches"
@@ -616,6 +636,8 @@ def get_sighting_detail(sighting_id):
                     base_cols.append("citizen_note")
                 if "address" not in err_str:
                     base_cols.append("address")
+                if "contact_email" not in err_str:
+                    base_cols.append("contact_email")
                 fallback_cols = ", ".join(base_cols)
                 res = (
                     supabase.table("missing_person_sightings")
@@ -664,6 +686,7 @@ def get_sighting_detail(sighting_id):
         "latitude": record.get("latitude"),
         "longitude": record.get("longitude"),
         "address": record.get("address") or None,
+        "contact_email": record.get("contact_email") or None,
         "image_url": image_path,
         "image_path": image_path,
         "signed_image_url": signed_url,
@@ -748,7 +771,7 @@ def match_sighting(sighting_id):
 
     # 1. Fetch existing sighting record
     columns = (
-        "id, missing_person_id, citizen_id, latitude, longitude, address, "
+        "id, missing_person_id, citizen_id, latitude, longitude, address, contact_email, "
         "image_url, is_verified, created_at, face_data, ai_matches, citizen_note"
     )
 
@@ -763,7 +786,7 @@ def match_sighting(sighting_id):
             )
         except Exception as q_err:
             err_str = str(q_err).lower()
-            if "address" in err_str or "citizen_note" in err_str:
+            if "address" in err_str or "citizen_note" in err_str or "contact_email" in err_str:
                 base_cols = [
                     "id", "missing_person_id", "citizen_id", "latitude", "longitude",
                     "image_url", "is_verified", "created_at", "face_data", "ai_matches"
@@ -772,6 +795,8 @@ def match_sighting(sighting_id):
                     base_cols.append("citizen_note")
                 if "address" not in err_str:
                     base_cols.append("address")
+                if "contact_email" not in err_str:
+                    base_cols.append("contact_email")
                 fallback_cols = ", ".join(base_cols)
                 res = (
                     supabase.table("missing_person_sightings")
@@ -902,6 +927,7 @@ def match_sighting(sighting_id):
         "candidate_cases": candidate_cases,
         "citizen_note": record.get("citizen_note") or None,
         "address": record.get("address") or None,
+        "contact_email": record.get("contact_email") or None,
     }), 200
 
 
