@@ -95,6 +95,12 @@ flutter:
     - family: SixCaps
       fonts:
         - asset: assets/fonts/SixCaps.ttf
+    - family: Flaviotte
+      fonts:
+        - asset: assets/fonts/Flaviotte.ttf
+    - family: LuthonSouthard
+      fonts:
+        - asset: assets/fonts/LuthonSouthardSerif.ttf
   #
   # For details regarding fonts from package dependencies,
   # see https://flutter.dev/to/font-from-package

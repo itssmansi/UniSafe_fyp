@@ -6,6 +6,7 @@ import '../../theme/unisafe_theme.dart';
 import '../home_page.dart';
 import '../interactive_map/report_model.dart';
 import '../interactive_map/report_provider.dart';
+import 'citizen_verification_screen.dart';
 
 enum KanbanStatus {
   planned,
@@ -176,19 +177,15 @@ class _KanbanBoardScreenState extends ConsumerState<KanbanBoardScreen> {
     }
 
     String department;
-    switch (r.category) {
-      case IssueCategory.infrastructure:
-        department = 'Roads & Traffic Infrastructure Authority';
-        break;
-      case IssueCategory.sanitation:
-        department = 'Solid Waste Management (SWM) Division';
-        break;
-      case IssueCategory.safety:
-        department = 'Public Safety & Emergency Response Unit';
-        break;
-      case IssueCategory.greenery:
-        department = 'Parks & Gardens Ecological Department';
-        break;
+    if (r.assignedOfficerDepartment != null && r.assignedOfficerDepartment!.trim().isNotEmpty) {
+      department = r.assignedOfficerDepartment!.trim();
+      if (r.assignedOfficerName != null && r.assignedOfficerName!.trim().isNotEmpty) {
+        department = '$department (${r.assignedOfficerName!.trim()})';
+      }
+    } else if (r.assignedOfficerName != null && r.assignedOfficerName!.trim().isNotEmpty) {
+      department = 'Assigned to ${r.assignedOfficerName!.trim()}';
+    } else {
+      department = 'Pending BMC Assignment';
     }
 
     return CivicReport(
@@ -227,45 +224,26 @@ class _KanbanBoardScreenState extends ConsumerState<KanbanBoardScreen> {
     return reports.where((report) => report.status == status).toList();
   }
 
-  void _toggleVerify(CivicReport report) {
-    final alreadyVerified = _verifiedReportIds.contains(report.id);
-    setState(() {
-      if (alreadyVerified) {
-        _verifiedReportIds.remove(report.id);
-      } else {
-        _verifiedReportIds.add(report.id);
-      }
-    });
+  Future<void> _openVerification(CivicReport report) async {
+    final result = await Navigator.of(context).push<bool>(
+      MaterialPageRoute(
+        builder: (_) => CitizenVerificationScreen(report: report),
+      ),
+    );
 
-    if (mounted) {
-      ScaffoldMessenger.of(context).clearSnackBars();
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Row(
-            children: [
-              Icon(
-                alreadyVerified ? Icons.info_outline : Icons.check_circle,
-                color: Colors.white,
-                size: 18,
-              ),
-              const SizedBox(width: 8),
-              Expanded(
-                child: Text(
-                  alreadyVerified
-                      ? 'Removed verification for "${report.title}".'
-                      : 'Report "${report.title}" verified successfully!',
-                  style: const TextStyle(fontWeight: FontWeight.w600),
-                ),
-              ),
-            ],
-          ),
-          backgroundColor: alreadyVerified ? UniSafeColors.teal : UniSafeColors.navy,
-          duration: const Duration(seconds: 2),
-          behavior: SnackBarBehavior.floating,
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-        ),
-      );
+    if (result == true) {
+      setState(() {
+        _verifiedReportIds.add(report.id);
+      });
+    } else if (result == false) {
+      setState(() {
+        _verifiedReportIds.remove(report.id);
+      });
     }
+  }
+
+  void _toggleVerify(CivicReport report) {
+    _openVerification(report);
   }
 
   void _handleBackNavigation(BuildContext context) {

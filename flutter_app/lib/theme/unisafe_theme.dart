@@ -19,6 +19,9 @@ abstract final class UniSafeColors {
 }
 
 abstract final class UniSafeTheme {
+  static final String? fontPrimary = GoogleFonts.inter().fontFamily;
+  static const String fontDisplay = 'Flaviotte';
+
   static ThemeData light() {
     final scheme = ColorScheme.fromSeed(
       seedColor: UniSafeColors.navy,
@@ -31,8 +34,9 @@ abstract final class UniSafeTheme {
     return ThemeData(
       useMaterial3: true,
       colorScheme: scheme,
+      fontFamily: GoogleFonts.inter().fontFamily,
       scaffoldBackgroundColor: UniSafeColors.canvas,
-      textTheme: GoogleFonts.manropeTextTheme().apply(
+      textTheme: GoogleFonts.interTextTheme(ThemeData.light().textTheme).apply(
         bodyColor: UniSafeColors.ink,
         displayColor: UniSafeColors.ink,
       ),
@@ -56,7 +60,7 @@ abstract final class UniSafeTheme {
       snackBarTheme: SnackBarThemeData(
         behavior: SnackBarBehavior.floating,
         backgroundColor: UniSafeColors.ink,
-        contentTextStyle: GoogleFonts.manrope(color: Colors.white, fontWeight: FontWeight.w600),
+        contentTextStyle: GoogleFonts.inter(color: Colors.white, fontWeight: FontWeight.w600),
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
       ),
       inputDecorationTheme: InputDecorationTheme(

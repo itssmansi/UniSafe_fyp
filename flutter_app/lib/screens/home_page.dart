@@ -13,6 +13,7 @@ import 'interactive_map/report_model.dart';
 import 'interactive_map/report_provider.dart';
 import 'interactive_map/street_view_modal.dart';
 import 'kanban_board_ui/kanban_board_screen.dart';
+import 'kanban_board_ui/citizen_verification_screen.dart';
 import 'women_safety/women_safety_screen.dart';
 import 'instant_capture/instant_camera_screen.dart';
 import 'instant_capture/instant_gallery_screen.dart';
@@ -477,6 +478,7 @@ class _HomePageState extends ConsumerState<HomePage> {
         Text(
           _firstName,
           style: const TextStyle(
+            fontFamily: UniSafeTheme.fontDisplay,
             color: Color(0xFF111827),
             fontSize: 28,
             fontWeight: FontWeight.w800,
@@ -642,7 +644,148 @@ class _HomePageState extends ConsumerState<HomePage> {
             ),
           ],
         ),
+
+        const SizedBox(height: 12),
+
+        // 5th Action Card: Citizen Resolution Verification (Test UI)
+        _buildVerificationTestCard(),
       ],
+    );
+  }
+
+  /// Citizen Resolution Verification (UI Test Launcher)
+  Widget _buildVerificationTestCard() {
+    return Container(
+      width: double.infinity,
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: const Color(0xFFE2E8F0)),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.03),
+            blurRadius: 10,
+            offset: const Offset(0, 3),
+          ),
+        ],
+      ),
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          borderRadius: BorderRadius.circular(16),
+          onTap: () {
+            final sampleReport = CivicReport(
+              id: 'rep-mumbai-4821',
+              title: 'Water logging & Pothole Repair',
+              category: 'Infrastructure',
+              categoryColor: const Color(0xFFE11D48),
+              categoryIcon: LucideIcons.hammer,
+              location: 'S.V. Road, Near Andheri Station (West), Mumbai',
+              date: 'Today, 2:30 PM',
+              department: 'BMC Ward K-West (Roads & Traffic)',
+              description:
+                  'Severe water logging cleared and road surface patched following heavy monsoon rainfall.',
+              status: KanbanStatus.inReview,
+              model: ReportModel(
+                id: 'rep-mumbai-4821',
+                location: const LatLng(19.1197, 72.8464),
+                category: IssueCategory.infrastructure,
+                title: 'Water logging & Pothole Repair',
+                description:
+                    'Severe water logging cleared and road surface patched following heavy monsoon rainfall.',
+                address: 'S.V. Road, Near Andheri Station (West), Mumbai',
+                status: 'in_review',
+                imagePath:
+                    'https://images.unsplash.com/photo-1545459720-aac8509eb02c?auto=format&fit=crop&w=1200&q=80',
+              ),
+            );
+
+            Navigator.of(context).push(
+              MaterialPageRoute(
+                builder: (_) => CitizenVerificationScreen(report: sampleReport),
+              ),
+            );
+          },
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+            child: Row(
+              children: [
+                Container(
+                  width: 42,
+                  height: 42,
+                  decoration: BoxDecoration(
+                    color: const Color(0xFF10B981).withValues(alpha: 0.12),
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(
+                      color: const Color(0xFF10B981).withValues(alpha: 0.25),
+                    ),
+                  ),
+                  child: const Icon(
+                    LucideIcons.badgeCheck,
+                    color: Color(0xFF10B981),
+                    size: 22,
+                  ),
+                ),
+                const SizedBox(width: 14),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          const Text(
+                            'Citizen Verification',
+                            style: TextStyle(
+                              fontSize: 14,
+                              fontWeight: FontWeight.w800,
+                              color: Color(0xFF0F172A),
+                              letterSpacing: -0.2,
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 6,
+                              vertical: 2,
+                            ),
+                            decoration: BoxDecoration(
+                              color: const Color(0xFF10B981).withValues(alpha: 0.12),
+                              borderRadius: BorderRadius.circular(6),
+                            ),
+                            child: const Text(
+                              'TEST UI',
+                              style: TextStyle(
+                                fontSize: 9.5,
+                                fontWeight: FontWeight.w800,
+                                color: Color(0xFF10B981),
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 2),
+                      const Text(
+                        'Inspect authority proof & verify completed work',
+                        style: TextStyle(
+                          fontSize: 11.5,
+                          color: Color(0xFF64748B),
+                        ),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ],
+                  ),
+                ),
+                const Icon(
+                  LucideIcons.chevronRight,
+                  size: 18,
+                  color: Color(0xFF94A3B8),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
     );
   }
 
@@ -2705,10 +2848,11 @@ class _HomePageState extends ConsumerState<HomePage> {
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                       style: const TextStyle(
+                        fontFamily: UniSafeTheme.fontDisplay,
                         color: Color(0xFF18181B),
-                        fontSize: 17,
+                        fontSize: 18,
                         fontWeight: FontWeight.w800,
-                        letterSpacing: -0.3,
+                        letterSpacing: -0.4,
                       ),
                     ),
                     const SizedBox(height: 3),

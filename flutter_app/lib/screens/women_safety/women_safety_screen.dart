@@ -94,7 +94,7 @@ class _WomenSafetyScreenState extends State<WomenSafetyScreen>
   bool _inactivityMonitoringEnabled = false;
 
   int _trustedContactsCount = 0;
-  bool _isLoadingInitial = true;
+  bool _isLoadingInitial = false;
 
   // Fallback coordinates (e.g. Mumbai center) if GPS permission not yet acquired
   static const LatLng _defaultCenter = LatLng(19.0760, 72.8777);
@@ -134,36 +134,79 @@ class _WomenSafetyScreenState extends State<WomenSafetyScreen>
   // ============================================================
 
   Future<void> _initializeScreen() async {
-    setState(() => _isLoadingInitial = true);
+    // Ensure fallback center is set immediately so map can display without delay
+    _currentPosition ??= _defaultCenter;
 
+    // 1. Instant cached location check (<5ms)
     try {
-      // 1. Fetch citizen profile
-      final citizen = await _journeyService.getCurrentCitizen();
+      final lastKnown = await Geolocator.getLastKnownPosition();
+      if (lastKnown != null && mounted) {
+        setState(() {
+          _currentPosition = LatLng(lastKnown.latitude, lastKnown.longitude);
+          _latestAccuratePosition = lastKnown;
+          _isUsingGps = true;
+        });
+        _mapController.move(_currentPosition!, 14.5);
+      }
+    } catch (_) {}
+
+    // 2. High-accuracy GPS update running in the background (non-blocking, fast 4s timeout)
+    _locationService
+        .getCurrentPosition(timeLimit: const Duration(seconds: 4))
+        .then((position) {
+      if (mounted) {
+        setState(() {
+          _currentPosition = LatLng(position.latitude, position.longitude);
+          _latestAccuratePosition = position.accuracy <= 50 ? position : null;
+          _isUsingGps = true;
+        });
+        _mapController.move(_currentPosition!, 14.5);
+        if (_destinationPosition != null) {
+          _calculateRoute(silent: true);
+        }
+      }
+    }).catchError((_) {
+      if (mounted && _currentPosition == null) {
+        setState(() {
+          _currentPosition = _defaultCenter;
+          _sourceAddress = 'Bandra, Mumbai (Default)';
+        });
+      }
+    });
+
+    // 3. Parallel fetch of profile and traffic key
+    try {
+      final results = await Future.wait([
+        _journeyService.getCurrentCitizen().catchError((e) => <String, dynamic>{}),
+        TrafficConfig.getEffectiveKey().catchError((e) => ''),
+      ]);
+
+      final citizen = results[0] as Map<String, dynamic>;
+      _tomTomApiKey = results[1] as String;
       _citizenId = citizen['id']?.toString();
       _citizenName = citizen['name']?.toString() ?? 'Citizen';
 
-      // 2. Fetch trusted contacts count and saved destinations
-      if (_citizenId != null) {
-        final contacts = await _contactsService.getTrustedContacts(_citizenId!);
-        _trustedContactsCount = contacts.length;
-        await _loadSavedDestinations();
-      }
-      _tomTomApiKey = await TrafficConfig.getEffectiveKey();
+      if (_citizenId != null && mounted) {
+        // Parallel fetch of contacts, saved destinations, and active journey
+        final secondaryResults = await Future.wait([
+          _contactsService.getTrustedContacts(_citizenId!).catchError((e) => <Map<String, dynamic>>[]),
+          _savedDestService.getSavedDestinations(_citizenId!).catchError((e) => <SavedDestination>[]),
+          _journeyService.getActiveJourney(_citizenId!).catchError((e) => null),
+        ]);
 
-      // 3. Acquire current location
-      try {
-        final position = await _locationService.getCurrentPosition();
-        _currentPosition = LatLng(position.latitude, position.longitude);
-        _latestAccuratePosition = position.accuracy <= 50 ? position : null;
-      } catch (_) {
-        _currentPosition = _defaultCenter;
-        _sourceAddress = 'Bandra, Mumbai (Default)';
-      }
+        final contacts = secondaryResults[0] as List<Map<String, dynamic>>;
+        final destinations = secondaryResults[1] as List<SavedDestination>;
+        final active = secondaryResults[2] as JourneySession?;
 
-      // 4. Check for active journey
-      if (_citizenId != null) {
-        final active = await _journeyService.getActiveJourney(_citizenId!);
-        if (active != null) {
+        if (mounted) {
+          setState(() {
+            _trustedContactsCount = contacts.length;
+            _savedDestinations = destinations;
+          });
+        }
+
+        // 4. Restore journey ONLY if an active journey already exists
+        if (active != null && mounted) {
           _activeSession = active;
           _isJourneyActive = true;
           _destinationName = active.destinationName;
@@ -209,29 +252,8 @@ class _WomenSafetyScreenState extends State<WomenSafetyScreen>
           _calculateRoute(silent: true);
         }
       }
-
-      // 5. Default route preview if no active journey
-      if (_destinationPosition == null) {
-        _currentPosition ??= _defaultCenter;
-        if (_savedDestinations.isNotEmpty) {
-          final dest = _savedDestinations.first;
-          _destinationPosition = LatLng(dest.latitude, dest.longitude);
-          _destinationName = dest.destinationName;
-        } else {
-          _destinationPosition = const LatLng(19.1197, 72.8468);
-          _destinationName = 'Andheri West';
-        }
-        _calculateRoute(silent: true);
-      }
     } catch (_) {
-      // Initial error handled
-    } finally {
-      if (mounted) {
-        setState(() => _isLoadingInitial = false);
-        if (_currentPosition != null) {
-          _mapController.move(_currentPosition!, 14.5);
-        }
-      }
+      // Handled gracefully
     }
   }
 
@@ -2260,30 +2282,18 @@ class _WomenSafetyScreenState extends State<WomenSafetyScreen>
           icon: const Icon(Icons.arrow_back, color: Colors.black87),
           onPressed: () => Navigator.pop(context),
         ),
-        title: Row(
-          children: [
-            Container(
-              padding: const EdgeInsets.all(4),
-              decoration: BoxDecoration(
-                color: Colors.red.shade50,
-                shape: BoxShape.circle,
-              ),
-              child: const Icon(Icons.shield, color: Colors.red, size: 20),
-            ),
-            const SizedBox(width: 8),
-            const Text(
-              'UniSafe',
-              style: TextStyle(
-                color: Colors.black87,
-                fontWeight: FontWeight.bold,
-                fontSize: 18,
-              ),
-            ),
-          ],
+        titleSpacing: 0,
+        title: const Text(
+          'Women Safety',
+          style: TextStyle(
+            color: Colors.black87,
+            fontWeight: FontWeight.bold,
+            fontSize: 20,
+          ),
         ),
         actions: [
           Padding(
-            padding: const EdgeInsets.only(right: 8),
+            padding: const EdgeInsets.only(right: 16),
             child: ElevatedButton.icon(
               onPressed: _triggerSos,
               icon: const Icon(Icons.emergency, size: 19),
@@ -2299,37 +2309,6 @@ class _WomenSafetyScreenState extends State<WomenSafetyScreen>
               ),
             ),
           ),
-          Container(
-            margin: const EdgeInsets.only(right: 16),
-            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-            decoration: BoxDecoration(
-              color: Colors.green.shade50,
-              borderRadius: BorderRadius.circular(20),
-              border: Border.all(color: Colors.green.shade200),
-            ),
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Container(
-                  width: 8,
-                  height: 8,
-                  decoration: const BoxDecoration(
-                    color: Colors.green,
-                    shape: BoxShape.circle,
-                  ),
-                ),
-                const SizedBox(width: 6),
-                Text(
-                  'Safe Mode',
-                  style: TextStyle(
-                    color: Colors.green.shade800,
-                    fontSize: 12,
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
-              ],
-            ),
-          ),
         ],
       ),
       body: _isLoadingInitial
@@ -2339,16 +2318,6 @@ class _WomenSafetyScreenState extends State<WomenSafetyScreen>
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  // Header Title
-                  const Text(
-                    'Women Safety',
-                    style: TextStyle(
-                      fontSize: 24,
-                      fontWeight: FontWeight.bold,
-                      color: Colors.black87,
-                    ),
-                  ),
-                  const SizedBox(height: 4),
                   const Text(
                     'Plan your journey and stay connected with your trusted contacts.',
                     style: TextStyle(fontSize: 13, color: Colors.black54),
@@ -2777,95 +2746,97 @@ class _WomenSafetyScreenState extends State<WomenSafetyScreen>
                   ),
 
                   // TOP STREET BANNER
-                  Positioned(
-                    top: 10,
-                    left: 85,
-                    right: 85,
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 12,
-                        vertical: 6,
-                      ),
-                      decoration: BoxDecoration(
-                        color: Colors.white.withValues(alpha: 0.94),
-                        borderRadius: BorderRadius.circular(8),
-                        boxShadow: const [
-                          BoxShadow(color: Colors.black12, blurRadius: 4),
-                        ],
-                      ),
-                      child: Text(
-                        _routeStreetName,
-                        textAlign: TextAlign.center,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(
-                          fontWeight: FontWeight.bold,
-                          fontSize: 13,
+                  if (_isRouteReady)
+                    Positioned(
+                      top: 10,
+                      left: 85,
+                      right: 85,
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 12,
+                          vertical: 6,
+                        ),
+                        decoration: BoxDecoration(
+                          color: Colors.white.withValues(alpha: 0.94),
+                          borderRadius: BorderRadius.circular(8),
+                          boxShadow: const [
+                            BoxShadow(color: Colors.black12, blurRadius: 4),
+                          ],
+                        ),
+                        child: Text(
+                          _routeStreetName,
+                          textAlign: TextAlign.center,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(
+                            fontWeight: FontWeight.bold,
+                            fontSize: 13,
+                          ),
                         ),
                       ),
                     ),
-                  ),
 
                   // LEFT HUD ETA & MODE BOX
-                  Positioned(
-                    top: 10,
-                    left: 10,
-                    child: Container(
-                      width: 84,
-                      padding: const EdgeInsets.symmetric(
-                        vertical: 6,
-                        horizontal: 4,
-                      ),
-                      decoration: BoxDecoration(
-                        color: Colors.white.withValues(alpha: 0.94),
-                        borderRadius: BorderRadius.circular(10),
-                        boxShadow: const [
-                          BoxShadow(color: Colors.black12, blurRadius: 4),
-                        ],
-                      ),
-                      child: Column(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Icon(
-                            _modeIconData(_selectedTransportMode),
-                            size: 24,
-                            color: Colors.indigo.shade700,
-                          ),
-                          const SizedBox(height: 2),
-                          const Text(
-                            'ETA',
-                            style: TextStyle(
-                              fontSize: 9,
-                              fontWeight: FontWeight.bold,
-                              color: Colors.black54,
-                              letterSpacing: 0.5,
+                  if (_isRouteReady)
+                    Positioned(
+                      top: 10,
+                      left: 10,
+                      child: Container(
+                        width: 84,
+                        padding: const EdgeInsets.symmetric(
+                          vertical: 6,
+                          horizontal: 4,
+                        ),
+                        decoration: BoxDecoration(
+                          color: Colors.white.withValues(alpha: 0.94),
+                          borderRadius: BorderRadius.circular(10),
+                          boxShadow: const [
+                            BoxShadow(color: Colors.black12, blurRadius: 4),
+                          ],
+                        ),
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(
+                              _modeIconData(_selectedTransportMode),
+                              size: 24,
+                              color: Colors.indigo.shade700,
                             ),
-                          ),
-                          Text(
-                            DateFormat('h:mm a').format(
-                              DateTime.now().add(
-                                Duration(minutes: _routeDurationMin),
+                            const SizedBox(height: 2),
+                            const Text(
+                              'ETA',
+                              style: TextStyle(
+                                fontSize: 9,
+                                fontWeight: FontWeight.bold,
+                                color: Colors.black54,
+                                letterSpacing: 0.5,
                               ),
                             ),
-                            style: const TextStyle(
-                              fontWeight: FontWeight.bold,
-                              fontSize: 11,
-                              color: Colors.black87,
+                            Text(
+                              DateFormat('h:mm a').format(
+                                DateTime.now().add(
+                                  Duration(minutes: _routeDurationMin),
+                                ),
+                              ),
+                              style: const TextStyle(
+                                fontWeight: FontWeight.bold,
+                                fontSize: 11,
+                                color: Colors.black87,
+                              ),
                             ),
-                          ),
-                          const Divider(height: 8),
-                          Text(
-                            _modeLabel(_selectedTransportMode),
-                            style: const TextStyle(
-                              fontSize: 10,
-                              fontWeight: FontWeight.w600,
-                              color: Colors.black54,
+                            const Divider(height: 8),
+                            Text(
+                              _modeLabel(_selectedTransportMode),
+                              style: const TextStyle(
+                                fontSize: 10,
+                                fontWeight: FontWeight.w600,
+                                color: Colors.black54,
+                              ),
                             ),
-                          ),
-                        ],
+                          ],
+                        ),
                       ),
                     ),
-                  ),
 
                   // RIGHT HUD STATS COLUMN (flag, timer, speed, GPS)
                   Positioned(
@@ -2874,21 +2845,23 @@ class _WomenSafetyScreenState extends State<WomenSafetyScreen>
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.end,
                       children: [
-                        _buildHudChip(
-                          Icons.flag,
-                          '${_routeDistanceKm.toStringAsFixed(1)} km',
-                        ),
-                        const SizedBox(height: 4),
-                        _buildHudChip(
-                          Icons.timer_outlined,
-                          _selectedTransportMode == TransportMode.driving &&
-                                  _trafficDelayMinutes > 0
-                              ? '${_formatDurationChip(_routeDurationMin)} (+${_trafficDelayMinutes}m traffic)'
-                              : _formatDurationChip(_routeDurationMin),
-                        ),
-                        const SizedBox(height: 4),
-                        _buildHudChip(Icons.speed, _calculateSpeedChipText()),
-                        const SizedBox(height: 4),
+                        if (_isRouteReady) ...[
+                          _buildHudChip(
+                            Icons.flag,
+                            '${_routeDistanceKm.toStringAsFixed(1)} km',
+                          ),
+                          const SizedBox(height: 4),
+                          _buildHudChip(
+                            Icons.timer_outlined,
+                            _selectedTransportMode == TransportMode.driving &&
+                                    _trafficDelayMinutes > 0
+                                ? '${_formatDurationChip(_routeDurationMin)} (+${_trafficDelayMinutes}m traffic)'
+                                : _formatDurationChip(_routeDurationMin),
+                          ),
+                          const SizedBox(height: 4),
+                          _buildHudChip(Icons.speed, _calculateSpeedChipText()),
+                          const SizedBox(height: 4),
+                        ],
                         _buildHudChip(
                           Icons.gps_fixed,
                           _isJourneyActive ? 'LIVE GPS' : 'GPS',
@@ -3178,17 +3151,56 @@ class _WomenSafetyScreenState extends State<WomenSafetyScreen>
             ),
           ),
           if (_isLoadingPlaces)
-            const Padding(
-              padding: EdgeInsets.symmetric(vertical: 10),
-              child: Row(
+            Container(
+              margin: const EdgeInsets.symmetric(vertical: 8),
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: const Color(0xFFF8FAFC),
+                borderRadius: BorderRadius.circular(10),
+                border: Border.all(color: const Color(0xFFE2E8F0)),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  SizedBox(
-                    width: 16,
-                    height: 16,
-                    child: CircularProgressIndicator(strokeWidth: 2),
+                  const Row(
+                    children: [
+                      SizedBox(
+                        width: 14,
+                        height: 14,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2,
+                          color: Colors.deepPurple,
+                        ),
+                      ),
+                      SizedBox(width: 8),
+                      Text(
+                        'Checking mapped corridor activity…',
+                        style: TextStyle(
+                          fontSize: 12,
+                          fontWeight: FontWeight.w600,
+                          color: Colors.deepPurple,
+                        ),
+                      ),
+                    ],
                   ),
-                  SizedBox(width: 8),
-                  Text('Checking mapped places…'),
+                  const SizedBox(height: 10),
+                  Container(
+                    width: double.infinity,
+                    height: 8,
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFE2E8F0),
+                      borderRadius: BorderRadius.circular(4),
+                    ),
+                  ),
+                  const SizedBox(height: 6),
+                  Container(
+                    width: 180,
+                    height: 8,
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFF1F5F9),
+                      borderRadius: BorderRadius.circular(4),
+                    ),
+                  ),
                 ],
               ),
             )
@@ -3246,6 +3258,67 @@ class _WomenSafetyScreenState extends State<WomenSafetyScreen>
     );
   }
 
+  Widget _buildPlacesSkeletonLoader() {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+      child: Column(
+        children: List.generate(
+          3,
+          (index) => Padding(
+            padding: const EdgeInsets.symmetric(vertical: 8.0),
+            child: Row(
+              children: [
+                Container(
+                  width: 38,
+                  height: 38,
+                  decoration: const BoxDecoration(
+                    color: Color(0xFFF1F5F9),
+                    shape: BoxShape.circle,
+                  ),
+                  child: Center(
+                    child: Container(
+                      width: 16,
+                      height: 16,
+                      decoration: const BoxDecoration(
+                        color: Color(0xFFE2E8F0),
+                        shape: BoxShape.circle,
+                      ),
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Container(
+                        width: index == 0 ? 150 : (index == 1 ? 190 : 130),
+                        height: 12,
+                        decoration: BoxDecoration(
+                          color: const Color(0xFFE2E8F0),
+                          borderRadius: BorderRadius.circular(6),
+                        ),
+                      ),
+                      const SizedBox(height: 6),
+                      Container(
+                        width: index == 0 ? 210 : (index == 1 ? 170 : 200),
+                        height: 9,
+                        decoration: BoxDecoration(
+                          color: const Color(0xFFF1F5F9),
+                          borderRadius: BorderRadius.circular(5),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
   Widget _buildNearbyPlaces() {
     if (!_isRouteReady || !_routeIsAccurate) return const SizedBox.shrink();
     final summary = _selectedRouteSummary;
@@ -3256,14 +3329,32 @@ class _WomenSafetyScreenState extends State<WomenSafetyScreen>
           color: Colors.teal,
         ),
         title: const Text('Places near this route'),
-        subtitle: Text(
-          _isLoadingPlaces
-              ? 'Loading OpenStreetMap entries…'
-              : _placeLookupConsent == false
-              ? 'Place lookup is off'
-              : summary == null || summary.places.isEmpty
-              ? 'No mapped places available'
-              : '${summary.places.length} mapped places within about 220 m',
+        subtitle: Row(
+          children: [
+            if (_isLoadingPlaces) ...[
+              const SizedBox(
+                width: 12,
+                height: 12,
+                child: CircularProgressIndicator(
+                  strokeWidth: 1.8,
+                  color: Colors.teal,
+                ),
+              ),
+              const SizedBox(width: 6),
+            ],
+            Expanded(
+              child: Text(
+                _isLoadingPlaces
+                    ? 'Loading OpenStreetMap entries…'
+                    : _placeLookupConsent == false
+                    ? 'Place lookup is off'
+                    : summary == null || summary.places.isEmpty
+                    ? 'No mapped places available'
+                    : '${summary.places.length} mapped places within about 220 m',
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
+          ],
         ),
         children: [
           if (_placeLookupConsent != true)
@@ -3317,10 +3408,7 @@ class _WomenSafetyScreenState extends State<WomenSafetyScreen>
                 ),
               )
             else if (_isLoadingPlaces)
-              const Padding(
-                padding: EdgeInsets.all(16),
-                child: CircularProgressIndicator(),
-              )
+              _buildPlacesSkeletonLoader()
             else if (summary == null || summary.places.isEmpty)
               const Padding(
                 padding: EdgeInsets.all(12),

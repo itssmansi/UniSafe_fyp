@@ -12,7 +12,7 @@ class PageHeading extends StatelessWidget {
       padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 22),
       child: Text(
         title,
-        style: GoogleFonts.notoSerif(
+        style: GoogleFonts.plusJakartaSans(
           fontSize: 30,
           fontWeight: FontWeight.bold,
           color: const Color(0xFF233743),

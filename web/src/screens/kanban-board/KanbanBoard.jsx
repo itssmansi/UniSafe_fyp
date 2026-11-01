@@ -162,10 +162,11 @@ const formatTicketId = (id, sourceType) => {
 
 const parseComplaintContent = (item) => {
   let title = item.title;
-  let description = item.description || '';
+  let rawDesc = (item.description || '').replace(/\\n/g, '\n');
+  let description = rawDesc;
   
-  if ((!title || title.toLowerCase() === (item.category || '').toLowerCase() || title.toLowerCase() === 'civic issue') && description.includes('\n')) {
-    const lines = description.split('\n');
+  if ((!title || title.toLowerCase() === (item.category || '').toLowerCase() || title.toLowerCase() === 'civic issue') && rawDesc.includes('\n')) {
+    const lines = rawDesc.split('\n');
     if (lines[0].trim()) {
       title = lines[0].trim();
       description = lines.slice(1).join('\n').trim();
@@ -563,7 +564,7 @@ export default function KanbanBoard({ hideHeader = false, initialOfficers = [] }
           const upvotes = c.upvote_count || 0;
           return {
             id: c.id,
-            title: c.category || c.title || 'Civic Issue',
+            title: c.title || c.category || 'Civic Issue',
             description: c.description || '',
             category: c.category || 'General',
             status: mapToKanbanStatus(c.status),

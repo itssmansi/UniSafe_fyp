@@ -221,6 +221,7 @@ class ReportModel {
 
     final map = <String, dynamic>{
       'id': id,
+      'title': title.isNotEmpty ? title : combinedDescription,
       'category': category.name,
       'description': combinedDescription,
       'latitude': location.latitude,
