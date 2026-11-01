@@ -13,6 +13,7 @@ import 'screens/SignupLogin_ui/welcome_screen.dart';
 import 'screens/SignupLogin_ui/login_screen.dart';
 import 'screens/SignupLogin_ui/signup_screen.dart';
 import 'screens/SignupLogin_ui/forget_password_screen.dart';
+import 'screens/missing_persons/missing_persons_screen.dart';
 import 'theme/unisafe_theme.dart';
 
 export 'screens/home_page.dart';
@@ -75,6 +76,7 @@ class UniSafeApp extends StatelessWidget {
           '/heatmap': (_) => const MapScreen(),
           '/kanban': (_) => const KanbanBoardScreen(),
           '/women-safety': (_) => const WomenSafetyScreen(),
+          '/missing-persons': (_) => const MissingPersonsScreen(),
         };
         final builder = routes[settings.name];
         return builder == null ? null : UniSafePageRoute(builder: builder, settings: settings);

@@ -26,6 +26,7 @@ import '../services/device_service.dart';
 import '../theme/unisafe_theme.dart';
 import 'SignupLogin_ui/services/digilocker_service.dart';
 import 'SignupLogin_ui/services/url_opener.dart';
+import 'missing_persons/missing_persons_screen.dart';
 
 class HomePage extends ConsumerStatefulWidget {
   const HomePage({super.key});
@@ -575,24 +576,8 @@ class _HomePageState extends ConsumerState<HomePage> {
                 actionText: 'Search Cases',
                 watermarkIcon: LucideIcons.users,
                 onTap: () {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(
-                      backgroundColor: const Color(0xFF1E293B),
-                      behavior: SnackBarBehavior.floating,
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                      content: const Row(
-                        children: [
-                          Icon(LucideIcons.users, color: Color(0xFFF59E0B), size: 20),
-                          SizedBox(width: 10),
-                          Expanded(
-                            child: Text(
-                              'Missing Persons bulletin module is coming soon.',
-                              style: TextStyle(fontWeight: FontWeight.w600),
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
+                  Navigator.of(context).push(
+                    UniSafePageRoute(builder: (context) => const MissingPersonsScreen()),
                   );
                 },
               ),
