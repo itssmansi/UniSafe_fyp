@@ -1,6 +1,6 @@
 import os
 import io
-from flask import Blueprint, request, jsonify, current_app
+from flask import Blueprint, request, jsonify, current_app, g
 import cv2
 import numpy as np
 from datetime import datetime
@@ -9,6 +9,7 @@ from werkzeug.utils import secure_filename
 
 from database.supabase_client import get_supabase_client
 from services.face_recognition import extract_reference_face_from_image
+from middleware.auth import require_authority, optional_authority
 
 
 missing_person_bp = Blueprint(
@@ -21,6 +22,7 @@ BUCKET_NAME = "missing-person-images"
 ALLOWED_EXTENSIONS = {"jpg", "jpeg", "png", "webp"}
 EXPECTED_EMBEDDING_SIZE = 512
 DEFAULT_MAX_IMAGE_SIZE_BYTES = 10 * 1024 * 1024  # 10 MB
+DEFAULT_SIGNED_URL_EXPIRY_SECONDS = 3600  # 1 hour
 
 
 def get_max_image_size_bytes():
@@ -34,6 +36,32 @@ def get_max_image_size_bytes():
     except Exception:
         pass
     return DEFAULT_MAX_IMAGE_SIZE_BYTES
+
+
+def get_signed_url_expiry_seconds():
+    """Retrieve signed URL expiration seconds from env or config with safe default."""
+    try:
+        env_val = os.getenv("SIGNED_URL_EXPIRY_SECONDS")
+        if env_val:
+            return int(env_val)
+        if current_app and current_app.config.get("SIGNED_URL_EXPIRY_SECONDS"):
+            return int(current_app.config["SIGNED_URL_EXPIRY_SECONDS"])
+    except Exception:
+        pass
+    return DEFAULT_SIGNED_URL_EXPIRY_SECONDS
+
+
+def extract_signed_url(res):
+    """Safely extract signed URL string from Supabase Storage SDK response."""
+    if isinstance(res, dict):
+        return res.get("signedURL") or res.get("signedUrl")
+    if isinstance(res, str):
+        return res
+    if hasattr(res, "signedURL"):
+        return res.signedURL
+    if hasattr(res, "signedUrl"):
+        return res.signedUrl
+    return str(res) if res else None
 
 
 def is_valid_uuid(val):
@@ -195,7 +223,24 @@ def cleanup_storage_object(supabase, storage_path):
 # ---------------------------------------------------------
 
 @missing_person_bp.post("")
+@require_authority(allowed_departments=["POLICE"])
 def create_missing_person_report():
+
+    # 0. Validate officer jurisdiction from authenticated context
+    authority = getattr(g, "current_authority", None) or {}
+    officer_jurisdiction = (authority.get("jurisdiction") or "").strip()
+
+    if not officer_jurisdiction:
+        return jsonify({
+            "error": "Access denied: Officer account has no assigned jurisdiction."
+        }), 403
+
+    # Do not allow client to register under another station's jurisdiction
+    client_jurisdiction = request.form.get("jurisdiction", "").strip()
+    if client_jurisdiction and client_jurisdiction.lower() != officer_jurisdiction.lower():
+        return jsonify({
+            "error": f"Jurisdiction mismatch: Cannot register case for '{client_jurisdiction}'. Your assigned station is '{officer_jurisdiction}'."
+        }), 403
 
     # 1. Read person details
     full_name = request.form.get("full_name", "").strip()
@@ -276,7 +321,8 @@ def create_missing_person_report():
             "latitude": parsed_latitude,
             "longitude": parsed_longitude,
             "description": description or None,
-            "status": "Missing"
+            "status": "Missing",
+            "jurisdiction": officer_jurisdiction
         }
 
         response = (
@@ -325,6 +371,7 @@ def create_missing_person_report():
             "person_id": person_id,
             "case_code": case_code,
             "full_name": full_name,
+            "jurisdiction": officer_jurisdiction,
             "image_path": storage_path,
             "face_count": 1,
             "detection_score": det_score
@@ -364,6 +411,7 @@ def create_missing_person_report():
 # ---------------------------------------------------------
 
 @missing_person_bp.post("/<person_id>/photos")
+@require_authority(allowed_departments=["POLICE"])
 def add_missing_person_photo(person_id):
     if not is_valid_uuid(person_id):
         return jsonify({
@@ -377,7 +425,7 @@ def add_missing_person_photo(person_id):
     try:
         response = (
             supabase.table("missing_persons")
-            .select("id, full_name, case_code")
+            .select("id, full_name, case_code, jurisdiction")
             .eq("id", person_id)
             .limit(1)
             .execute()
@@ -390,11 +438,27 @@ def add_missing_person_photo(person_id):
 
         person = response.data[0]
         case_code = person.get("case_code")
+        case_jurisdiction = (person.get("jurisdiction") or "").strip()
 
         if not case_code:
             return jsonify({
                 "error": "Person has no case code"
             }), 500
+
+        authority = getattr(g, "current_authority", None) or {}
+        officer_jurisdiction = (authority.get("jurisdiction") or "").strip()
+        if not officer_jurisdiction:
+            return jsonify({
+                "error": "Access forbidden: Officer account has no assigned jurisdiction."
+            }), 403
+        if not case_jurisdiction:
+            return jsonify({
+                "error": "Access forbidden: Case has no assigned jurisdiction."
+            }), 403
+        if case_jurisdiction.lower() != officer_jurisdiction.lower():
+            return jsonify({
+                "error": f"Access forbidden: Case belongs to '{case_jurisdiction}' jurisdiction, not '{officer_jurisdiction}'."
+            }), 403
 
     except Exception:
         current_app.logger.exception(
@@ -508,6 +572,393 @@ def add_missing_person_photo(person_id):
         }), 500
 
 
+def fetch_person_photos_with_signed_urls(supabase, person_id):
+    """
+    Query missing_person_embeddings for the given person_id and generate
+    time-limited signed URLs from the private Storage bucket.
+    Excludes raw 512-D face embedding vectors.
+
+    Returns:
+        tuple (photos, error_response):
+            photos: list of photo dicts on success, or None on error
+            error_response: (jsonify_response, status_code) on error, or None on success
+    """
+    try:
+        photos_res = (
+            supabase.table("missing_person_embeddings")
+            .select("id, image_path, det_score, created_at")
+            .eq("missing_person_id", person_id)
+            .order("created_at")
+            .execute()
+        )
+        photo_records = photos_res.data or []
+    except Exception:
+        current_app.logger.exception(
+            "Failed to query reference photos for case: %s", person_id
+        )
+        return None, (
+            jsonify({"error": "Could not query reference photos"}),
+            500,
+        )
+
+    expiry = get_signed_url_expiry_seconds()
+    photos = []
+
+    for record in photo_records:
+        image_path = record.get("image_path")
+        if not image_path:
+            continue
+
+        try:
+            url_res = supabase.storage.from_(BUCKET_NAME).create_signed_url(
+                image_path,
+                expires_in=expiry
+            )
+            signed_url = extract_signed_url(url_res)
+            if not signed_url:
+                raise RuntimeError(
+                    f"Storage returned empty signed URL for {image_path}"
+                )
+        except Exception:
+            current_app.logger.exception(
+                "Failed to generate signed URL for reference photo: %s",
+                image_path
+            )
+            return None, (
+                jsonify({"error": "Could not generate signed photo URLs"}),
+                500,
+            )
+
+        photos.append({
+            "embedding_id": record.get("id"),
+            "image_path": image_path,
+            "signed_url": signed_url,
+            "detection_score": record.get("det_score"),
+            "created_at": record.get("created_at"),
+        })
+
+    return photos, None
+
+
+# ---------------------------------------------------------
+# LIST MISSING-PERSON CASES
+# GET /api/missing-persons
+# ---------------------------------------------------------
+
+@missing_person_bp.get("")
+@missing_person_bp.get("/")
+@optional_authority
+def get_missing_persons_list():
+    """
+    Retrieve a list of missing-person cases using confirmed database columns.
+    Supports optional status filtering (e.g. ?status=Missing, ?status=all).
+    Excludes any raw biometric embedding vectors or internal face data.
+    """
+    supabase = get_supabase_client()
+
+    # Confirmed columns in public.missing_persons
+    columns = (
+        "id, case_code, full_name, age, gender, "
+        "last_seen_date, latitude, longitude, description, status, jurisdiction, created_at"
+    )
+
+    try:
+        query = (
+            supabase.table("missing_persons")
+            .select(columns)
+            .order("created_at", desc=True)
+        )
+
+        # Optional status filtering
+        status_param = request.args.get("status")
+        if status_param is not None:
+            status_clean = status_param.strip()
+            if status_clean and status_clean.lower() != "all":
+                query = query.eq("status", status_clean)
+
+        # Jurisdiction filtering / station scoping
+        jurisdiction_param = request.args.get("jurisdiction")
+        authority = getattr(g, "current_authority", None) or {}
+        officer_jurisdiction = (authority.get("jurisdiction") or "").strip()
+        dept = (authority.get("department") or "").strip().upper()
+
+        if dept == "POLICE" and officer_jurisdiction:
+            # Authenticated police officers can only view cases within their assigned station
+            query = query.ilike("jurisdiction", officer_jurisdiction)
+        elif jurisdiction_param is not None:
+            jurisdiction_clean = jurisdiction_param.strip()
+            if jurisdiction_clean and jurisdiction_clean.lower() != "all":
+                query = query.ilike("jurisdiction", jurisdiction_clean)
+
+        # Optional limit parameter
+        limit_param = request.args.get("limit")
+        if limit_param is not None and limit_param.strip():
+            try:
+                limit_val = int(limit_param.strip())
+                if limit_val > 0:
+                    query = query.limit(limit_val)
+                else:
+                    return jsonify({"error": "limit must be a positive integer"}), 400
+            except ValueError:
+                return jsonify({"error": "limit must be a positive integer"}), 400
+
+        person_res = query.execute()
+        case_records = person_res.data or []
+
+    except Exception:
+        current_app.logger.exception(
+            "Failed to query missing-person cases from database"
+        )
+        return jsonify({
+            "error": "Could not query missing-person cases"
+        }), 500
+
+    # Fetch associated reference photos for cases
+    photos_by_person = {}
+    person_ids = [r.get("id") for r in case_records if r.get("id")]
+    if person_ids:
+        try:
+            emb_builder = supabase.table("missing_person_embeddings").select(
+                "id, missing_person_id, image_path, created_at"
+            )
+            if hasattr(emb_builder, "in_"):
+                emb_query = emb_builder.in_("missing_person_id", person_ids)
+            else:
+                emb_query = emb_builder
+            if hasattr(emb_query, "order"):
+                emb_query = emb_query.order("created_at")
+            emb_res = emb_query.execute()
+            emb_data = emb_res.data or []
+            for emb in emb_data:
+                if isinstance(emb, dict):
+                    pid = emb.get("missing_person_id")
+                    if pid and pid in person_ids:
+                        photos_by_person.setdefault(pid, []).append(emb)
+        except Exception:
+            current_app.logger.warning(
+                "Could not query reference photos for missing persons list",
+                exc_info=True
+            )
+
+    expiry = get_signed_url_expiry_seconds()
+    paths_to_sign = []
+    for pid, p_list in photos_by_person.items():
+        for p in p_list:
+            img_path = p.get("image_path")
+            if img_path and img_path not in paths_to_sign:
+                paths_to_sign.append(img_path)
+
+    path_to_signed_url = {}
+    if paths_to_sign:
+        try:
+            storage_bucket = supabase.storage.from_(BUCKET_NAME)
+            if hasattr(storage_bucket, "create_signed_urls"):
+                batch_res = storage_bucket.create_signed_urls(paths_to_sign, expires_in=expiry)
+                for item in (batch_res or []):
+                    if isinstance(item, dict) and item.get("path"):
+                        s_url = extract_signed_url(item)
+                        if s_url:
+                            path_to_signed_url[item["path"]] = s_url
+
+            for p_path in paths_to_sign:
+                if p_path not in path_to_signed_url:
+                    try:
+                        s_res = storage_bucket.create_signed_url(p_path, expires_in=expiry)
+                        s_url = extract_signed_url(s_res)
+                        if s_url:
+                            path_to_signed_url[p_path] = s_url
+                    except Exception:
+                        pass
+        except Exception:
+            current_app.logger.warning(
+                "Could not generate signed URLs for missing persons list photos",
+                exc_info=True
+            )
+
+    # Ensure no internal biometric vectors are ever exposed
+    biometric_keys = {"embedding", "embeddings", "face_data"}
+    sanitized_cases = []
+    for record in case_records:
+        rec_id = record.get("id")
+        p_photos = photos_by_person.get(rec_id, [])
+        primary_photo_path = p_photos[0].get("image_path") if p_photos else None
+        photo_url = path_to_signed_url.get(primary_photo_path) if primary_photo_path else None
+
+        sanitized = {
+            k: v for k, v in record.items() if k not in biometric_keys
+        }
+        sanitized["photo_url"] = photo_url
+        sanitized_cases.append(sanitized)
+
+    return jsonify({
+        "missing_persons": sanitized_cases,
+        "count": len(sanitized_cases),
+        "total": len(sanitized_cases),
+    }), 200
+
+
+# ---------------------------------------------------------
+# GET REFERENCE PHOTOS FOR AN EXISTING PERSON
+# GET /api/missing-persons/<person_id>/photos
+# ---------------------------------------------------------
+
+@missing_person_bp.get("/<person_id>/photos")
+@require_authority(allowed_departments=["POLICE"])
+def get_missing_person_photos(person_id):
+    """
+    Retrieve reference photos for a missing-person case.
+    Generates time-limited signed URLs for the private Storage bucket
+    and excludes raw 512-D face embedding vectors.
+    """
+    if not is_valid_uuid(person_id):
+        return jsonify({
+            "error": "Invalid missing-person ID"
+        }), 400
+
+    # 1. Authority validation
+    authority = getattr(g, "current_authority", None) or {}
+    officer_dept = (authority.get("department") or "").strip().upper()
+    officer_jurisdiction = (authority.get("jurisdiction") or "").strip()
+
+    if officer_dept != "POLICE" or not officer_jurisdiction:
+        return jsonify({
+            "error": "Access forbidden: Only authorized police officers with an assigned jurisdiction may view reference photos."
+        }), 403
+
+    supabase = get_supabase_client()
+
+    # 2. Verify case exists in missing_persons and fetch jurisdiction
+    try:
+        person_res = (
+            supabase.table("missing_persons")
+            .select("id, case_code, jurisdiction")
+            .eq("id", person_id)
+            .limit(1)
+            .execute()
+        )
+        if not person_res.data:
+            return jsonify({
+                "error": "Missing-person case not found"
+            }), 404
+
+        person = person_res.data[0]
+        case_code = person.get("case_code")
+
+    except Exception:
+        current_app.logger.exception(
+            "Failed to verify missing-person case: %s", person_id
+        )
+        return jsonify({
+            "error": "Could not verify missing-person case"
+        }), 500
+
+    # 3. Verify case jurisdiction is non-NULL and matches officer jurisdiction
+    case_jurisdiction = (person.get("jurisdiction") or "").strip()
+    if not case_jurisdiction:
+        return jsonify({
+            "error": "Access forbidden: Case has no assigned jurisdiction."
+        }), 403
+
+    if case_jurisdiction.lower() != officer_jurisdiction.lower():
+        return jsonify({
+            "error": f"Access forbidden: Case belongs to '{case_jurisdiction}' jurisdiction, not '{officer_jurisdiction}'."
+        }), 403
+
+    # 4. Query photos and generate signed URLs (excluding raw embeddings)
+    # Executed strictly AFTER the jurisdiction check has passed!
+    photos, error_response = fetch_person_photos_with_signed_urls(supabase, person_id)
+    if error_response:
+        return error_response
+
+    return jsonify({
+        "person_id": person["id"],
+        "case_code": case_code,
+        "photo_count": len(photos),
+        "photos": photos,
+    }), 200
+
+
+# ---------------------------------------------------------
+# GET SINGLE MISSING-PERSON CASE DETAILS
+# GET /api/missing-persons/<person_id>
+# ---------------------------------------------------------
+
+@missing_person_bp.get("/<person_id>")
+@require_authority(allowed_departments=["POLICE"])
+def get_missing_person_report(person_id):
+    """
+    Retrieve details of a single missing-person case by UUID,
+    including associated reference photos with time-limited signed URLs.
+    Never returns raw face embeddings or internal biometric vectors.
+    """
+    if not is_valid_uuid(person_id):
+        return jsonify({
+            "error": "Invalid missing-person ID"
+        }), 400
+
+    # 1. Authority validation
+    authority = getattr(g, "current_authority", None) or {}
+    officer_dept = (authority.get("department") or "").strip().upper()
+    officer_jurisdiction = (authority.get("jurisdiction") or "").strip()
+
+    if officer_dept != "POLICE" or not officer_jurisdiction:
+        return jsonify({
+            "error": "Access forbidden: Only authorized police officers with an assigned jurisdiction may access case details."
+        }), 403
+
+    supabase = get_supabase_client()
+
+    # 2. Fetch case record from missing_persons
+    try:
+        person_res = (
+            supabase.table("missing_persons")
+            .select("*")
+            .eq("id", person_id)
+            .limit(1)
+            .execute()
+        )
+        if not person_res.data:
+            return jsonify({
+                "error": "Missing-person case not found"
+            }), 404
+
+        person = person_res.data[0]
+
+    except Exception:
+        current_app.logger.exception(
+            "Failed to fetch missing-person case: %s", person_id
+        )
+        return jsonify({
+            "error": "Could not fetch missing-person case"
+        }), 500
+
+    # 3. Verify case jurisdiction is non-NULL and matches officer jurisdiction
+    case_jurisdiction = (person.get("jurisdiction") or "").strip()
+    if not case_jurisdiction:
+        return jsonify({
+            "error": "Access forbidden: Case has no assigned jurisdiction."
+        }), 403
+
+    if case_jurisdiction.lower() != officer_jurisdiction.lower():
+        return jsonify({
+            "error": f"Access forbidden: Case belongs to '{case_jurisdiction}' jurisdiction, not '{officer_jurisdiction}'."
+        }), 403
+
+    # 4. Query photos and generate signed URLs (excluding raw embeddings)
+    # Executed strictly AFTER the jurisdiction check has passed!
+    photos, error_response = fetch_person_photos_with_signed_urls(supabase, person_id)
+    if error_response:
+        return error_response
+
+    # 5. Build sanitized response without raw biometric embeddings
+    biometric_keys = {"embedding", "embeddings", "face_data"}
+    case_data = {k: v for k, v in person.items() if k not in biometric_keys}
+    case_data["photos"] = photos
+    case_data["photo_count"] = len(photos)
+
+    return jsonify(case_data), 200
+
+
 # ---------------------------------------------------------
 # DELETE A PHOTO FROM AN EXISTING PERSON
 # DELETE /api/missing-persons/<person_id>/photos
@@ -515,6 +966,7 @@ def add_missing_person_photo(person_id):
 # ---------------------------------------------------------
 
 @missing_person_bp.delete("/<person_id>/photos")
+@require_authority(allowed_departments=["POLICE"])
 def delete_missing_person_photo(person_id):
     if not is_valid_uuid(person_id):
         return jsonify({
@@ -539,7 +991,7 @@ def delete_missing_person_photo(person_id):
     try:
         person_response = (
             supabase.table("missing_persons")
-            .select("id, full_name, case_code")
+            .select("id, full_name, case_code, jurisdiction")
             .eq("id", person_id)
             .limit(1)
             .execute()
@@ -551,6 +1003,22 @@ def delete_missing_person_photo(person_id):
             }), 404
 
         person = person_response.data[0]
+        case_jurisdiction = (person.get("jurisdiction") or "").strip()
+
+        authority = getattr(g, "current_authority", None) or {}
+        officer_jurisdiction = (authority.get("jurisdiction") or "").strip()
+        if not officer_jurisdiction:
+            return jsonify({
+                "error": "Access forbidden: Officer account has no assigned jurisdiction."
+            }), 403
+        if not case_jurisdiction:
+            return jsonify({
+                "error": "Access forbidden: Case has no assigned jurisdiction."
+            }), 403
+        if case_jurisdiction.lower() != officer_jurisdiction.lower():
+            return jsonify({
+                "error": f"Access forbidden: Case belongs to '{case_jurisdiction}' jurisdiction, not '{officer_jurisdiction}'."
+            }), 403
 
     except Exception:
         current_app.logger.exception(
@@ -672,6 +1140,7 @@ def delete_missing_person_photo(person_id):
 
 
 @missing_person_bp.patch("/<person_id>")
+@require_authority(allowed_departments=["POLICE"])
 def update_missing_person_report(person_id):
     """
     Update editable details of an existing missing-person case.
@@ -852,4 +1321,142 @@ def update_missing_person_report(person_id):
         )
         return jsonify({
             "error": "An internal error occurred while updating the case."
+        }), 500
+
+
+# ---------------------------------------------------------
+# UPDATE MISSING-PERSON CASE STATUS
+# PATCH /api/missing-persons/<person_id>/status
+# ---------------------------------------------------------
+
+ALLOWED_CASE_STATUSES = {
+    "missing": "Missing",
+    "found": "Found",
+    "closed": "Closed",
+}
+
+
+@missing_person_bp.patch("/<person_id>/status")
+@missing_person_bp.patch("/<person_id>/status/")
+@missing_person_bp.put("/<person_id>/status")
+@missing_person_bp.put("/<person_id>/status/")
+@require_authority(allowed_departments=["POLICE"], allowed_roles=["Inspector", "Constable", "authority"])
+def update_missing_person_status(person_id):
+    """
+    Update the official case status of an existing missing-person case.
+    Allowed statuses: Missing, Found, Closed.
+    Marking a case as 'Found' requires explicit officer verification confirmation
+    (automated AI match inferences alone cannot change case status).
+    Audit history limitation: The underlying schema does not currently define a
+    case_status_logs audit table, so the change is persisted directly to missing_persons.
+    """
+    # 1. Validate person UUID
+    if not is_valid_uuid(person_id):
+        return jsonify({
+            "error": "Invalid missing-person ID."
+        }), 400
+
+    # 2. Parse request body
+    data = request.get_json(silent=True)
+    if not isinstance(data, dict) or not data:
+        return jsonify({
+            "error": "Provide a JSON object containing the new status."
+        }), 400
+
+    raw_status = data.get("status")
+    if not raw_status or not isinstance(raw_status, str) or not raw_status.strip():
+        return jsonify({
+            "error": "status is required and must be a non-empty string."
+        }), 400
+
+    normalized_status = ALLOWED_CASE_STATUSES.get(raw_status.strip().lower())
+    if not normalized_status:
+        return jsonify({
+            "error": (
+                f"Invalid status value: '{raw_status.strip()}'. "
+                "Allowed statuses are: Missing, Found, Closed."
+            ),
+            "allowed_statuses": ["Missing", "Found", "Closed"],
+        }), 400
+
+    # 3. Protocol safeguard: 'Found' requires explicit verification confirmation
+    if normalized_status == "Found":
+        verified_confirmation = data.get("verified_confirmation")
+        if verified_confirmation is not True:
+            return jsonify({
+                "error": (
+                    "Marking a missing-person case as 'Found' requires explicit officer "
+                    "verification confirmation. Automated AI match scores alone cannot "
+                    "be used to confirm identity."
+                ),
+                "confirmation_required": True,
+            }), 400
+
+    supabase = get_supabase_client()
+
+    try:
+        # 4. Confirm case exists and read current status
+        existing = (
+            supabase.table("missing_persons")
+            .select("id, case_code, full_name, status")
+            .eq("id", person_id)
+            .limit(1)
+            .execute()
+        )
+        if not existing.data:
+            return jsonify({
+                "error": "Missing-person case not found."
+            }), 404
+
+        current_case = existing.data[0]
+        current_status = current_case.get("status")
+
+        # 5. Guard against redundant updates to the same status
+        if current_status == normalized_status:
+            return jsonify({
+                "error": f"Case is already in '{normalized_status}' status.",
+                "current_status": current_status,
+                "status": current_status,
+            }), 400
+
+        # 6. Apply status update
+        update_payload = {"status": normalized_status}
+        result = (
+            supabase.table("missing_persons")
+            .update(update_payload)
+            .eq("id", person_id)
+            .execute()
+        )
+        if not result.data:
+            return jsonify({
+                "error": "The case status could not be updated."
+            }), 500
+
+        remarks = data.get("remarks")
+        remarks_clean = remarks.strip() if isinstance(remarks, str) and remarks.strip() else None
+
+        current_app.logger.info(
+            "Status updated for case %s (%s): %s -> %s",
+            current_case.get("case_code"),
+            person_id,
+            current_status,
+            normalized_status,
+        )
+
+        return jsonify({
+            "message": f"Case status successfully updated to '{normalized_status}'.",
+            "person_id": person_id,
+            "case_code": current_case.get("case_code"),
+            "full_name": current_case.get("full_name"),
+            "previous_status": current_status,
+            "status": normalized_status,
+            "remarks": remarks_clean,
+        }), 200
+
+    except Exception:
+        current_app.logger.exception(
+            "Failed to update status for missing-person case: %s", person_id
+        )
+        return jsonify({
+            "error": "An internal error occurred while updating the case status."
         }), 500
