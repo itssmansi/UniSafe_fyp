@@ -1,3 +1,4 @@
+import 'missing_persons_config.dart';
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
@@ -21,7 +22,7 @@ class ReportSightingForm extends StatefulWidget {
     this.linkedPerson,
     this.apiBaseUrl = const String.fromEnvironment(
       'FLASK_API_BASE_URL',
-      defaultValue: 'http://10.0.2.2:5000',
+      defaultValue: 'http://10.188.158.12:5000',
     ),
     this.httpClient,
     this.initialImageBytes,
@@ -32,6 +33,9 @@ class ReportSightingForm extends StatefulWidget {
 }
 
 class _ReportSightingFormState extends State<ReportSightingForm> {
+  String? _activeBaseUrl;
+
+
   final _formKey = GlobalKey<FormState>();
 
   final _locationController = TextEditingController();
@@ -50,6 +54,9 @@ class _ReportSightingFormState extends State<ReportSightingForm> {
   @override
   void initState() {
     super.initState();
+    MissingPersonsConfig.getBaseUrl().then((url) {
+      if (mounted) setState(() => _activeBaseUrl = url);
+    });
     if (widget.initialImageBytes != null) {
       _imageBytes = widget.initialImageBytes;
     }
@@ -206,7 +213,7 @@ class _ReportSightingFormState extends State<ReportSightingForm> {
     }
 
     try {
-      final cleanBase = widget.apiBaseUrl.replaceAll(RegExp(r'/+$'), '');
+      final cleanBase = (_activeBaseUrl ?? widget.apiBaseUrl).replaceAll(RegExp(r'/+$'), '');
       final uri = Uri.parse('$cleanBase/api/sightings');
 
       final request = http.MultipartRequest('POST', uri);
@@ -301,7 +308,7 @@ class _ReportSightingFormState extends State<ReportSightingForm> {
     } on SocketException catch (_) {
       if (!mounted) return;
       _showErrorDialog(
-        'Unable to connect to UniSafe server at ${widget.apiBaseUrl}. Please ensure the Flask backend is running and your device is connected.',
+        'Unable to connect to UniSafe server at ${_activeBaseUrl ?? widget.apiBaseUrl}. Please ensure the Flask backend is running and your device is connected.',
       );
     } on http.ClientException catch (e) {
       if (!mounted) return;

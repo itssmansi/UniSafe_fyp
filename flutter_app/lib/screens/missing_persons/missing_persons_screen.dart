@@ -1,3 +1,5 @@
+import '../../config/supabase_config.dart';
+import 'missing_persons_config.dart';
 import 'dart:convert';
 
 import 'package:flutter/material.dart';
@@ -43,52 +45,62 @@ class _MissingPersonsScreenState extends State<MissingPersonsScreen> {
       _errorMessage = null;
     });
 
+    final baseUrl = await MissingPersonsConfig.getBaseUrl();
     try {
       final response = await http
           .get(
-            Uri.parse(
-              'http://10.0.2.2:5000/api/missing-persons',
-            ),
+            Uri.parse('$baseUrl/api/missing-persons'),
           )
-          .timeout(const Duration(seconds: 15));
+          .timeout(const Duration(seconds: 5));
 
       if (response.statusCode != 200) {
-        throw Exception(
-          'Server returned ${response.statusCode}',
-        );
+        throw Exception('Server returned ${response.statusCode}');
       }
 
-      final data =
-          jsonDecode(response.body) as Map<String, dynamic>;
-
+      final data = jsonDecode(response.body) as Map<String, dynamic>;
       final records = data['missing_persons'] as List<dynamic>;
-
       final cases = records
-          .map(
-            (record) => MissingPerson.fromJson(
-              record as Map<String, dynamic>,
-            ),
-          )
+          .map((record) => MissingPerson.fromJson(record as Map<String, dynamic>))
           .toList();
 
       if (!mounted) return;
-
       setState(() {
         _allCases = cases;
         _isLoading = false;
         _errorMessage = null;
       });
+      return;
     } catch (e) {
-      if (!mounted) return;
+      debugPrint('Missing persons Flask error ($baseUrl): $e. Trying Supabase fallback...');
+      try {
+        final supabaseRecords = await SupabaseConfig.client
+            .from('missing_persons')
+            .select()
+            .order('created_at', ascending: false);
+        if (supabaseRecords is List && supabaseRecords.isNotEmpty) {
+          final cases = (supabaseRecords as List<dynamic>)
+              .map((r) => MissingPerson.fromJson(r as Map<String, dynamic>))
+              .toList();
+          if (mounted) {
+            setState(() {
+              _allCases = cases;
+              _isLoading = false;
+              _errorMessage = null;
+            });
+            return;
+          }
+        }
+      } catch (dbErr) {
+        debugPrint('Supabase direct load error: $dbErr');
+      }
 
+      if (!mounted) return;
       setState(() {
         _isLoading = false;
         _errorMessage =
-            'Could not load missing-person cases. '
-            'Check your connection and try again.';
+            'Could not connect to Flask AI at $baseUrl. '
+            'Tap server icon above to check laptop IP.';
       });
-
-      debugPrint('Missing persons API error: $e');
     }
   }
 
@@ -114,6 +126,62 @@ class _MissingPersonsScreenState extends State<MissingPersonsScreen> {
 
   Future<void> _handleRefresh() async {
     await _loadCases();
+  }
+
+  
+  Future<void> _showServerConfigDialog() async {
+    final currentUrl = await MissingPersonsConfig.getBaseUrl();
+    final controller = TextEditingController(text: currentUrl);
+
+    if (!mounted) return;
+    await showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Row(
+          children: [
+            Icon(Icons.wifi, color: UniSafeTheme.midnightBlue),
+            SizedBox(width: 8),
+            Text('Flask AI Server IP', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+          ],
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text(
+              'Enter your laptop Wi-Fi IP address or tunnel URL:',
+              style: TextStyle(fontSize: 13, color: UniSafeTheme.textMuted),
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              controller: controller,
+              decoration: const InputDecoration(
+                labelText: 'Server URL',
+                hintText: 'http://10.188.158.12:5000',
+                border: OutlineInputBorder(),
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton(
+            onPressed: () async {
+              final newUrl = controller.text.trim();
+              if (newUrl.isNotEmpty) {
+                await MissingPersonsConfig.setBaseUrl(newUrl);
+                Navigator.pop(ctx);
+                _handleRefresh();
+              }
+            },
+            child: const Text('Save & Reconnect'),
+          ),
+        ],
+      ),
+    );
   }
 
   void _showInfoDialog() {
@@ -238,6 +306,15 @@ class _MissingPersonsScreenState extends State<MissingPersonsScreen> {
           ],
         ),
         actions: [
+          IconButton(
+            icon: const Icon(
+              Icons.dns_outlined,
+              size: 21,
+              color: UniSafeTheme.textMuted,
+            ),
+            onPressed: _showServerConfigDialog,
+            tooltip: 'Server Connection',
+          ),
           IconButton(
             icon: const Icon(
               Icons.info_outline,
