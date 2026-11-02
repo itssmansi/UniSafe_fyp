@@ -61,8 +61,7 @@ Deno.serve(async (req: Request) => {
     const supabaseUrl = Deno.env.get("SUPABASE_URL");
     const supabaseAnonKey = Deno.env.get("SUPABASE_ANON_KEY");
     const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
-    const fallbackPingramKey =
-      "pingram_sk_eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJqdGkiOiJrZXlfMGM3MjEyMzcxNWU0NWY4ZWM1ZjlkMzY2ZTU2NmM5NjEiLCJ2ZXJzaW9uIjoxLCJhY2NvdW50SWQiOiJxaHk1dzFtYndwcGhiZGFmNXFpd3FsMWdxayIsImtleVR5cGUiOiJzZWNyZXQiLCJlbnZpcm9ubWVudElkIjoicWh5NXcxbWJ3cHBoYmRhZjVxaXdxbDFncWsifQ.fR8DWriVAOp6OkN5Gx3h55hHqw8zwUWit71Hj7PSd1g";
+    const fallbackPingramKey = "pingram_sk_eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJqdGkiOiJrZXlfMzkwMDQ5MTE3MWE3NmViMjQzOWY1ZWQyMGE5ZGNjYTMiLCJ2ZXJzaW9uIjoxLCJhY2NvdW50SWQiOiJoYW5pa2Rwa3ZyZGhkbzZjdjBlZGF0emg5NSIsImtleVR5cGUiOiJzZWNyZXQiLCJlbnZpcm9ubWVudElkIjoiaGFuaWtkcGt2cmRoZG82Y3YwZWRhdHpoOTUifQ._e49BB3K09PvNkxw0uK16zt_vpZRqFqgmbd1sNEymuY";
 
     let pingramApiKey = Deno.env.get("PINGRAM_API_KEY");
     if (!pingramApiKey || pingramApiKey.includes("97uh22t130jm7re9eeh0unxupx")) {
