@@ -4,11 +4,18 @@ import 'package:latlong2/latlong.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 import '../../services/instant_capture_service.dart';
 import '../interactive_map/map_screen.dart';
+import 'instant_camera_screen.dart';
 
 class InstantGalleryScreen extends StatefulWidget {
   final bool isTab;
+  final bool isPicker;
   final ValueChanged<bool>? onSelectionModeChanged;
-  const InstantGalleryScreen({super.key, this.isTab = false, this.onSelectionModeChanged});
+  const InstantGalleryScreen({
+    super.key,
+    this.isTab = false,
+    this.isPicker = false,
+    this.onSelectionModeChanged,
+  });
 
   @override
   State<InstantGalleryScreen> createState() => _InstantGalleryScreenState();
@@ -263,9 +270,9 @@ class _InstantGalleryScreenState extends State<InstantGalleryScreen> {
       title: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Text(
-            'Safety Gallery',
-            style: TextStyle(
+          Text(
+            widget.isPicker ? 'Select Safety Photo' : 'Safety Gallery',
+            style: const TextStyle(
               color: Color(0xFF0F172A),
               fontSize: 20,
               fontWeight: FontWeight.w800,
@@ -275,13 +282,15 @@ class _InstantGalleryScreenState extends State<InstantGalleryScreen> {
           Text(
             _isLoading
                 ? 'Loading photos...'
-                : '${_drafts.length} ${_drafts.length == 1 ? 'photo' : 'photos'} geotagged',
+                : widget.isPicker
+                    ? 'Tap any photo to attach (${_drafts.length} verified)'
+                    : '${_drafts.length} ${_drafts.length == 1 ? 'photo' : 'photos'} geotagged',
             style: TextStyle(color: Colors.grey.shade500, fontSize: 12),
           ),
         ],
       ),
       actions: [
-        if (_drafts.isNotEmpty)
+        if (_drafts.isNotEmpty && !widget.isPicker)
           TextButton(
             onPressed: () {
               if (_drafts.isNotEmpty) {
@@ -332,6 +341,30 @@ class _InstantGalleryScreenState extends State<InstantGalleryScreen> {
               'Photos taken with Instant Click & Go are geotagged with GPS and saved here so you can review or file a report anytime.',
               textAlign: TextAlign.center,
               style: TextStyle(fontSize: 14, color: Colors.grey.shade600, height: 1.45),
+            ),
+            const SizedBox(height: 20),
+            ElevatedButton.icon(
+              onPressed: () async {
+                final result = await Navigator.push<InstantCaptureDraft>(
+                  context,
+                  MaterialPageRoute(builder: (_) => const InstantCameraScreen(isPicker: true)),
+                );
+                if (result != null && mounted) {
+                  if (widget.isPicker) {
+                    Navigator.pop(context, result);
+                  } else {
+                    _loadDrafts();
+                  }
+                }
+              },
+              icon: const Icon(LucideIcons.camera, size: 18),
+              label: const Text('Open In-App Camera', style: TextStyle(fontWeight: FontWeight.w700)),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: const Color(0xFF2563EB),
+                foregroundColor: Colors.white,
+                padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+              ),
             ),
           ],
         ),
@@ -399,6 +432,8 @@ class _InstantGalleryScreenState extends State<InstantGalleryScreen> {
                     onTap: () {
                       if (_isSelectionMode) {
                         _toggleSelect(draft.id);
+                      } else if (widget.isPicker) {
+                        Navigator.pop(context, draft);
                       } else {
                         _openDetailViewer(globalIdx);
                       }

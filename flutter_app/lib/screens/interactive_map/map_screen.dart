@@ -19,6 +19,9 @@ import '../home_page.dart';
 import '../../theme/unisafe_theme.dart';
 import '../../config/supabase_config.dart';
 import '../../services/device_service.dart';
+import '../instant_capture/instant_camera_screen.dart';
+import '../instant_capture/instant_gallery_screen.dart';
+import '../../services/instant_capture_service.dart';
 
 /// Centralized visual identity for each issue category.
 class CategoryStyle {
@@ -1201,41 +1204,26 @@ class _InteractiveMapScreenState extends ConsumerState<InteractiveMapScreen> {
   }
   Future<void> _takeInstantPictureAndReport() async {
     try {
-      final picker = ImagePicker();
-      XFile? photo;
-      try {
-        photo = await picker.pickImage(
-          source: ImageSource.camera,
-          maxWidth: 1920,
-          maxHeight: 1080,
-          imageQuality: 85,
-        );
-      } catch (e) {
-        // Fallback to gallery if direct camera capture fails or is unsupported
-        photo = await picker.pickImage(
-          source: ImageSource.gallery,
-          maxWidth: 1920,
-          maxHeight: 1080,
-          imageQuality: 85,
-        );
-      }
+      final draft = await Navigator.push<InstantCaptureDraft>(
+        context,
+        MaterialPageRoute(builder: (_) => const InstantCameraScreen(isPicker: true)),
+      );
 
-      if (photo == null) return;
+      if (draft == null || !mounted) return;
 
-      final bytes = await photo.readAsBytes();
-      final reportLocation = _myLocation ?? _mapController.camera.center;
+      final reportLocation = _myLocation ?? LatLng(draft.latitude, draft.longitude);
 
       // Animate map camera smoothly to the incident location
       _mapController.move(reportLocation, 16.5);
 
-      if (mounted) {
-        _showReportForm(
-          context,
-          reportLocation,
-          initialImagePath: photo.path,
-          initialImageBytes: bytes,
-        );
-      }
+      _showReportForm(
+        context,
+        reportLocation,
+        initialImagePath: draft.imagePath,
+        initialImageBytes: draft.imageBytes,
+        photoLatitude: draft.latitude,
+        photoLongitude: draft.longitude,
+      );
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -1254,6 +1242,8 @@ class _InteractiveMapScreenState extends ConsumerState<InteractiveMapScreen> {
     IssueCategory? initialCategory,
     String? initialImagePath,
     Uint8List? initialImageBytes,
+    double? photoLatitude,
+    double? photoLongitude,
   }) {
     showModalBottomSheet(
       context: context,
@@ -1276,6 +1266,8 @@ class _InteractiveMapScreenState extends ConsumerState<InteractiveMapScreen> {
             initialCategory: initialCategory ?? _selectedCategory ?? IssueCategory.infrastructure,
             initialImagePath: initialImagePath,
             initialImageBytes: initialImageBytes,
+            initialPhotoLatitude: photoLatitude,
+            initialPhotoLongitude: photoLongitude,
             onSubmit: (report) {
               ref.read(interactiveReportProvider.notifier).addReport(report);
               _loadUserOwnershipCredentials();
@@ -3742,6 +3734,8 @@ class ReportFormWidget extends StatefulWidget {
   final IssueCategory initialCategory;
   final String? initialImagePath;
   final Uint8List? initialImageBytes;
+  final double? initialPhotoLatitude;
+  final double? initialPhotoLongitude;
   final Function(ReportModel) onSubmit;
   final VoidCallback onCancel;
 
@@ -3751,6 +3745,8 @@ class ReportFormWidget extends StatefulWidget {
     this.initialCategory = IssueCategory.infrastructure,
     this.initialImagePath,
     this.initialImageBytes,
+    this.initialPhotoLatitude,
+    this.initialPhotoLongitude,
     required this.onSubmit,
     required this.onCancel,
   });
@@ -3766,6 +3762,8 @@ class _ReportFormWidgetState extends State<ReportFormWidget> {
   String? _selectedSubcategory;
   String? _imagePath;
   Uint8List? _imageBytes;
+  double? _photoLatitude;
+  double? _photoLongitude;
   bool _isProcessingImage = false;
   static const _maxDescLength = 300;
 
@@ -3781,6 +3779,8 @@ class _ReportFormWidgetState extends State<ReportFormWidget> {
     _category = widget.initialCategory;
     _imagePath = widget.initialImagePath;
     _imageBytes = widget.initialImageBytes;
+    _photoLatitude = widget.initialPhotoLatitude;
+    _photoLongitude = widget.initialPhotoLongitude;
     _customTitleController.addListener(() => setState(() {}));
     _descController.addListener(() => setState(() {}));
   }
@@ -3792,33 +3792,55 @@ class _ReportFormWidgetState extends State<ReportFormWidget> {
     super.dispose();
   }
 
-  Future<void> _pickImage(ImageSource source) async {
+  Future<void> _pickFromInAppCamera() async {
     setState(() => _isProcessingImage = true);
     try {
-      final picker = ImagePicker();
-      final photo = await picker.pickImage(
-        source: source,
-        maxWidth: 1920,
-        maxHeight: 1080,
-        imageQuality: 85,
+      final draft = await Navigator.push<InstantCaptureDraft>(
+        context,
+        MaterialPageRoute(builder: (_) => const InstantCameraScreen(isPicker: true)),
       );
-      if (photo != null) {
-        final bytes = await photo.readAsBytes();
+      if (draft != null && mounted) {
         setState(() {
-          _imagePath = photo.path;
-          _imageBytes = bytes;
+          _imagePath = draft.imagePath;
+          _imageBytes = draft.imageBytes;
+          _photoLatitude = draft.latitude;
+          _photoLongitude = draft.longitude;
         });
       }
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error selecting image: $e')),
+          SnackBar(content: Text('Error with in-app camera: $e')),
         );
       }
     } finally {
-      if (mounted) {
-        setState(() => _isProcessingImage = false);
+      if (mounted) setState(() => _isProcessingImage = false);
+    }
+  }
+
+  Future<void> _pickFromInAppGallery() async {
+    setState(() => _isProcessingImage = true);
+    try {
+      final draft = await Navigator.push<InstantCaptureDraft>(
+        context,
+        MaterialPageRoute(builder: (_) => const InstantGalleryScreen(isPicker: true)),
+      );
+      if (draft != null && mounted) {
+        setState(() {
+          _imagePath = draft.imagePath;
+          _imageBytes = draft.imageBytes;
+          _photoLatitude = draft.latitude;
+          _photoLongitude = draft.longitude;
+        });
       }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Error selecting from in-app gallery: $e')),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _isProcessingImage = false);
     }
   }
 
@@ -3842,6 +3864,11 @@ class _ReportFormWidgetState extends State<ReportFormWidget> {
               decoration: BoxDecoration(color: Colors.grey.shade300, borderRadius: BorderRadius.circular(4)),
             ),
             const Text('Add Incident Photo', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+            const SizedBox(height: 4),
+            Text(
+              'Only verified GPS-geotagged photos are accepted',
+              style: TextStyle(fontSize: 12.5, color: Colors.grey.shade600),
+            ),
             const SizedBox(height: 16),
             ListTile(
               leading: Container(
@@ -3849,24 +3876,24 @@ class _ReportFormWidgetState extends State<ReportFormWidget> {
                 decoration: BoxDecoration(color: Colors.blue.shade50, shape: BoxShape.circle),
                 child: const Icon(LucideIcons.camera, color: Color(0xFF2563EB)),
               ),
-              title: const Text('Take Photo', style: TextStyle(fontWeight: FontWeight.w700)),
-              subtitle: const Text('Capture live issue with camera'),
+              title: const Text('In-App Safety Camera', style: TextStyle(fontWeight: FontWeight.w700)),
+              subtitle: const Text('Capture live issue with instant GPS geotag'),
               onTap: () {
                 Navigator.pop(ctx);
-                _pickImage(ImageSource.camera);
+                _pickFromInAppCamera();
               },
             ),
             ListTile(
               leading: Container(
                 padding: const EdgeInsets.all(10),
                 decoration: BoxDecoration(color: Colors.purple.shade50, shape: BoxShape.circle),
-                child: const Icon(LucideIcons.image, color: Colors.purple),
+                child: const Icon(LucideIcons.images, color: Colors.purple),
               ),
-              title: const Text('Choose from Gallery', style: TextStyle(fontWeight: FontWeight.w700)),
-              subtitle: const Text('Select existing photo from files'),
+              title: const Text('In-App Safety Gallery', style: TextStyle(fontWeight: FontWeight.w700)),
+              subtitle: const Text('Choose verified geotagged safety photo'),
               onTap: () {
                 Navigator.pop(ctx);
-                _pickImage(ImageSource.gallery);
+                _pickFromInAppGallery();
               },
             ),
             const SizedBox(height: 10),
@@ -4222,6 +4249,8 @@ class _ReportFormWidgetState extends State<ReportFormWidget> {
                           onTap: () => setState(() {
                             _imageBytes = null;
                             _imagePath = null;
+                            _photoLatitude = null;
+                            _photoLongitude = null;
                           }),
                           child: Container(
                             padding: const EdgeInsets.all(6),
@@ -4274,11 +4303,16 @@ class _ReportFormWidgetState extends State<ReportFormWidget> {
                 child: ElevatedButton(
                   onPressed: _isValid
                       ? () {
+                          final rawDesc = _descController.text.trim();
+                          final finalDesc = _photoLatitude != null
+                              ? '$rawDesc\n[Geo-Verified Photo: Lat ${_photoLatitude!.toStringAsFixed(4)}, Lng ${_photoLongitude!.toStringAsFixed(4)}]'
+                              : rawDesc;
+
                           final report = ReportModel(
                             location: widget.location,
                             category: _category,
                             title: _selectedSubcategory == 'Other' ? _customTitleController.text.trim() : _selectedSubcategory!,
-                            description: _descController.text.trim(),
+                            description: finalDesc,
                             imagePath: _imagePath,
                             imageBytes: _imageBytes,
                           );

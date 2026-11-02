@@ -227,7 +227,7 @@ class _KanbanBoardScreenState extends ConsumerState<KanbanBoardScreen> {
   Future<void> _openVerification(CivicReport report) async {
     final result = await Navigator.of(context).push<bool>(
       MaterialPageRoute(
-        builder: (_) => CitizenVerificationScreen(report: report),
+        builder: (_) => CitizenVerificationScreen(report: report.model),
       ),
     );
 

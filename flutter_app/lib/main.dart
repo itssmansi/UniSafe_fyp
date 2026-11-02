@@ -7,7 +7,6 @@ import 'screens/auth/authority_login_screen.dart';
 import 'screens/heatmap_ui/map_screen.dart';
 import 'screens/home_page.dart';
 import 'screens/interactive_map/map_screen.dart';
-import 'screens/kanban_board_ui/kanban_board_screen.dart';
 import 'screens/women_safety/women_safety_screen.dart';
 import 'screens/SignupLogin_ui/welcome_screen.dart';
 import 'screens/SignupLogin_ui/login_screen.dart';
@@ -74,7 +73,6 @@ class UniSafeApp extends StatelessWidget {
           '/home': (_) => const HomePage(),
           '/interactive-map': (_) => const InteractiveMapScreen(),
           '/heatmap': (_) => const MapScreen(),
-          '/kanban': (_) => const KanbanBoardScreen(),
           '/women-safety': (_) => const WomenSafetyScreen(),
           '/missing-persons': (_) => const MissingPersonsScreen(),
         };

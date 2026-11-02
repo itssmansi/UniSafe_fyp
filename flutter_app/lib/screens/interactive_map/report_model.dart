@@ -33,6 +33,8 @@ class ReportModel {
   final String? assignedOfficerRole;
   final String? assignedOfficerAvatar;
   final int? assignedOfficerSolvedCount;
+  final String? authorityImageUrl;
+  final String? citizenFeedback;
 
   ReportModel({
     String? id,
@@ -57,6 +59,8 @@ class ReportModel {
     this.assignedOfficerRole,
     this.assignedOfficerAvatar,
     this.assignedOfficerSolvedCount,
+    this.authorityImageUrl,
+    this.citizenFeedback,
   }) : id = id ?? const Uuid().v4();
 
   ReportModel copyWith({
@@ -82,6 +86,8 @@ class ReportModel {
     String? assignedOfficerRole,
     String? assignedOfficerAvatar,
     int? assignedOfficerSolvedCount,
+    String? authorityImageUrl,
+    String? citizenFeedback,
   }) {
     return ReportModel(
       id: id ?? this.id,
@@ -106,6 +112,8 @@ class ReportModel {
       assignedOfficerRole: assignedOfficerRole ?? this.assignedOfficerRole,
       assignedOfficerAvatar: assignedOfficerAvatar ?? this.assignedOfficerAvatar,
       assignedOfficerSolvedCount: assignedOfficerSolvedCount ?? this.assignedOfficerSolvedCount,
+      authorityImageUrl: authorityImageUrl ?? this.authorityImageUrl,
+      citizenFeedback: citizenFeedback ?? this.citizenFeedback,
     );
   }
 
@@ -211,6 +219,8 @@ class ReportModel {
       assignedOfficerRole: officerRole,
       assignedOfficerAvatar: officerAvatar,
       assignedOfficerSolvedCount: officerSolvedCount,
+      authorityImageUrl: json['authority_image_url']?.toString(),
+      citizenFeedback: json['citizen_feedback']?.toString(),
     );
   }
 

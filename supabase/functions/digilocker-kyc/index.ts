@@ -18,9 +18,9 @@ function jsonResponse(body: Record<string, unknown>, status = 200) {
 const SANDBOX_BASE =
   Deno.env.get("SANDBOX_BASE") || "https://api.sandbox.co.in";
 const SANDBOX_KEY =
-  Deno.env.get("SANDBOX_KEY") || "key_live_2f653498e8674e74ba759412432638cb";
+  Deno.env.get("SANDBOX_KEY") || "key_live_3073becbf19c4ee78fdf0022dee8cdfe";
 const SANDBOX_SECRET =
-  Deno.env.get("SANDBOX_SECRET") || "secret_live_de1fcbec97174666a861dd6bf511be82";
+  Deno.env.get("SANDBOX_SECRET") || "secret_live_44a8d4f97be04437b87148f9cf421604";
 const API_VERSION = "1.0";
 
 async function getAccessToken(): Promise<string> {

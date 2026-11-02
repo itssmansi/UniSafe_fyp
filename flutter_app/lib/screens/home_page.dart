@@ -12,12 +12,10 @@ import 'interactive_map/map_screen.dart';
 import 'interactive_map/report_model.dart';
 import 'interactive_map/report_provider.dart';
 import 'interactive_map/street_view_modal.dart';
-import 'kanban_board_ui/kanban_board_screen.dart';
 import 'kanban_board_ui/citizen_verification_screen.dart';
 import 'women_safety/women_safety_screen.dart';
 import 'instant_capture/instant_camera_screen.dart';
 import 'instant_capture/instant_gallery_screen.dart';
-import '../services/instant_capture_service.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../config/supabase_config.dart';
@@ -290,6 +288,7 @@ class _HomePageState extends ConsumerState<HomePage> {
   String _formatReportStatus(String status) {
     final s = status.toLowerCase().trim();
     if (s == 'resolved' || s == 'done') return 'Done';
+    if (s.contains('review')) return 'In Review';
     if (s.contains('progress')) return 'In Progress';
     return 'Pending';
   }
@@ -587,190 +586,24 @@ class _HomePageState extends ConsumerState<HomePage> {
 
         const SizedBox(height: 12),
 
-        // Row 2: Kanban Board (Left) & Women Safety (Right)
-        Row(
-          children: [
-            Expanded(
-              child: _buildBentoActionCard(
-                icon: LucideIcons.kanban,
-                accentColor: UniSafeColors.blue,
-                iconBg: const Color(0xFFEAF3FA),
-                iconBorder: const Color(0xFFC8DFEF),
-                badgeText: 'TRIAGE',
-                title: 'Kanban Board',
-                subtitle: 'Civic issue triage & resolution pipeline',
-                actionText: 'Open Board',
-                watermarkIcon: LucideIcons.kanban,
-                onTap: () {
-                  Navigator.of(context).push(
-                    UniSafePageRoute(builder: (context) => const KanbanBoardScreen()),
-                  );
-                },
-              ),
-            ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: _buildBentoActionCard(
-                icon: LucideIcons.shield,
-                accentColor: const Color(0xFFE11D48),
-                iconBg: const Color(0xFFFFF1F2),
-                iconBorder: const Color(0xFFFECDD3),
-                badgeText: 'SOS READY',
-                title: 'Women Safety',
-                subtitle: 'Inactivity guardian & emergency SOS',
-                actionText: 'Open Safety',
-                watermarkIcon: LucideIcons.shield,
-                onTap: () {
-                  Navigator.of(context).push(
-                    UniSafePageRoute(builder: (context) => const WomenSafetyScreen()),
-                  );
-                },
-              ),
-            ),
-          ],
-        ),
-
-        const SizedBox(height: 12),
-
-        // 5th Action Card: Citizen Resolution Verification (Test UI)
-        _buildVerificationTestCard(),
-      ],
-    );
-  }
-
-  /// Citizen Resolution Verification (UI Test Launcher)
-  Widget _buildVerificationTestCard() {
-    return Container(
-      width: double.infinity,
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: const Color(0xFFE2E8F0)),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: 0.03),
-            blurRadius: 10,
-            offset: const Offset(0, 3),
-          ),
-        ],
-      ),
-      child: Material(
-        color: Colors.transparent,
-        child: InkWell(
-          borderRadius: BorderRadius.circular(16),
+        // Row 2: Women Safety (Full Width)
+        _buildBentoActionCard(
+          icon: LucideIcons.shield,
+          accentColor: const Color(0xFFE11D48),
+          iconBg: const Color(0xFFFFF1F2),
+          iconBorder: const Color(0xFFFECDD3),
+          badgeText: 'SOS READY',
+          title: 'Women Safety',
+          subtitle: 'Inactivity guardian & emergency SOS',
+          actionText: 'Open Safety',
+          watermarkIcon: LucideIcons.shield,
           onTap: () {
-            final sampleReport = CivicReport(
-              id: 'rep-mumbai-4821',
-              title: 'Water logging & Pothole Repair',
-              category: 'Infrastructure',
-              categoryColor: const Color(0xFFE11D48),
-              categoryIcon: LucideIcons.hammer,
-              location: 'S.V. Road, Near Andheri Station (West), Mumbai',
-              date: 'Today, 2:30 PM',
-              department: 'BMC Ward K-West (Roads & Traffic)',
-              description:
-                  'Severe water logging cleared and road surface patched following heavy monsoon rainfall.',
-              status: KanbanStatus.inReview,
-              model: ReportModel(
-                id: 'rep-mumbai-4821',
-                location: const LatLng(19.1197, 72.8464),
-                category: IssueCategory.infrastructure,
-                title: 'Water logging & Pothole Repair',
-                description:
-                    'Severe water logging cleared and road surface patched following heavy monsoon rainfall.',
-                address: 'S.V. Road, Near Andheri Station (West), Mumbai',
-                status: 'in_review',
-                imagePath:
-                    'https://images.unsplash.com/photo-1545459720-aac8509eb02c?auto=format&fit=crop&w=1200&q=80',
-              ),
-            );
-
             Navigator.of(context).push(
-              MaterialPageRoute(
-                builder: (_) => CitizenVerificationScreen(report: sampleReport),
-              ),
+              UniSafePageRoute(builder: (context) => const WomenSafetyScreen()),
             );
           },
-          child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-            child: Row(
-              children: [
-                Container(
-                  width: 42,
-                  height: 42,
-                  decoration: BoxDecoration(
-                    color: const Color(0xFF10B981).withValues(alpha: 0.12),
-                    borderRadius: BorderRadius.circular(12),
-                    border: Border.all(
-                      color: const Color(0xFF10B981).withValues(alpha: 0.25),
-                    ),
-                  ),
-                  child: const Icon(
-                    LucideIcons.badgeCheck,
-                    color: Color(0xFF10B981),
-                    size: 22,
-                  ),
-                ),
-                const SizedBox(width: 14),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Row(
-                        children: [
-                          const Text(
-                            'Citizen Verification',
-                            style: TextStyle(
-                              fontSize: 14,
-                              fontWeight: FontWeight.w800,
-                              color: Color(0xFF0F172A),
-                              letterSpacing: -0.2,
-                            ),
-                          ),
-                          const SizedBox(width: 8),
-                          Container(
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 6,
-                              vertical: 2,
-                            ),
-                            decoration: BoxDecoration(
-                              color: const Color(0xFF10B981).withValues(alpha: 0.12),
-                              borderRadius: BorderRadius.circular(6),
-                            ),
-                            child: const Text(
-                              'TEST UI',
-                              style: TextStyle(
-                                fontSize: 9.5,
-                                fontWeight: FontWeight.w800,
-                                color: Color(0xFF10B981),
-                              ),
-                            ),
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 2),
-                      const Text(
-                        'Inspect authority proof & verify completed work',
-                        style: TextStyle(
-                          fontSize: 11.5,
-                          color: Color(0xFF64748B),
-                        ),
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                    ],
-                  ),
-                ),
-                const Icon(
-                  LucideIcons.chevronRight,
-                  size: 18,
-                  color: Color(0xFF94A3B8),
-                ),
-              ],
-            ),
-          ),
         ),
-      ),
+      ],
     );
   }
 
@@ -1712,6 +1545,7 @@ class _HomePageState extends ConsumerState<HomePage> {
         'assignedOfficerRole': r.assignedOfficerRole,
         'assignedOfficerAvatar': r.assignedOfficerAvatar,
         'assignedOfficerSolvedCount': r.assignedOfficerSolvedCount,
+        'reportModel': r,
       });
     }
 
@@ -1769,20 +1603,26 @@ class _HomePageState extends ConsumerState<HomePage> {
         bottom: PreferredSize(
           preferredSize: const Size.fromHeight(48),
           child: Container(
-            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
             decoration: const BoxDecoration(
               border: Border(bottom: BorderSide(color: Color(0xFFF4F4F5), width: 1)),
             ),
-            child: Row(
-              children: [
-                _buildInboxFilterChip('All', countFor('All')),
-                const SizedBox(width: 8),
-                _buildInboxFilterChip('Unread', countFor('Unread')),
-                const SizedBox(width: 8),
-                _buildInboxFilterChip('In Progress', countFor('In Progress')),
-                const SizedBox(width: 8),
-                _buildInboxFilterChip('Done', countFor('Done')),
-              ],
+            child: SingleChildScrollView(
+              scrollDirection: Axis.horizontal,
+              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
+              physics: const BouncingScrollPhysics(),
+              child: Row(
+                children: [
+                  _buildInboxFilterChip('All', countFor('All')),
+                  const SizedBox(width: 8),
+                  _buildInboxFilterChip('Unread', countFor('Unread')),
+                  const SizedBox(width: 8),
+                  _buildInboxFilterChip('In Progress', countFor('In Progress')),
+                  const SizedBox(width: 8),
+                  _buildInboxFilterChip('In Review', countFor('In Review')),
+                  const SizedBox(width: 8),
+                  _buildInboxFilterChip('Done', countFor('Done')),
+                ],
+              ),
             ),
           ),
         ),
@@ -2030,6 +1870,8 @@ class _HomePageState extends ConsumerState<HomePage> {
     Color accent;
     if (status.contains('Done')) {
       accent = const Color(0xFF10B981);
+    } else if (status.contains('Review')) {
+      accent = const Color(0xFF2563EB);
     } else if (status.contains('In Progress')) {
       accent = const Color(0xFFF59E0B);
     } else {
@@ -2597,6 +2439,77 @@ class _HomePageState extends ConsumerState<HomePage> {
                             ),
                           ],
                         ],
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+              // Authority Completed Work / Citizen Verification Banner & Button (In Review only)
+              if ((item['status'] as String).toLowerCase().contains('review') ||
+                  (item['rawStatus'] as String? ?? '').toLowerCase().contains('review')) ...[
+                const SizedBox(height: 16),
+                Container(
+                  width: double.infinity,
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFF0FDF4),
+                    borderRadius: BorderRadius.circular(16),
+                    border: Border.all(color: const Color(0xFFBBF7D0)),
+                  ),
+                  padding: const EdgeInsets.all(16),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Row(
+                        children: [
+                          Icon(LucideIcons.badgeCheck, size: 20, color: Color(0xFF15803D)),
+                          SizedBox(width: 8),
+                          Text(
+                            'Authority Completed Work',
+                            style: TextStyle(
+                              fontSize: 14.5,
+                              fontWeight: FontWeight.w800,
+                              color: Color(0xFF15803D),
+                              letterSpacing: -0.2,
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 6),
+                      const Text(
+                        'The assigned authority marked this issue as resolved and submitted photo proof. Please inspect and verify the repair.',
+                        style: TextStyle(fontSize: 12.5, color: Color(0xFF166534), height: 1.4),
+                      ),
+                      const SizedBox(height: 14),
+                      SizedBox(
+                        width: double.infinity,
+                        height: 46,
+                        child: ElevatedButton.icon(
+                          onPressed: () async {
+                            Navigator.pop(sheetContext);
+                            final repModel = item['reportModel'] as ReportModel?;
+                            if (repModel != null) {
+                              final result = await parentNavigator.push<bool>(
+                                MaterialPageRoute(
+                                  builder: (_) => CitizenVerificationScreen(report: repModel),
+                                ),
+                              );
+                              if (result != null) {
+                                ref.invalidate(interactiveReportProvider);
+                              }
+                            }
+                          },
+                          icon: const Icon(LucideIcons.shieldCheck, size: 18),
+                          label: const Text(
+                            'Verify Resolution On-Site',
+                            style: TextStyle(fontSize: 14, fontWeight: FontWeight.w700),
+                          ),
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: const Color(0xFF10B981),
+                            foregroundColor: Colors.white,
+                            elevation: 0,
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                          ),
+                        ),
                       ),
                     ],
                   ),

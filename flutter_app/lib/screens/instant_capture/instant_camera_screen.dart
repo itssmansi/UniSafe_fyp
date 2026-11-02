@@ -9,7 +9,8 @@ import '../../services/instant_capture_service.dart';
 import 'instant_gallery_screen.dart';
 
 class InstantCameraScreen extends StatefulWidget {
-  const InstantCameraScreen({super.key});
+  final bool isPicker;
+  const InstantCameraScreen({super.key, this.isPicker = false});
 
   @override
   State<InstantCameraScreen> createState() => _InstantCameraScreenState();
@@ -42,6 +43,7 @@ class _InstantCameraScreenState extends State<InstantCameraScreen> with WidgetsB
   // Drafts gallery preview
   int _draftCount = 0;
   Uint8List? _latestDraftBytes;
+  InstantCaptureDraft? _previewDraft;
 
   // Visual capture flash animation & saved toast
   bool _showShutterFlash = false;
@@ -310,6 +312,14 @@ class _InstantCameraScreenState extends State<InstantCameraScreen> with WidgetsB
       await InstantCaptureService.instance.saveDraft(newDraft);
 
       if (mounted) {
+        if (widget.isPicker) {
+          setState(() {
+            _isCapturing = false;
+            _previewDraft = newDraft;
+          });
+          return;
+        }
+
         setState(() {
           _isCapturing = false;
           _draftCount++;
@@ -328,8 +338,21 @@ class _InstantCameraScreenState extends State<InstantCameraScreen> with WidgetsB
     }
   }
 
-  void _openGallery() {
+  void _openGallery() async {
     HapticFeedback.lightImpact();
+    if (widget.isPicker) {
+      final selected = await Navigator.push<InstantCaptureDraft>(
+        context,
+        MaterialPageRoute(builder: (_) => const InstantGalleryScreen(isPicker: true)),
+      );
+      if (selected != null && mounted) {
+        Navigator.pop(context, selected);
+      } else {
+        _loadDraftInfo();
+      }
+      return;
+    }
+
     Navigator.push(
       context,
       MaterialPageRoute(builder: (_) => const InstantGalleryScreen()),
@@ -338,6 +361,10 @@ class _InstantCameraScreenState extends State<InstantCameraScreen> with WidgetsB
 
   @override
   Widget build(BuildContext context) {
+    if (_previewDraft != null) {
+      return _buildPickerPreview();
+    }
+
     return Scaffold(
       backgroundColor: Colors.black,
       body: GestureDetector(
@@ -730,6 +757,133 @@ class _InstantCameraScreenState extends State<InstantCameraScreen> with WidgetsB
             ),
           ],
         ),
+      ),
+    );
+  }
+
+
+  Widget _buildPickerPreview() {
+    final draft = _previewDraft!;
+    return Scaffold(
+      backgroundColor: Colors.black,
+      body: Stack(
+        fit: StackFit.expand,
+        children: [
+          if (draft.imageBytes != null)
+            Image.memory(
+              draft.imageBytes!,
+              fit: BoxFit.cover,
+              width: double.infinity,
+              height: double.infinity,
+            )
+          else
+            const Center(
+              child: Icon(LucideIcons.image, size: 60, color: Colors.white54),
+            ),
+          Container(
+            decoration: const BoxDecoration(
+              gradient: LinearGradient(
+                begin: Alignment.topCenter,
+                end: Alignment.bottomCenter,
+                colors: [
+                  Color(0x99000000),
+                  Colors.transparent,
+                  Colors.transparent,
+                  Color(0xCC000000),
+                ],
+                stops: [0.0, 0.25, 0.7, 1.0],
+              ),
+            ),
+          ),
+          SafeArea(
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 12),
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      GestureDetector(
+                        onTap: () => setState(() => _previewDraft = null),
+                        child: Container(
+                          width: 42,
+                          height: 42,
+                          decoration: BoxDecoration(
+                            color: Colors.black.withValues(alpha: 0.45),
+                            shape: BoxShape.circle,
+                            border: Border.all(color: Colors.white.withValues(alpha: 0.2)),
+                          ),
+                          child: const Icon(LucideIcons.x, color: Colors.white, size: 20),
+                        ),
+                      ),
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFF0F172A).withValues(alpha: 0.85),
+                          borderRadius: BorderRadius.circular(20),
+                          border: Border.all(color: const Color(0xFF10B981).withValues(alpha: 0.5)),
+                        ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            const Icon(LucideIcons.mapPin, size: 14, color: Color(0xFF10B981)),
+                            const SizedBox(width: 6),
+                            Text(
+                              'GPS Verified (${draft.latitude.toStringAsFixed(4)}, ${draft.longitude.toStringAsFixed(4)})',
+                              style: const TextStyle(
+                                color: Colors.white,
+                                fontSize: 12,
+                                fontWeight: FontWeight.w700,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(width: 42),
+                    ],
+                  ),
+                  Padding(
+                    padding: const EdgeInsets.only(bottom: 24),
+                    child: Row(
+                      children: [
+                        Expanded(
+                          child: OutlinedButton.icon(
+                            onPressed: () => setState(() => _previewDraft = null),
+                            icon: const Icon(LucideIcons.refreshCw, size: 16),
+                            label: const Text('Retake', style: TextStyle(fontSize: 15, fontWeight: FontWeight.w700)),
+                            style: OutlinedButton.styleFrom(
+                              foregroundColor: Colors.white,
+                              side: const BorderSide(color: Colors.white70, width: 1.5),
+                              padding: const EdgeInsets.symmetric(vertical: 16),
+                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                              backgroundColor: Colors.black45,
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 14),
+                        Expanded(
+                          child: ElevatedButton.icon(
+                            onPressed: () => Navigator.pop(context, _previewDraft),
+                            icon: const Icon(LucideIcons.check, size: 18),
+                            label: const Text('Use Photo', style: TextStyle(fontSize: 15, fontWeight: FontWeight.w700)),
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: const Color(0xFF2563EB),
+                              foregroundColor: Colors.white,
+                              padding: const EdgeInsets.symmetric(vertical: 16),
+                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                              elevation: 4,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ],
       ),
     );
   }

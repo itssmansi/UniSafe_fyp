@@ -1,16 +1,21 @@
 import 'dart:typed_data';
 import 'dart:ui';
 import 'package:flutter/material.dart';
-import 'package:image_picker/image_picker.dart';
+import 'package:geolocator/geolocator.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
-import 'kanban_board_screen.dart';
+import '../instant_capture/instant_camera_screen.dart';
+import '../instant_capture/instant_gallery_screen.dart';
+import '../../services/instant_capture_service.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
+import '../../config/supabase_config.dart';
+import '../interactive_map/report_model.dart';
 
 /// Citizen Resolution Verification Screen
 ///
 /// World-class civic audit interface matching Apple & Linear craft standards.
-/// Pure client-side UI simulation (Zero backend modifications per AGENTS.md).
+/// Verified ground-truth resolution handshake with Supabase.
 class CitizenVerificationScreen extends StatefulWidget {
-  final CivicReport report;
+  final ReportModel report;
 
   const CitizenVerificationScreen({
     super.key,
@@ -23,7 +28,33 @@ class CitizenVerificationScreen extends StatefulWidget {
 }
 
 class _CitizenVerificationScreenState extends State<CitizenVerificationScreen> {
-  final ImagePicker _picker = ImagePicker();
+  bool _isSubmitting = false;
+
+  IconData _getCategoryIcon(IssueCategory category) {
+    switch (category) {
+      case IssueCategory.infrastructure:
+        return LucideIcons.hammer;
+      case IssueCategory.sanitation:
+        return LucideIcons.trash2;
+      case IssueCategory.safety:
+        return LucideIcons.shieldAlert;
+      case IssueCategory.greenery:
+        return LucideIcons.trees;
+    }
+  }
+
+  Color _getCategoryColor(IssueCategory category) {
+    switch (category) {
+      case IssueCategory.infrastructure:
+        return const Color(0xFF2563EB);
+      case IssueCategory.sanitation:
+        return const Color(0xFFD97706);
+      case IssueCategory.safety:
+        return const Color(0xFFDC2626);
+      case IssueCategory.greenery:
+        return const Color(0xFF059669);
+    }
+  }
 
   // Active view: 0 = After (Fixed), 1 = Before (Reported)
   int _activeViewIndex = 0;
@@ -39,7 +70,9 @@ class _CitizenVerificationScreenState extends State<CitizenVerificationScreen> {
   // Citizen on-site proof state
   Uint8List? _citizenPhotoBytes;
   String? _citizenPhotoUrl;
-  bool _isUsingDemoSnapshot = false;
+  double? _photoLatitude;
+  double? _photoLongitude;
+  double? _verificationDistanceMeters;
 
   // Dispute feedback controllers
   final TextEditingController _feedbackController = TextEditingController();
@@ -62,27 +95,43 @@ class _CitizenVerificationScreenState extends State<CitizenVerificationScreen> {
 
   // --- Photo Actions ---
 
-  Future<void> _pickPhoto(ImageSource source) async {
+  Future<void> _pickPhotoFromInAppCamera() async {
     try {
-      final XFile? file = await _picker.pickImage(
-        source: source,
-        maxWidth: 1600,
-        maxHeight: 1600,
-        imageQuality: 85,
+      final draft = await Navigator.push<InstantCaptureDraft>(
+        context,
+        MaterialPageRoute(builder: (_) => const InstantCameraScreen(isPicker: true)),
       );
-      if (file != null) {
-        final bytes = await file.readAsBytes();
+      if (draft != null && mounted) {
+        final dist = Geolocator.distanceBetween(
+          widget.report.location.latitude,
+          widget.report.location.longitude,
+          draft.latitude,
+          draft.longitude,
+        );
         setState(() {
-          _citizenPhotoBytes = bytes;
+          _citizenPhotoBytes = draft.imageBytes;
           _citizenPhotoUrl = null;
-          _isUsingDemoSnapshot = false;
+          _photoLatitude = draft.latitude;
+          _photoLongitude = draft.longitude;
+          _verificationDistanceMeters = dist;
         });
+
+        if (dist > 200) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('Warning: Photo taken ${dist.toStringAsFixed(0)}m from report location. Must be within 200m to verify.'),
+              backgroundColor: const Color(0xFFDC2626),
+              behavior: SnackBarBehavior.floating,
+              duration: const Duration(seconds: 4),
+            ),
+          );
+        }
       }
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('Camera/Gallery selection unavailable: $e'),
+            content: Text('In-app camera unavailable: $e'),
             backgroundColor: const Color(0xFFDC2626),
             behavior: SnackBarBehavior.floating,
           ),
@@ -91,46 +140,192 @@ class _CitizenVerificationScreenState extends State<CitizenVerificationScreen> {
     }
   }
 
-  void _useDemoSnapshot() {
-    setState(() {
-      _isUsingDemoSnapshot = true;
-      _citizenPhotoBytes = null;
-      _citizenPhotoUrl = _demoCitizenPhotoUrl;
-    });
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: const Row(
-          children: [
-            Icon(LucideIcons.sparkles, color: Colors.white, size: 16),
-            SizedBox(width: 8),
-            Text('Demo on-site verification photo attached.'),
-          ],
-        ),
-        backgroundColor: const Color(0xFF0D9488),
-        behavior: SnackBarBehavior.floating,
-        duration: const Duration(seconds: 2),
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-      ),
-    );
+  Future<void> _pickPhotoFromInAppGallery() async {
+    try {
+      final draft = await Navigator.push<InstantCaptureDraft>(
+        context,
+        MaterialPageRoute(builder: (_) => const InstantGalleryScreen(isPicker: true)),
+      );
+      if (draft != null && mounted) {
+        final dist = Geolocator.distanceBetween(
+          widget.report.location.latitude,
+          widget.report.location.longitude,
+          draft.latitude,
+          draft.longitude,
+        );
+        setState(() {
+          _citizenPhotoBytes = draft.imageBytes;
+          _citizenPhotoUrl = null;
+          _photoLatitude = draft.latitude;
+          _photoLongitude = draft.longitude;
+          _verificationDistanceMeters = dist;
+        });
+
+        if (dist > 200) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('Warning: Selected photo is ${dist.toStringAsFixed(0)}m from report location. Must be within 200m to verify.'),
+              backgroundColor: const Color(0xFFDC2626),
+              behavior: SnackBarBehavior.floating,
+              duration: const Duration(seconds: 4),
+            ),
+          );
+        }
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('In-app gallery unavailable: $e'),
+            backgroundColor: const Color(0xFFDC2626),
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+      }
+    }
   }
 
   // --- Resolution Actions ---
 
-  void _onConfirmVerification() {
-    final hasProof = _citizenPhotoBytes != null ||
-        _citizenPhotoUrl != null ||
-        _isUsingDemoSnapshot;
+  Future<String?> _resolveCitizenId() async {
+    final authUser = SupabaseConfig.client.auth.currentUser;
+    if (authUser != null) {
+      try {
+        var query = SupabaseConfig.client.from('citizens').select('id');
+        if (authUser.email != null && authUser.email!.isNotEmpty) {
+          query = query.or('auth_user_id.eq.${authUser.id},email.eq.${authUser.email}');
+        } else if (authUser.phone != null && authUser.phone!.isNotEmpty) {
+          query = query.or('auth_user_id.eq.${authUser.id},phone.eq.${authUser.phone}');
+        } else {
+          query = query.eq('auth_user_id', authUser.id);
+        }
+        final citizenRecord = await query.maybeSingle();
+        if (citizenRecord != null && citizenRecord['id'] != null) {
+          return citizenRecord['id'].toString();
+        }
+      } catch (e) {
+        debugPrint('[CitizenVerificationScreen] Error resolving citizen profile by auth: $e');
+      }
+    }
+
+    // Fallback: check if widget.report.citizenId exists in public.citizens
+    if (widget.report.citizenId != null && widget.report.citizenId!.trim().isNotEmpty) {
+      try {
+        final existing = await SupabaseConfig.client
+            .from('citizens')
+            .select('id')
+            .eq('id', widget.report.citizenId!.trim())
+            .maybeSingle();
+        if (existing != null && existing['id'] != null) {
+          return existing['id'].toString();
+        }
+      } catch (_) {}
+    }
+
+    return null;
+  }
+
+  Future<String?> _uploadCitizenProof(String complaintId) async {
+    if (_citizenPhotoBytes == null) {
+      if (_citizenPhotoUrl != null) return _citizenPhotoUrl;
+      return null;
+    }
+    try {
+      final fileName = 'citizen_verifications/${complaintId}_${DateTime.now().millisecondsSinceEpoch}.jpg';
+      await SupabaseConfig.client.storage
+          .from('complaint_images')
+          .uploadBinary(
+            fileName,
+            _citizenPhotoBytes!,
+            fileOptions: const FileOptions(contentType: 'image/jpeg', upsert: true),
+          );
+      final publicUrl = SupabaseConfig.client.storage
+          .from('complaint_images')
+          .getPublicUrl(fileName);
+      return publicUrl;
+    } catch (e) {
+      debugPrint('Error uploading citizen proof: $e');
+      return null;
+    }
+  }
+
+  Future<void> _onConfirmVerification() async {
+    final hasProof = _citizenPhotoBytes != null || _citizenPhotoUrl != null;
     if (!hasProof) {
       _showProofRequiredSheet();
       return;
     }
 
-    showModalBottomSheet(
-      context: context,
-      isScrollControlled: true,
-      backgroundColor: Colors.transparent,
-      builder: (ctx) => _buildSuccessBottomSheet(ctx),
-    );
+    if (_verificationDistanceMeters != null && _verificationDistanceMeters! > 200) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Cannot verify: You are ${_verificationDistanceMeters!.toStringAsFixed(0)}m away. On-site verification must be within 200m of the issue location.'),
+          backgroundColor: const Color(0xFFDC2626),
+          behavior: SnackBarBehavior.floating,
+          duration: const Duration(seconds: 4),
+        ),
+      );
+      return;
+    }
+
+    setState(() => _isSubmitting = true);
+
+    try {
+      final citizenId = await _resolveCitizenId();
+      final uploadedUrl = await _uploadCitizenProof(widget.report.id);
+
+      // 1. Upsert into complaint_verifications (Triggers auto-update of complaint status)
+      final verificationPayload = <String, dynamic>{
+        'complaint_id': widget.report.id,
+        'image_url': uploadedUrl,
+        'is_verified': true,
+      };
+      if (citizenId != null) {
+        verificationPayload['citizen_id'] = citizenId;
+        await SupabaseConfig.client
+            .from('complaint_verifications')
+            .upsert(verificationPayload, onConflict: 'complaint_id,citizen_id');
+      } else {
+        await SupabaseConfig.client
+            .from('complaint_verifications')
+            .insert(verificationPayload);
+      }
+
+      // 2. Update complaints status to resolved (backed by DB trigger)
+      try {
+        await SupabaseConfig.client.from('complaints').update({
+          'status': 'resolved',
+        }).eq('id', widget.report.id);
+      } catch (_) {}
+
+      // 3. Log to complaint_logs
+      try {
+        await SupabaseConfig.client.from('complaint_logs').insert({
+          'complaint_id': widget.report.id,
+          'action': 'citizen_verified',
+          'message': 'Citizen verified the resolution and marked complaint as Done.',
+        });
+      } catch (_) {}
+
+      if (!mounted) return;
+      setState(() => _isSubmitting = false);
+
+      showModalBottomSheet(
+        context: context,
+        isScrollControlled: true,
+        backgroundColor: Colors.transparent,
+        builder: (ctx) => _buildSuccessBottomSheet(ctx),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      setState(() => _isSubmitting = false);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Failed to record verification: $e'),
+          backgroundColor: const Color(0xFFDC2626),
+        ),
+      );
+    }
   }
 
   void _openDisputeSheet() {
@@ -183,7 +378,7 @@ class _CitizenVerificationScreenState extends State<CitizenVerificationScreen> {
             ),
             const SizedBox(height: 8),
             const Text(
-              'To ensure civic accountability, please attach a real-time photo of the repair site or use the demo snapshot before final sign-off.',
+              'To ensure civic accountability, please capture or choose a GPS-verified photo within 200m of the site using the In-App Camera or Safety Gallery.',
               textAlign: TextAlign.center,
               style: TextStyle(fontSize: 13, color: Color(0xFF64748B), height: 1.4),
             ),
@@ -194,10 +389,10 @@ class _CitizenVerificationScreenState extends State<CitizenVerificationScreen> {
                   child: OutlinedButton.icon(
                     onPressed: () {
                       Navigator.pop(ctx);
-                      _pickPhoto(ImageSource.camera);
+                      _pickPhotoFromInAppCamera();
                     },
                     icon: const Icon(LucideIcons.camera, size: 16),
-                    label: const Text('Open Camera'),
+                    label: const Text('In-App Camera'),
                     style: OutlinedButton.styleFrom(
                       foregroundColor: const Color(0xFF0F172A),
                       padding: const EdgeInsets.symmetric(vertical: 13),
@@ -211,12 +406,12 @@ class _CitizenVerificationScreenState extends State<CitizenVerificationScreen> {
                   child: ElevatedButton.icon(
                     onPressed: () {
                       Navigator.pop(ctx);
-                      _useDemoSnapshot();
+                      _pickPhotoFromInAppGallery();
                     },
-                    icon: const Icon(LucideIcons.sparkles, size: 16),
-                    label: const Text('Demo Photo'),
+                    icon: const Icon(LucideIcons.images, size: 16),
+                    label: const Text('Safety Gallery'),
                     style: ElevatedButton.styleFrom(
-                      backgroundColor: const Color(0xFF0D9488),
+                      backgroundColor: const Color(0xFF2563EB),
                       foregroundColor: Colors.white,
                       padding: const EdgeInsets.symmetric(vertical: 13),
                       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
@@ -428,7 +623,29 @@ class _CitizenVerificationScreenState extends State<CitizenVerificationScreen> {
 
   // --- 1. Ticket Overview Card ---
 
-  Widget _buildHeaderCard(CivicReport rep) {
+  Widget _buildHeaderCard(ReportModel rep) {
+
+    final catColor = _getCategoryColor(rep.category);
+
+    final catIcon = _getCategoryIcon(rep.category);
+
+    final dateStr = rep.createdAt != null
+
+        ? '${rep.createdAt!.day}/${rep.createdAt!.month}/${rep.createdAt!.year}'
+
+        : 'Recent';
+
+    final locStr = (rep.address != null && rep.address!.trim().isNotEmpty)
+
+        ? rep.address!
+
+        : '${rep.location.latitude.toStringAsFixed(3)}, ${rep.location.longitude.toStringAsFixed(3)}';
+
+    final deptStr = (rep.assignedOfficerDepartment != null && rep.assignedOfficerDepartment!.trim().isNotEmpty)
+
+        ? rep.assignedOfficerDepartment!
+
+        : 'Municipal Authority';
     return Container(
       decoration: BoxDecoration(
         color: Colors.white,
@@ -452,20 +669,20 @@ class _CitizenVerificationScreenState extends State<CitizenVerificationScreen> {
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 4),
                 decoration: BoxDecoration(
-                  color: rep.categoryColor.withValues(alpha: 0.1),
+                  color: catColor.withValues(alpha: 0.1),
                   borderRadius: BorderRadius.circular(8),
                 ),
                 child: Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    Icon(rep.categoryIcon, size: 12, color: rep.categoryColor),
+                    Icon(catIcon, size: 12, color: catColor),
                     const SizedBox(width: 5),
                     Text(
-                      rep.category,
+                      rep.category.name.toUpperCase(),
                       style: TextStyle(
                         fontSize: 11,
                         fontWeight: FontWeight.w700,
-                        color: rep.categoryColor,
+                        color: catColor,
                         letterSpacing: 0.1,
                       ),
                     ),
@@ -493,7 +710,7 @@ class _CitizenVerificationScreenState extends State<CitizenVerificationScreen> {
               const Icon(LucideIcons.calendar, size: 12, color: Color(0xFF94A3B8)),
               const SizedBox(width: 4),
               Text(
-                rep.date,
+                dateStr,
                 style: const TextStyle(
                   fontSize: 11,
                   fontWeight: FontWeight.w500,
@@ -533,7 +750,7 @@ class _CitizenVerificationScreenState extends State<CitizenVerificationScreen> {
                 const SizedBox(width: 8),
                 Expanded(
                   child: Text(
-                    rep.location,
+                    locStr,
                     style: const TextStyle(
                       fontSize: 12,
                       fontWeight: FontWeight.w600,
@@ -563,7 +780,7 @@ class _CitizenVerificationScreenState extends State<CitizenVerificationScreen> {
                 const SizedBox(width: 8),
                 Expanded(
                   child: Text(
-                    'Assigned to ${rep.department}',
+                    'Assigned to $deptStr',
                     style: const TextStyle(
                       fontSize: 12,
                       fontWeight: FontWeight.w600,
@@ -598,14 +815,19 @@ class _CitizenVerificationScreenState extends State<CitizenVerificationScreen> {
 
   // --- 2. Clean, Spacious Before & After Visual Inspection ---
 
-  Widget _buildInspectionSwitcherSection(CivicReport rep) {
-    final String currentImageUrl = _activeViewIndex == 0
-        ? ((rep.model.imagePath != null && rep.model.imagePath!.isNotEmpty)
-            ? rep.model.imagePath!
-            : _defaultAfterPhotoUrl)
-        : _defaultBeforePhotoUrl;
+  Widget _buildInspectionSwitcherSection(ReportModel rep) {
+    final String? authorityImg = rep.authorityImageUrl;
+    final String? citizenImg = rep.imagePath;
 
-    final Uint8List? memoryBytes = _activeViewIndex == 0 ? rep.model.imageBytes : null;
+    final String currentImageUrl = _activeViewIndex == 0
+        ? (authorityImg != null && authorityImg.isNotEmpty
+            ? authorityImg
+            : _defaultAfterPhotoUrl)
+        : (citizenImg != null && citizenImg.isNotEmpty
+            ? citizenImg
+            : _defaultBeforePhotoUrl);
+
+    final Uint8List? memoryBytes = _activeViewIndex == 1 ? rep.imageBytes : null;
 
     return Container(
       decoration: BoxDecoration(
@@ -813,7 +1035,7 @@ class _CitizenVerificationScreenState extends State<CitizenVerificationScreen> {
                             ),
                           );
                         },
-                        errorBuilder: (_, __, ___) => Center(
+                        errorBuilder: (_, _, _) => Center(
                           child: Column(
                             mainAxisAlignment: MainAxisAlignment.center,
                             children: const [
@@ -854,9 +1076,7 @@ class _CitizenVerificationScreenState extends State<CitizenVerificationScreen> {
   // --- 3. Citizen Ground-Truth Proof Section (Responsive & No-Overflow) ---
 
   Widget _buildCitizenProofSection() {
-    final hasProof = _citizenPhotoBytes != null ||
-        _citizenPhotoUrl != null ||
-        _isUsingDemoSnapshot;
+    final hasProof = _citizenPhotoBytes != null || _citizenPhotoUrl != null;
 
     return Container(
       decoration: BoxDecoration(
@@ -965,7 +1185,7 @@ class _CitizenVerificationScreenState extends State<CitizenVerificationScreen> {
             // Attached Photo View (Pure Clean Image with Full Screen & Delete)
             GestureDetector(
               onTap: () => _openFullScreenPhoto(
-                _citizenPhotoUrl ?? _demoCitizenPhotoUrl,
+                _citizenPhotoUrl ?? '',
                 memoryBytes: _citizenPhotoBytes,
                 title: 'Your On-Site Verification Photo',
               ),
@@ -982,23 +1202,25 @@ class _CitizenVerificationScreenState extends State<CitizenVerificationScreen> {
                               _citizenPhotoBytes!,
                               fit: BoxFit.cover,
                             )
-                          : Image.network(
-                              _citizenPhotoUrl ?? _demoCitizenPhotoUrl,
-                              fit: BoxFit.cover,
-                              loadingBuilder: (_, child, progress) {
-                                if (progress == null) return child;
-                                return const Center(
-                                  child: SizedBox(
-                                    width: 24,
-                                    height: 24,
-                                    child: CircularProgressIndicator(
-                                      strokeWidth: 2,
-                                      color: Color(0xFF0D9488),
-                                    ),
-                                  ),
-                                );
-                              },
-                            ),
+                          : (_citizenPhotoUrl != null
+                              ? Image.network(
+                                  _citizenPhotoUrl!,
+                                  fit: BoxFit.cover,
+                                  loadingBuilder: (_, child, progress) {
+                                    if (progress == null) return child;
+                                    return const Center(
+                                      child: SizedBox(
+                                        width: 24,
+                                        height: 24,
+                                        child: CircularProgressIndicator(
+                                          strokeWidth: 2,
+                                          color: Color(0xFF0D9488),
+                                        ),
+                                      ),
+                                    );
+                                  },
+                                )
+                              : const SizedBox.shrink()),
                     ),
 
                     // Full Screen Button (Bottom Right)
@@ -1007,7 +1229,7 @@ class _CitizenVerificationScreenState extends State<CitizenVerificationScreen> {
                       right: 8,
                       child: InkWell(
                         onTap: () => _openFullScreenPhoto(
-                          _citizenPhotoUrl ?? _demoCitizenPhotoUrl,
+                          _citizenPhotoUrl ?? '',
                           memoryBytes: _citizenPhotoBytes,
                           title: 'Your On-Site Verification Photo',
                         ),
@@ -1043,19 +1265,38 @@ class _CitizenVerificationScreenState extends State<CitizenVerificationScreen> {
                       bottom: 8,
                       left: 8,
                       child: Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 4),
+                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
                         decoration: BoxDecoration(
-                          color: Colors.black.withValues(alpha: 0.6),
-                          borderRadius: BorderRadius.circular(6),
+                          color: (_verificationDistanceMeters != null && _verificationDistanceMeters! > 200)
+                              ? const Color(0xFFDC2626).withValues(alpha: 0.85)
+                              : Colors.black.withValues(alpha: 0.65),
+                          borderRadius: BorderRadius.circular(8),
+                          border: Border.all(
+                            color: (_verificationDistanceMeters != null && _verificationDistanceMeters! > 200)
+                                ? const Color(0xFFFCA5A5)
+                                : Colors.white.withValues(alpha: 0.2),
+                          ),
                         ),
-                        child: const Row(
+                        child: Row(
                           mainAxisSize: MainAxisSize.min,
                           children: [
-                            Icon(LucideIcons.mapPin, color: Color(0xFF34D399), size: 11),
-                            SizedBox(width: 4),
+                            Icon(
+                              (_verificationDistanceMeters != null && _verificationDistanceMeters! > 200)
+                                  ? LucideIcons.alertTriangle
+                                  : LucideIcons.mapPin,
+                              color: (_verificationDistanceMeters != null && _verificationDistanceMeters! > 200)
+                                  ? Colors.white
+                                  : const Color(0xFF34D399),
+                              size: 11,
+                            ),
+                            const SizedBox(width: 4),
                             Text(
-                              'On-Site Verified (8m)',
-                              style: TextStyle(
+                              _verificationDistanceMeters != null
+                                  ? (_verificationDistanceMeters! <= 200
+                                      ? 'On-Site Verified (${_verificationDistanceMeters!.toStringAsFixed(0)}m)'
+                                      : 'Too Far (${_verificationDistanceMeters!.toStringAsFixed(0)}m > 200m)')
+                                  : 'GPS Geotagged',
+                              style: const TextStyle(
                                 color: Colors.white,
                                 fontSize: 10,
                                 fontWeight: FontWeight.w600,
@@ -1074,7 +1315,9 @@ class _CitizenVerificationScreenState extends State<CitizenVerificationScreen> {
                         onTap: () => setState(() {
                           _citizenPhotoBytes = null;
                           _citizenPhotoUrl = null;
-                          _isUsingDemoSnapshot = false;
+                          _photoLatitude = null;
+                          _photoLongitude = null;
+                          _verificationDistanceMeters = null;
                         }),
                         borderRadius: BorderRadius.circular(20),
                         child: Container(
@@ -1096,9 +1339,9 @@ class _CitizenVerificationScreenState extends State<CitizenVerificationScreen> {
               children: [
                 Expanded(
                   child: OutlinedButton.icon(
-                    onPressed: () => _pickPhoto(ImageSource.camera),
+                    onPressed: _pickPhotoFromInAppCamera,
                     icon: const Icon(LucideIcons.camera, size: 13),
-                    label: const Text('Retake Photo', style: TextStyle(fontSize: 11.5)),
+                    label: const Text('In-App Camera', style: TextStyle(fontSize: 11.5)),
                     style: OutlinedButton.styleFrom(
                       foregroundColor: const Color(0xFF0F172A),
                       side: const BorderSide(color: Color(0xFFCBD5E1)),
@@ -1110,9 +1353,9 @@ class _CitizenVerificationScreenState extends State<CitizenVerificationScreen> {
                 const SizedBox(width: 8),
                 Expanded(
                   child: OutlinedButton.icon(
-                    onPressed: () => _pickPhoto(ImageSource.gallery),
-                    icon: const Icon(LucideIcons.image, size: 13),
-                    label: const Text('From Gallery', style: TextStyle(fontSize: 11.5)),
+                    onPressed: _pickPhotoFromInAppGallery,
+                    icon: const Icon(LucideIcons.images, size: 13),
+                    label: const Text('Safety Gallery', style: TextStyle(fontSize: 11.5)),
                     style: OutlinedButton.styleFrom(
                       foregroundColor: const Color(0xFF0F172A),
                       side: const BorderSide(color: Color(0xFFCBD5E1)),
@@ -1124,7 +1367,7 @@ class _CitizenVerificationScreenState extends State<CitizenVerificationScreen> {
               ],
             ),
           ] else ...[
-            // Empty State Prompt with Responsive 1-Tap Demo Button
+            // Empty State Prompt with In-App Options Only
             Container(
               padding: const EdgeInsets.all(14),
               decoration: BoxDecoration(
@@ -1138,55 +1381,24 @@ class _CitizenVerificationScreenState extends State<CitizenVerificationScreen> {
                     children: [
                       _buildUploadChoiceButton(
                         icon: LucideIcons.camera,
-                        label: 'Take Photo',
+                        label: 'In-App Camera',
                         color: const Color(0xFF0284C7),
-                        onTap: () => _pickPhoto(ImageSource.camera),
+                        onTap: _pickPhotoFromInAppCamera,
                       ),
                       const SizedBox(width: 10),
                       _buildUploadChoiceButton(
-                        icon: LucideIcons.image,
-                        label: 'Gallery',
+                        icon: LucideIcons.images,
+                        label: 'Safety Gallery',
                         color: const Color(0xFF475569),
-                        onTap: () => _pickPhoto(ImageSource.gallery),
+                        onTap: _pickPhotoFromInAppGallery,
                       ),
                     ],
                   ),
-                  const SizedBox(height: 12),
-                  const Divider(color: Color(0xFFE2E8F0), height: 1),
                   const SizedBox(height: 10),
-
-                  // 1-Tap Quick Test Simulator (Overflow Free)
-                  InkWell(
-                    onTap: _useDemoSnapshot,
-                    borderRadius: BorderRadius.circular(10),
-                    child: Container(
-                      width: double.infinity,
-                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-                      decoration: BoxDecoration(
-                        color: const Color(0xFF10B981).withValues(alpha: 0.08),
-                        borderRadius: BorderRadius.circular(10),
-                        border: Border.all(color: const Color(0xFF10B981).withValues(alpha: 0.3)),
-                      ),
-                      child: Row(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: const [
-                          Icon(LucideIcons.sparkles, size: 14, color: Color(0xFF059669)),
-                          SizedBox(width: 8),
-                          Flexible(
-                            child: Text(
-                              'Attach Demo Verified Photo (1-Tap)',
-                              style: TextStyle(
-                                fontSize: 12,
-                                fontWeight: FontWeight.w700,
-                                color: Color(0xFF059669),
-                              ),
-                              overflow: TextOverflow.ellipsis,
-                              maxLines: 1,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
+                  Text(
+                    'Verification requires a GPS-geotagged photo taken within 200m of the complaint location.',
+                    textAlign: TextAlign.center,
+                    style: TextStyle(fontSize: 11, color: Colors.grey.shade600, height: 1.3),
                   ),
                 ],
               ),
@@ -1303,7 +1515,7 @@ class _CitizenVerificationScreenState extends State<CitizenVerificationScreen> {
                       ],
                     ),
                     child: ElevatedButton.icon(
-                      onPressed: _onConfirmVerification,
+                      onPressed: _isSubmitting ? null : _onConfirmVerification,
                       icon: const Icon(LucideIcons.badgeCheck, size: 18),
                       label: const Text(
                         'Verify & Close',
@@ -1467,22 +1679,85 @@ class _CitizenVerificationScreenState extends State<CitizenVerificationScreen> {
             width: double.infinity,
             height: 46,
             child: ElevatedButton.icon(
-              onPressed: () {
-                final notes = _feedbackController.text.trim();
-                Navigator.pop(ctx);
-                Navigator.of(context).pop(false);
-                ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(
-                    content: Text(
-                      notes.isNotEmpty
-                          ? 'Ticket returned to In Progress with your feedback.'
-                          : 'Ticket flagged for municipal recheck.',
-                    ),
-                    backgroundColor: const Color(0xFFE11D48),
-                    behavior: SnackBarBehavior.floating,
-                  ),
-                );
-              },
+              onPressed: _isSubmitting
+                  ? null
+                  : () async {
+                      final notes = _feedbackController.text.trim();
+                      if (notes.length < 10) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(
+                            content: Text('Please describe what remains incomplete (at least 10 characters).'),
+                            backgroundColor: Color(0xFFDC2626),
+                            behavior: SnackBarBehavior.floating,
+                          ),
+                        );
+                        return;
+                      }
+
+                      Navigator.pop(ctx);
+                      setState(() => _isSubmitting = true);
+
+                      try {
+                        final citizenId = await _resolveCitizenId();
+                        final uploadedUrl = await _uploadCitizenProof(widget.report.id);
+
+                        // 1. Upsert into complaint_verifications (Triggers auto-update of complaint status)
+                        final disputePayload = <String, dynamic>{
+                          'complaint_id': widget.report.id,
+                          'image_url': uploadedUrl,
+                          'is_verified': false,
+                          'feedback': notes,
+                        };
+                        if (citizenId != null) {
+                          disputePayload['citizen_id'] = citizenId;
+                          await SupabaseConfig.client
+                              .from('complaint_verifications')
+                              .upsert(disputePayload, onConflict: 'complaint_id,citizen_id');
+                        } else {
+                          await SupabaseConfig.client
+                              .from('complaint_verifications')
+                              .insert(disputePayload);
+                        }
+
+                        // 2. Revert complaints to in-progress with citizen_feedback (backed by DB trigger)
+                        try {
+                          await SupabaseConfig.client.from('complaints').update({
+                            'status': 'in-progress',
+                            'citizen_feedback': notes,
+                          }).eq('id', widget.report.id);
+                        } catch (_) {}
+
+                        // 3. Log to complaint_logs
+                        try {
+                          await SupabaseConfig.client.from('complaint_logs').insert({
+                            'complaint_id': widget.report.id,
+                            'action': 'citizen_rejected',
+                            'message': 'Citizen rejected resolution: $notes',
+                          });
+                        } catch (_) {}
+
+                        if (!mounted) return;
+                        setState(() => _isSubmitting = false);
+
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(
+                            content: Text('Ticket returned to In Progress with your feedback for re-inspection.'),
+                            backgroundColor: Color(0xFFE11D48),
+                            behavior: SnackBarBehavior.floating,
+                          ),
+                        );
+                        Navigator.of(context).pop(false);
+                      } catch (e) {
+                        if (!mounted) return;
+                        setState(() => _isSubmitting = false);
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(
+                            content: Text('Failed to submit dispute: $e'),
+                            backgroundColor: const Color(0xFFDC2626),
+                          ),
+                        );
+                      }
+                    },
               icon: const Icon(LucideIcons.send, size: 16),
               label: const Text(
                 'Submit Feedback & Send Back',
@@ -1563,7 +1838,7 @@ class _CitizenVerificationScreenState extends State<CitizenVerificationScreen> {
                 shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
               ),
               child: const Text(
-                'Done & Back to Kanban',
+                'Done & Back to Inbox',
                 style: TextStyle(fontSize: 14, fontWeight: FontWeight.w700),
               ),
             ),
