@@ -1,0 +1,118 @@
+Created At: 2026-08-06T08:56:52+05:30
+Completed At: 2026-08-06T08:56:52+05:30
+The following changes were made by the replace_file_content tool to: c:\projects\Unisafe\flutter_app\lib\screens\heatmap_ui\map_screen.dart. If relevant, proactively run terminal commands to execute this code for the USER. Don't ask for permission.
+[diff_block_start]
+@@ -43,7 +43,7 @@
+ class MapPinShape extends StatefulWidget {
+   static const double headSize = 44;
+   static const double boxWidth = 64;
+-  static const double boxHeight = 64;
++  static const double boxHeight = 128; // Double height so the tip is in the exact center
+ 
+   final IconData icon;
+   final Color color;
+@@ -107,50 +107,57 @@
+     return SizedBox(
+       width: MapPinShape.boxWidth,
+       height: MapPinShape.boxHeight,
+-      child: Center(
+-        child: AnimatedBuilder(
+-          animation: _pulseController,
+-          builder: (context, child) {
+-            final pulseScale = widget.isPending || widget.isEditing 
+-                ? 1.0 + (_pulseController.value * 0.1) 
+-                : 1.0;
+-            final finalScale = pulseScale * zoomScale;
+-            return Transform.scale(
+-              scale: finalScale,
+-              alignment: Alignment.bottomCenter,
+-              child: Transform.rotate(
+-                angle: 45 * 3.14159265359 / 180,
+-                child: Container(
+-                  width: MapPinShape.headSize,
+-                  height: MapPinShape.headSize,
+-                  decoration: BoxDecoration(
+-                    color: widget.color,
+-                    borderRadius: const BorderRadius.only(
+-                      topLeft: Radius.circular(24),
+-                      topRight: Radius.circular(24),
+-                      bottomLeft: Radius.circular(24),
+-                      bottomRight: Radius.circular(4),
+-                    ),
+-                    border: Border.all(color: ringColor, width: widget.isEditing ? 3 : 2.5),
+-                    boxShadow: [
+-                      BoxShadow(
+-                        color: widget.glowColor,
+-                        blurRadius: (widget.isPending || widget.isEditing) ? 12 : 8,
+-                        spreadRadius: (widget.isPending || widget.isEditing) ? 4 : 1,
+-                        offset: const Offset(3, 3),
+-                      ),
+-                    ],
+-                  ),
+-                  child: Center(
+-                    child: Transform.rotate(
+-                      angle: -45 * 3.14159265359 / 180,
+-                      child: Icon(widget.icon, color: Colors.white, size: MapPinShape.headSize * 0.5),
+-                    ),
+-                  ),
+-                ),
+-              ),
+-            );
+-          },
++      child: Align(
++        alignment: Alignment.topCenter,
++        child: SizedBox(
++          width: 64,
++          height: 64, // The visual box
++          child: Center(
++            child: AnimatedBuilder(
++              animation: _pulseController,
++              builder: (context, child) {
++                final pulseScale = widget.isPending || widget.isEditing 
++                    ? 1.0 + (_pulseController.value * 0.1) 
++                    : 1.0;
++                final finalScale = pulseScale * zoomScale;
++                return Transform.scale(
++                  scale: finalScale,
++                  alignment: Alignment.bottomCenter, // Scales relative to the tip of the teardrop
++                  child: Transform.rotate(
++                    angle: 45 * 3.14159265359 / 180,
++                    child: Container(
++                      width: MapPinShape.headSize,
++                      height: MapPinShape.headSize,
++                      decoration: BoxDecoration(
++                        color: widget.color,
++                        borderRadius: const BorderRadius.only(
++                          topLeft: Radius.circular(24),
++                          topRight: Radius.circular(24),
++                          bottomLeft: Radius.circular(24),
++                          bottomRight: Radius.circular(4),
++                        ),
++                        border: Border.all(color: ringColor, width: widget.isEditing ? 3 : 2.5),
++                        boxShadow: [
++                          BoxShadow(
++                            color: widget.glowColor,
++                            blurRadius: (widget.isPending || widget.isEditing) ? 12 : 8,
++                            spreadRadius: (widget.isPending || widget.isEditing) ? 4 : 1,
++                            offset: const Offset(3, 3),
++                          ),
++                        ],
++                      ),
++                      child: Center(
++                        child: Transform.rotate(
++                          angle: -45 * 3.14159265359 / 180,
++                          child: Icon(widget.icon, color: Colors.white, size: MapPinShape.headSize * 0.5),
++                        ),
++                      ),
++                    ),
++                  ),
++                );
++              },
++            ),
++          ),
+         ),
+       ),
+     );
+[diff_block_end]
+
+Please note that the above snippet only shows the MODIFIED lines from the last change. It shows up to 3 lines of unchanged lines before and after the modified lines. The actual file contents may have many more lines not shown.

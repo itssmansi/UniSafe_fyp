@@ -1,0 +1,35 @@
+Created At: 2026-08-06T08:48:25+05:30
+Completed At: 2026-08-06T08:48:26+05:30
+The following changes were made by the replace_file_content tool to: c:\projects\Unisafe\flutter_app\lib\screens\heatmap_ui\map_screen.dart. If relevant, proactively run terminal commands to execute this code for the USER. Don't ask for permission.
+[diff_block_start]
+@@ -100,6 +100,11 @@
+   Widget build(BuildContext context) {
+     final ringColor = widget.isEditing ? const Color(0xFFF59E0B) : Colors.white;
+     
++    // Scale the pin down if zoomed out, so it doesn't cover massive areas
++    final camera = MapCamera.maybeOf(context);
++    final zoom = camera?.zoom ?? 15.0;
++    final zoomScale = ((zoom - 8) / (15 - 8)).clamp(0.4, 1.0);
++
+     return SizedBox(
+       width: MapPinShape.boxWidth,
+       height: MapPinShape.boxHeight,
+@@ -106,11 +106,13 @@
+         child: AnimatedBuilder(
+           animation: _pulseController,
+           builder: (context, child) {
+-            final scale = widget.isPending || widget.isEditing 
++            final pulseScale = widget.isPending || widget.isEditing 
+                 ? 1.0 + (_pulseController.value * 0.1) 
+                 : 1.0;
++            final finalScale = pulseScale * zoomScale;
+             return Transform.scale(
+-              scale: scale,
++              scale: finalScale,
++              alignment: Alignment.bottomCenter,
+               child: Transform.rotate(
+                 angle: 45 * 3.14159265359 / 180,
+                 child: Container(
+[diff_block_end]
+
+Please note that the above snippet only shows the MODIFIED lines from the last change. It shows up to 3 lines of unchanged lines before and after the modified lines. The actual file contents may have many more lines not shown.

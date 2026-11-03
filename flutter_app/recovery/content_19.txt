@@ -1,0 +1,29 @@
+Created At: 2026-08-06T09:00:53+05:30
+Completed At: 2026-08-06T09:00:54+05:30
+File Path: `file:///c:/projects/Unisafe/flutter_app/lib/screens/heatmap_ui/map_screen.dart`
+Total Lines: 1568
+Total Bytes: 65003
+Showing lines 410 to 430
+The following code has been modified to include a line number before every line, in the format: <line_number>: <original_line>. Please note that any changes targeting the original code should remove the line number, colon, and leading space.
+410:                   maxClusterRadius: 45,
+411:                   size: const Size(40, 40),
+412:                   alignment: Alignment.center,
+413:                   maxZoom: 15,
+414:                   markers: [
+415:                     ...reports.where((r) => r.id != _editingReportId && !_hiddenCategories.contains(r.category)).map((r) {
+416:                       final style = kCategoryStyles[r.category]!;
+417:                       return Marker(
+418:                         point: r.location,
+419:                         width: MapPinShape.boxWidth,
+420:                         height: MapPinShape.boxHeight,
+421:                         alignment: Alignment.bottomCenter,
+422:                         child: GestureDetector(
+423:                           behavior: HitTestBehavior.opaque,
+424:                           onTap: () => _showReportOptions(r),
+425:                           child: MapPinShape(
+426:                             icon: style.icon, 
+427:                             color: style.color, 
+428:                             glowColor: style.glowColor,
+429:                             isEditing: false,
+430:                           ),
+The above content does NOT show the entire file contents. If you need to view any lines of the file which were not shown to complete your task, call this tool again to view those lines.

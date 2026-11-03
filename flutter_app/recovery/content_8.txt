@@ -1,0 +1,14 @@
+Created At: 2026-08-06T08:40:54+05:30
+Completed At: 2026-08-06T08:40:54+05:30
+{"File":"c:\\projects\\Unisafe\\flutter_app\\lib\\screens\\heatmap_ui\\map_screen.dart","LineNumber":108,"LineContent":"      width: MapPinShape.boxWidth,"}
+{"File":"c:\\projects\\Unisafe\\flutter_app\\lib\\screens\\heatmap_ui\\map_screen.dart","LineNumber":109,"LineContent":"      height: MapPinShape.boxHeight,"}
+{"File":"c:\\projects\\Unisafe\\flutter_app\\lib\\screens\\heatmap_ui\\map_screen.dart","LineNumber":124,"LineContent":"                    width: MapPinShape.headSize,"}
+{"File":"c:\\projects\\Unisafe\\flutter_app\\lib\\screens\\heatmap_ui\\map_screen.dart","LineNumber":125,"LineContent":"                    height: MapPinShape.headSize,"}
+{"File":"c:\\projects\\Unisafe\\flutter_app\\lib\\screens\\heatmap_ui\\map_screen.dart","LineNumber":139,"LineContent":"                    child: Icon(widget.icon, color: Colors.white, size: MapPinShape.headSize * 0.5),"}
+{"File":"c:\\projects\\Unisafe\\flutter_app\\lib\\screens\\heatmap_ui\\map_screen.dart","LineNumber":145,"LineContent":"              size: const Size(MapPinShape.headSize * 0.34, MapPinShape.tailHeight),"}
+{"File":"c:\\projects\\Unisafe\\flutter_app\\lib\\screens\\heatmap_ui\\map_screen.dart","LineNumber":425,"LineContent":"                        width: MapPinShape.boxWidth,"}
+{"File":"c:\\projects\\Unisafe\\flutter_app\\lib\\screens\\heatmap_ui\\map_screen.dart","LineNumber":426,"LineContent":"                        height: MapPinShape.boxHeight,"}
+{"File":"c:\\projects\\Unisafe\\flutter_app\\lib\\screens\\heatmap_ui\\map_screen.dart","LineNumber":482,"LineContent":"                        width: MapPinShape.boxWidth,"}
+{"File":"c:\\projects\\Unisafe\\flutter_app\\lib\\screens\\heatmap_ui\\map_screen.dart","LineNumber":483,"LineContent":"                        height: MapPinShape.boxHeight,"}
+{"File":"c:\\projects\\Unisafe\\flutter_app\\lib\\screens\\heatmap_ui\\map_screen.dart","LineNumber":513,"LineContent":"                      width: MapPinShape.boxWidth,"}
+{"File":"c:\\projects\\Unisafe\\flutter_app\\lib\\screens\\heatmap_ui\\map_screen.dart","LineNumber":514,"LineContent":"                      height: MapPinShape.boxHeight,"}

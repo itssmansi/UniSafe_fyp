@@ -1,0 +1,49 @@
+Created At: 2026-08-06T08:59:38+05:30
+Completed At: 2026-08-06T08:59:38+05:30
+File Path: `file:///c:/projects/Unisafe/flutter_app/lib/screens/heatmap_ui/map_screen.dart`
+Total Lines: 1568
+Total Bytes: 65003
+Showing lines 500 to 540
+The following code has been modified to include a line number before every line, in the format: <line_number>: <original_line>. Please note that any changes targeting the original code should remove the line number, colon, and leading space.
+500:                       );
+501:                     }),
+502: 
+503:                   // Currently dropping pin
+504:                   if (_droppedLocation != null && _selectedCategory != null)
+505:                     Marker(
+506:                       point: _droppedLocation!,
+507:                       width: MapPinShape.boxWidth,
+508:                       height: MapPinShape.boxHeight,
+509:                       alignment: Alignment.bottomCenter,
+510:                       child: GestureDetector(
+511:                         behavior: HitTestBehavior.opaque,
+512:                         onPanUpdate: (details) {
+513:                           _dragPin(
+514:                             _droppedLocation!, 
+515:                             details.delta, 
+516:                             (newLatLng) => setState(() => _droppedLocation = newLatLng)
+517:                           );
+518:                         },
+519:                         child: MapPinShape(
+520:                           icon: kCategoryStyles[_selectedCategory!]!.icon,
+521:                           color: kCategoryStyles[_selectedCategory!]!.color,
+522:                           glowColor: kCategoryStyles[_selectedCategory!]!.glowColor,
+523:                           isPending: true,
+524:                         ),
+525:                       ),
+526:                     ),
+527:                     ], // closes MarkerLayer.markers
+528:                   ),   // closes MarkerLayer
+529:                 ],     // closes FlutterMap.children
+530:               ),       // closes FlutterMap
+531:             );         // closes Container
+532:           },           // closes builder
+533:         ),             // closes DragTarget
+534:       ),               // closes Positioned.fill
+535:           
+536:           // Top Search Bar
+537:           SafeArea(
+538:             child: Align(
+539:               alignment: Alignment.topCenter,
+540:               child: Padding(
+The above content does NOT show the entire file contents. If you need to view any lines of the file which were not shown to complete your task, call this tool again to view those lines.
