@@ -6,3 +6,17 @@ supabase_pre_purge_backup.json
 .env.*
 !.env.example
 
+# Working documents, reports & diagram source scripts
+*.docx
+DESIGN_THINKING_DOCUMENT.md
+SESSION_WORK_REPORT.md
+DATABASE_CHANGES.md
+DATABASE_CHANGES_REPORT.md
+citizen_verification_plan.md
+design.md
+generate_architecture.py
+generate_clean_architecture.py
+generate_concise_architecture.py
+unisafe_system_architecture.drawio
+
+
