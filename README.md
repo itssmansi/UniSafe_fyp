@@ -49,10 +49,16 @@ UniSafe is a community safety mobile application designed to help citizens repor
 ![Navigation](unisafe_images/navigation.png)
 
 ### Interactive Safety Map
-![Interactive Map](unisafe_images/interactive_map.png)
+![Interactive Safety Map 1](unisafe_images/interactive_map.png)
+
+![Interactive Safety Map 2](unisafe_images/interactive_map_2.png)
 
 ### Missing Person Assistance
-![Missing Person](unisafe_images/missing_person.png)
+![Missing Person Assistance 1](unisafe_images/missing_person.png)
+
+![Missing Person Assistance 2](unisafe_images/missing_person_2.png)
+
+![Missing Person Assistance 3](unisafe_images/missing_person_3.png)
 
 ### Inbox
 ![Inbox](unisafe_images/inbox.png)
