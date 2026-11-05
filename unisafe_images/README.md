@@ -1,12 +1,10 @@
-# UniSafe Application Screenshots & Media
+# UniSafe Application Screenshots
 
-Place your application demo screenshots, recordings, and UI mockups in this folder.
+This directory contains visual assets and screenshots of the UniSafe mobile application used in the main project README.
 
-### Suggested File Naming:
-- `01_interactive_map.png` - Interactive Map & Safe Routing
-- `02_safe_journey.png` - Safe Journey Live Tracking
-- `03_emergency_sos.png` - Emergency SOS Trigger & Alert Card
-- `04_trusted_contacts.png` - Trusted Contacts Management
-- `05_missing_persons.png` - Missing Persons Registry & Case Details
-- `06_sighting_report.png` - Citizen Sighting & AI Face Recognition
-- `07_live_tracking_web.png` - Web Tracking Link for Contacts
+- **Citizen Login**: `login.png`
+- **Navigation & Routing**: `navigation.png`
+- **Interactive Safety Map**: `interactive_map.png`
+- **Missing Person Assistance**: `missing_person.png`
+- **Inbox & Notifications**: `inbox.png`
+- **Women's Safety & Live Journey Tracking**: `womens_safety.png`
