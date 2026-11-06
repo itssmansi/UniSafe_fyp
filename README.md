@@ -43,28 +43,25 @@ UniSafe is a community safety mobile application designed to help citizens repor
 ## App Screenshots
 
 ### Citizen Login
-![Citizen Login](unisafe_images/login.png)
+<img src="unisafe_images/login.png" width="260" alt="Citizen Login" />
 
 ### Navigation
-![Navigation](unisafe_images/navigation.png)
+<img src="unisafe_images/navigation.png" width="260" alt="Navigation" />
 
 ### Interactive Safety Map
-![Interactive Safety Map 1](unisafe_images/interactive_map.png)
-
-![Interactive Safety Map 2](unisafe_images/interactive_map_2.png)
+<img src="unisafe_images/interactive_map.png" width="260" alt="Interactive Safety Map 1" />&nbsp;&nbsp;
+<img src="unisafe_images/interactive_map_2.png" width="260" alt="Interactive Safety Map 2" />
 
 ### Missing Person Assistance
-![Missing Person Assistance 1](unisafe_images/missing_person.png)
-
-![Missing Person Assistance 2](unisafe_images/missing_person_2.png)
-
-![Missing Person Assistance 3](unisafe_images/missing_person_3.png)
+<img src="unisafe_images/missing_person.png" width="260" alt="Missing Person Assistance 1" />&nbsp;&nbsp;
+<img src="unisafe_images/missing_person_2.png" width="260" alt="Missing Person Assistance 2" />&nbsp;&nbsp;
+<img src="unisafe_images/missing_person_3.png" width="260" alt="Missing Person Assistance 3" />
 
 ### Inbox
-![Inbox](unisafe_images/inbox.png)
+<img src="unisafe_images/inbox.png" width="260" alt="Inbox" />
 
 ### Women's Safety
-![Women's Safety](unisafe_images/womens_safety.png)
+<img src="unisafe_images/womens_safety.png" width="260" alt="Women's Safety" />
 
 ## Technology Stack
 
